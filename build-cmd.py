@@ -2,25 +2,26 @@
 
 
 # Check https://wiki.lindenlab.com/wiki/How_To_Start_Using_Autobuild/Examples for info on how to build this package
-from shutil import copytree, ignore_patterns, rmtree
+from shutil import copy, copytree, ignore_patterns, rmtree
 
 import os
 import os.path
-import platform
 import re
 import subprocess
 import sys
 import trace
 
+darwin = re.compile('darwin')
+linux = re.compile('linux')
+windows = re.compile('win')
+
 #unify platform names and correctly return bitness
 def getPlatform():
-    darwin = re.compile('darwin')
-    linux = re.compile('linux')
-    windows = re.compile('win')
+    import platform
     machine = platform.machine()
-    bitness = 32
+    bitness = '32'
     if machine.endswith('64'):
-        bitness = 64
+        bitness = '64'
     platform = sys.platform.lower()
     if darwin.search(platform) is not None:
         return 'darwin' + bitness
@@ -33,20 +34,21 @@ def getPlatform():
     
 
 def main():
-    if os.environ('AUTOBUILD') is None:
+    if os.environ['AUTOBUILD'] is None:
         sys.exit(1)
-    autobuild = os.environ('AUTOBUILD')
+    autobuild = os.environ['AUTOBUILD']
     top = os.path.dirname(os.path.realpath(sys.argv[0]))
-    stage = os.path.join(top, "stage") 
+    stage = os.path.join(top, "stage")
+    src = os.path.join(top, 'vmp-src')
+    dst = os.path.join(stage, "VMP")    
            
     #the version file consists of one line with the version string in it
-    print open(os.path.join(top, "VERSION.txt"), 'r').read()
+    sourceVersionFile = os.path.join(top, "VERSION.txt")
+    print("%s: %s" % (sourceVersionFile, open(sourceVersionFile, 'r').read()))
     
-    src = os.path.join(top, 'vmp-src')
-    dst = os.path.join(stage, "VMP")
     #copytree doesn't want the directory to pre-exist
     if os.path.exists(dst):
-        rmtree(dest, ignore_errors=True)
+        rmtree(dst, ignore_errors=True)
     platform = getPlatform()
     #We will ship a 32 bit VMP with 64 bit viewers
     if platform is None or platform == 'win64':
@@ -55,7 +57,8 @@ def main():
         
     #all three platforms do this
     #python for those that have, also for libary access for pyinstaller and list of files to compile
-    copytree(src, dest, ignore=ignore_patterns('*.pyc', '*tests*'))
+    copytree(src, dst, ignore=ignore_patterns('*.pyc', '*tests*'))
+    copy(sourceVersionFile, stage)
         
     #no else because we would have exited above
     if darwin.search(platform):
@@ -63,7 +66,6 @@ def main():
     elif linux.search(platform):
         #left as a separate clause in case lnx and mac ever diverge
         pass
-                
     elif windows.search(platform):
         #to keep things as platform independent as possible, EXEs go into the same directory as .py files
         p = re.compile(r"\.py$")

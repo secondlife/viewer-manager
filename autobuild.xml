@@ -121,6 +121,6 @@
     <key>type</key>
     <string>autobuild</string>
     <key>version</key>
-    <string>1.0</string>
+    <string>1.3</string>
   </map>
 </llsd>
