@@ -36,9 +36,7 @@ import update_manager
 
 def test_get_summary():
     key = update_manager.get_platform_key()
-    #launcher is one dir above tests
-    launcher_path = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
-    summary_json = update_manager.get_summary(key, launcher_path)
+    summary_json = update_manager.get_summary(key)
 
     #we aren't testing the JSON library, one key pair is enough
     #so we will use the one pair that is actually a constant

@@ -52,7 +52,7 @@ def test_query_vvm(tmpdir1, handle):
     parent = update_manager.get_parent_path(key)
     settings = update_manager.get_settings(handle, parent)
     launcher_path = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
-    summary = update_manager.get_summary(key, launcher_path)
+    summary = update_manager.get_summary(key)
 
     #for unit testing purposes, just testing a value from results.  If no update, then None and it falls through
     #for formal QA see:
