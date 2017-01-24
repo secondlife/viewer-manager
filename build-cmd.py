@@ -41,6 +41,31 @@ def main():
     stage = os.path.join(top, "stage")
     src = os.path.join(top, 'vmp-src')
     dst = os.path.join(stage, "VMP")    
+    tests = os.path.join(src,'tests')
+    platform = getPlatform()
+    #We will ship a 32 bit VMP with 64 bit viewers
+    if platform is None: 
+        print >>sys.stderr, 'No valid platform found'
+        sys.exit(1)         
+    if platform == 'win64':
+        print >>sys.stderr, 'The Windows VMP must be built on a 32-bit Windows host'
+        sys.exit(1)    
+    
+    
+    #run nosetests
+    if darwin.search(platform):
+        nosetest_cmd = '/usr/local/bin/nosetests'
+    elif linux.search(platform):
+        nosetest_cmd = '/usr/bin/nosetests'
+    else:
+        nosetest_cmd = 'TBD WOLF-688'
+    os.chdir(src)
+    try:
+        subprocess.check_call([nosetest_cmd, tests])
+    except Exception as e:
+        print repr(e)
+        sys.exit(1)
+    os.chdir(top)
            
     #the version file consists of one line with the version string in it
     sourceVersionFile = os.path.join(top, "VERSION.txt")
@@ -49,11 +74,6 @@ def main():
     #copytree doesn't want the directory to pre-exist
     if os.path.exists(dst):
         rmtree(dst, ignore_errors=True)
-    platform = getPlatform()
-    #We will ship a 32 bit VMP with 64 bit viewers
-    if platform is None or platform == 'win64':
-        print >>sys.stderr, 'The Windows VMP must be built on a 32-bit Windows host'
-        sys.exit(1)
         
     #all three platforms do this
     #python for those that have, also for libary access for pyinstaller and list of files to compile
