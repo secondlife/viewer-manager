@@ -4,6 +4,7 @@
 # Check https://wiki.lindenlab.com/wiki/How_To_Start_Using_Autobuild/Examples for info on how to build this package
 from shutil import copy, copytree, ignore_patterns, rmtree
 
+import cgitb
 import os
 import os.path
 import re
@@ -11,6 +12,7 @@ import subprocess
 import sys
 import trace
 
+cgitb.enable(format='text')
 darwin = re.compile('darwin')
 linux = re.compile('linux')
 windows = re.compile('win')
@@ -65,7 +67,12 @@ def main():
     except Exception as e:
         print repr(e)
         sys.exit(1)
+    #remove dummy JSON file used during unit tests
+    summary = os.path.join(src,'summary.json')
+    if os.path.exists(summary):
+        os.remove(summary)
     os.chdir(top)
+    
            
     #the version file consists of one line with the version string in it
     sourceVersionFile = os.path.join(top, "VERSION.txt")
