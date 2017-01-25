@@ -25,6 +25,8 @@ def getPlatform():
     bitness = '32'
     if machine.endswith('64') and platform.endswith'64':
         bitness = '64'"""
+    platform = sys.platform.lower()
+    bitness = '32'
     if sys.maxsize > 2**32:
         bitness = '64'
     if darwin.search(platform) is not None:
