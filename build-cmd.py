@@ -19,12 +19,14 @@ windows = re.compile('win')
 
 #unify platform names and correctly return bitness
 def getPlatform():
-    import platform
+    """import platform
     machine = platform.machine()
-    bitness = '32'
-    if machine.endswith('64'):
-        bitness = '64'
     platform = sys.platform.lower()
+    bitness = '32'
+    if machine.endswith('64') and platform.endswith'64':
+        bitness = '64'"""
+    if sys.maxsize > 2**32:
+        bitness = '64'
     if darwin.search(platform) is not None:
         return 'darwin' + bitness
     elif linux.search(platform):
