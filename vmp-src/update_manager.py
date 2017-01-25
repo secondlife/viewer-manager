@@ -31,7 +31,7 @@ $/LicenseInfo$
 import os
 
 #NOTA BENE: 
-#   For POSIX platforms, llbase will be imported from the same directory.  
+#   For POSIX platforms, llbase will be imported.  
 #   For Windows, llbase will be compiled into the executable by pyinstaller
 try:
     from llbase import llrest
