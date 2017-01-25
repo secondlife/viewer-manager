@@ -28,22 +28,11 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
-import os
-
-#NOTA BENE: 
-#   For POSIX platforms, llbase will be imported.  
-#   For Windows, llbase will be compiled into the executable by pyinstaller
-try:
-    from llbase import llrest
-    from llbase.llrest import RESTError
-    from llbase import llsd    
-except:
-    #if Windows, this is expected, if not, we're dead
-    if os.name == 'nt':
-        pass
-
 from copy import deepcopy
 from datetime import datetime
+from llbase import llrest
+from llbase.llrest import RESTError
+from llbase import llsd    
 from urlparse import urljoin
 
 import apply_update
@@ -53,6 +42,7 @@ import fnmatch
 import hashlib
 import InstallerUserMessage
 import json
+import os
 import platform
 import re
 import shutil
@@ -218,6 +208,7 @@ def check_for_completed_download(download_dir, expected_size = 0):
     return completed  
 
 def get_settings(log_file_handle, parent_dir):
+    print llsd.BINARY_MIME_TYPE
     #return the settings file parsed into a dict
     try:
         settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml'))
