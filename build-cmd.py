@@ -75,6 +75,9 @@ def main():
         subprocess.check_call([nosetest_cmd, tests])
     except Exception as e:
         print repr(e)
+        print "returncode: " + e.returncode
+        print "command: " + e.cmd
+        print "output: " + e.output
         sys.exit(1)
     #remove dummy JSON file used during unit tests
     summary = os.path.join(iter_paths['vmp']['src'],'summary.json')
