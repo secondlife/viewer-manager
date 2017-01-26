@@ -61,7 +61,7 @@ def main():
         nosetest_cmd = 'TBD WOLF-688'
     os.chdir(src)
     try:
-        print "About to call %s on % from %s" % (src, nosetest_cmd, tests)
+        print "About to call %s on %s from %s" % (src, nosetest_cmd, tests)
         subprocess.check_call([nosetest_cmd, tests])
     except Exception as e:
         print repr(e)
