@@ -220,6 +220,9 @@ def get_settings(log_file_handle, parent_dir):
     except llsd.LLSDParseError as lpe:
         silent_write(log_file_handle, "Could not parse settings file %s" % lpe)
         return None
+    except Exception as e:
+        silent_write(log_file_handle, "Could not read settings file. %s" % e)
+        return None
     return settings
 
 def get_log_file_handle(parent_dir, filename = None):
