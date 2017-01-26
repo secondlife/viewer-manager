@@ -124,6 +124,11 @@ def get_summary(platform_name):
     else:
         summary_dir = os.path.abspath(os.path.dirname(str(sys.executable)))
     summary_file = os.path.join(summary_dir,"summary.json")
+    #for windows unit tests
+    if not os.path.exists(summary_file):
+        summary_file = os.path.join(os.path.dirname(apply_update.__file__), "summary.json")
+        if not os.path.exists(summary_file):
+            return None
     with open(summary_file) as summary_handle:
         return json.load(summary_handle)
 
