@@ -19,12 +19,6 @@ windows = re.compile('win')
 
 #unify platform names and correctly return bitness
 def getPlatform():
-    """import platform
-    machine = platform.machine()
-    platform = sys.platform.lower()
-    bitness = '32'
-    if machine.endswith('64') and platform.endswith'64':
-        bitness = '64'"""
     platform = sys.platform.lower()
     bitness = '32'
     if sys.maxsize > 2**32:
@@ -67,6 +61,7 @@ def main():
         nosetest_cmd = 'TBD WOLF-688'
     os.chdir(src)
     try:
+        print "About to call %s on % from %s" % (src, nosetest_cmd, tests)
         subprocess.check_call([nosetest_cmd, tests])
     except Exception as e:
         print repr(e)
@@ -121,5 +116,5 @@ def main():
 
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
-    tracer = trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix], trace=1, count=0, timing=True)
+    tracer = trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix], ignoremods=["subprocess"], trace=1, count=0, timing=True)
     tracer.run('main()')
