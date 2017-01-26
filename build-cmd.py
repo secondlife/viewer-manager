@@ -47,12 +47,12 @@ def main():
 
     # various places things go and come from.  
     top = os.path.dirname(os.path.realpath(sys.argv[0]))
-    stage = os.path.join(top, stage)
-    tests = os.path.join(src,'tests')
+    stage = os.path.join(top, 'stage')
     #if we decide we need to copy yet another directory tree, just add the source and dest to this dict
-    iter_paths = {vmp: {src: os.path.join(top, 'vmp-src'), dst: os.path.join(stage, "VMP")}, 
-                  llb: {src: os.path.dirname(llbase.__file__), dst: os.path.join(os.path.join(stage, "VMP"), 'llbase')}
+    iter_paths = {'vmp': {'src': os.path.join(top, 'vmp-src'), 'dst': os.path.join(stage, "VMP")}, 
+                  'llb': {'src': os.path.dirname(llbase.__file__), 'dst': os.path.join(os.path.join(stage, "VMP"), 'llbase')}
     }
+    tests = os.path.join(iter_paths['vmp']['src'],'tests')
     
     #We will ship a 32 bit VMP with 64 bit viewers
     if platform is None: 
@@ -71,13 +71,13 @@ def main():
         nosetest_cmd = "/cygdrive/c/Python27/Scripts/nosetests"
     os.chdir(iter_paths['vmp']['src'])
     try:
-        print "About to call %s on %s from %s" % (nosetest_cmd, tests, sources[src])
+        print "About to call %s on %s from %s" % (nosetest_cmd, tests, iter_paths['vmp']['src'])
         subprocess.check_call([nosetest_cmd, tests])
     except Exception as e:
         print repr(e)
         sys.exit(1)
     #remove dummy JSON file used during unit tests
-    summary = os.path.join(src,'summary.json')
+    summary = os.path.join(iter_paths['vmp']['src'],'summary.json')
     if os.path.exists(summary):
         os.remove(summary)
     os.chdir(top)
@@ -89,7 +89,7 @@ def main():
     #copytree doesn't want the destination directory to pre-exist
     for key in iter_paths.keys():
         if os.path.exists(iter_paths[key]['dst']):
-            rmtree(path, ignore_errors=True)
+            rmtree(iter_paths[key]['dst'], ignore_errors=True)
         copytree(iter_paths[key]['src'], iter_paths[key]['dst'], ignore=ignore_patterns('*.pyc', '*tests*'))
         
     copy(sourceVersionFile, stage)
