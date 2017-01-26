@@ -62,7 +62,7 @@ def test_query_vvm(tmpdir1, handle):
     #for test plans on all cases, as it requires setting up a fake VVM service
 
     try:
-        results = update_manager.query_vvm(handle, key, settings, summary)
+        results = update_manager.query_vvm(handle, key, None, summary)
     except Exception, e:
         print "query_vvm threw unexpected exception %s" % str(e)
         assert False

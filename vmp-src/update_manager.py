@@ -317,7 +317,7 @@ def query_vvm(log_file_handle = None, platform_key = None, settings = None, summ
     else:   
         try:
             test_ok = settings['test']['Value']
-        except KeyError:
+        except Exception:
             #normal case, no testing key
             test_ok = 'testok'
     #because urljoin can't be arsed to take multiple elements
