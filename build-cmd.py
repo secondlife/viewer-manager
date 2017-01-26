@@ -12,6 +12,15 @@ import subprocess
 import sys
 import trace
 
+#autobuild itself needs llbase, so if python cannot find llbase,
+#we are in a very weird state.
+try:
+    import llbase
+except Exception as e:
+    print "Python at %s could not find llbase" % sys.executable
+    repr(e)
+    sys.exit(1)
+
 cgitb.enable(format='text')
 darwin = re.compile('darwin')
 linux = re.compile('linux')
@@ -32,17 +41,19 @@ def getPlatform():
     else:
         return None
     
-
 def main():
-    if os.environ['AUTOBUILD'] is None:
-        sys.exit(1)
-    autobuild = os.environ['AUTOBUILD']
-    top = os.path.dirname(os.path.realpath(sys.argv[0]))
-    stage = os.path.join(top, "stage")
-    src = os.path.join(top, 'vmp-src')
-    dst = os.path.join(stage, "VMP")    
-    tests = os.path.join(src,'tests')
+    autobuild = os.environ.get('AUTOBUILD')
     platform = getPlatform()
+
+    # various places things go and come from.  
+    top = os.path.dirname(os.path.realpath(sys.argv[0]))
+    stage = os.path.join(top, stage)
+    tests = os.path.join(src,'tests')
+    #if we decide we need to copy yet another directory tree, just add the source and dest to this dict
+    iter_paths = {vmp: {src: os.path.join(top, 'vmp-src'), dst: os.path.join(stage, "VMP")}, 
+                  llb: {src: os.path.dirname(llbase.__file__), dst: os.path.join(os.path.join(stage, "VMP"), 'llbase')}
+    }
+    
     #We will ship a 32 bit VMP with 64 bit viewers
     if platform is None: 
         print >>sys.stderr, 'No valid platform found'
@@ -51,17 +62,16 @@ def main():
         print >>sys.stderr, 'The Windows VMP must be built on a 32-bit Windows host'
         sys.exit(1)    
     
-    
     #run nosetests
     if darwin.search(platform):
         nosetest_cmd = '/usr/local/bin/nosetests'
     elif linux.search(platform):
         nosetest_cmd = '/usr/bin/nosetests'
     else:
-        nosetest_cmd = 'TBD WOLF-688'
-    os.chdir(src)
+        nosetest_cmd = "/cygdrive/c/Python27/Scripts/nosetests"
+    os.chdir(iter_paths['vmp']['src'])
     try:
-        print "About to call %s on %s from %s" % (src, nosetest_cmd, tests)
+        print "About to call %s on %s from %s" % (nosetest_cmd, tests, sources[src])
         subprocess.check_call([nosetest_cmd, tests])
     except Exception as e:
         print repr(e)
@@ -71,19 +81,17 @@ def main():
     if os.path.exists(summary):
         os.remove(summary)
     os.chdir(top)
-    
            
     #the version file consists of one line with the version string in it
     sourceVersionFile = os.path.join(top, "VERSION.txt")
     print("%s: %s" % (sourceVersionFile, open(sourceVersionFile, 'r').read()))
     
-    #copytree doesn't want the directory to pre-exist
-    if os.path.exists(dst):
-        rmtree(dst, ignore_errors=True)
+    #copytree doesn't want the destination directory to pre-exist
+    for key in iter_paths.keys():
+        if os.path.exists(iter_paths[key]['dst']):
+            rmtree(path, ignore_errors=True)
+        copytree(iter_paths[key]['src'], iter_paths[key]['dst'], ignore=ignore_patterns('*.pyc', '*tests*'))
         
-    #all three platforms do this
-    #python for those that have, also for libary access for pyinstaller and list of files to compile
-    copytree(src, dst, ignore=ignore_patterns('*.pyc', '*tests*'))
     copy(sourceVersionFile, stage)
         
     #no else because we would have exited above
@@ -113,7 +121,6 @@ def main():
                 print repr(e)
                 sys.exit(1)
         
-
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
     tracer = trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix], ignoremods=["subprocess"], trace=1, count=0, timing=True)
