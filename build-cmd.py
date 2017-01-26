@@ -68,7 +68,7 @@ def main():
     elif linux.search(platform):
         nosetest_cmd = '/usr/bin/nosetests'
     else:
-        nosetest_cmd = "/cygdrive/c/Python27/Scripts/nosetests"
+        nosetest_cmd = "c:/Python27/Scripts/nosetests"
     os.chdir(iter_paths['vmp']['src'])
     try:
         print "About to call %s on %s from %s" % (nosetest_cmd, tests, iter_paths['vmp']['src'])
