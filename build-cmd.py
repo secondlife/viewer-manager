@@ -118,6 +118,7 @@ def main():
             try:
                 target = []
                 target.append(f)
+                print "about to call %s using %s on %s" % (pyinstaller_exe, args, target)
                 subprocess.check_call(pyinstaller_exe + args + target)
             except Exception as e:
                 print "Pyinstaller failed"
