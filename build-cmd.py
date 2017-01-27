@@ -113,7 +113,7 @@ def main():
         #exe's for those that don't
         #In a typical Windows install, pyinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         pyinstaller_exe = os.path.join(os.path.dirname(sys.executable), 'Scripts/pyinstaller.exe')
-        args = [ "-y", "-windows", "--clean", "--onefile", "--log-level DEBUG", "-p " + dest, "--distpath " + dest]
+        args = [ "-y", "-windows", "--clean", "--onefile", "--log-level DEBUG", "-p " + iter_paths[key]['dst'], "--distpath " + iter_paths[key]['dst']]
         for f in vmp_files:
             try:
                 target = []
