@@ -112,7 +112,8 @@ def main():
                 vmp_files.append(str(os.path.join(iter_paths[key]['dst'], f)))
         #exe's for those that don't
         #In a typical Windows install, pyinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
-        pyinstaller_exe = [os.path.join(os.path.dirname(sys.executable), 'Scripts/pyinstaller.exe')]
+        #BUT that's not true of the virtualenv that autobuild runs in, so hard code the canonical location
+        pyinstaller_exe = ['C:\Python27\Scripts\nosetests']
         args = [ "-y", "-windows", "--clean", "--onefile", "--log-level DEBUG", "-p " + iter_paths[key]['dst'], "--distpath " + iter_paths[key]['dst']]
         for f in vmp_files:
             try:
