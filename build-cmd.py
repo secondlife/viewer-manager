@@ -149,6 +149,7 @@ def main():
                     os.remove(f)
                 except:
                     pass
+    print "Build Succeeded"
         
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.

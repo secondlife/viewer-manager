@@ -59,8 +59,8 @@
           </map>
           <key>manifest</key>
           <array>
-            <string>vmp/release/vmp/*.*</string>
-            <string>vmp/release/icons/*.*</string>
+            <string>VERSION.txt</string>
+            <string>stage/VMP/*.*</string>
           </array>
           <key>name</key>
           <string>darwin</string>
@@ -81,8 +81,8 @@
           </map>
           <key>manifest</key>
           <array>
-            <string>vmp/release/vmp/*.*</string>
-            <string>vmp/release/icons/*.*</string>
+            <string>VERSION.txt</string>
+            <string>stage/VMP/*.*</string>
           </array>
           <key>name</key>
           <string>linux</string>
@@ -103,7 +103,8 @@
           </map>
           <key>manifest</key>
           <array>
-            <string>vmp/release/vmp/*.*</string>
+            <string>VERSION.txt</string>
+            <string>stage/VMP/*.*</string>
           </array>
           <key>name</key>
           <string>windows</string>
