@@ -48,6 +48,7 @@ def main():
     # various places things go and come from.  
     top = os.path.dirname(os.path.realpath(sys.argv[0]))
     stage = os.path.join(top, 'stage')
+    build = os.path.join(top, 'build')
     #if we decide we need to copy yet another directory tree, just add the source and dest to this dict
     iter_paths = {'vmp': {'src': os.path.join(top, 'vmp-src'), 'dst': os.path.join(stage, "VMP")}, 
                   'llb': {'src': os.path.dirname(llbase.__file__), 'dst': os.path.join(os.path.join(stage, "VMP"), 'llbase')}
@@ -68,21 +69,23 @@ def main():
     elif linux.search(platform):
         nosetest_cmd = '/usr/bin/nosetests'
     else:
-        nosetest_cmd = "c:/Python27/Scripts/nosetests"
+        nosetest_cmd = r"C:\Python27\Scripts\nosetests"
+
     os.chdir(iter_paths['vmp']['src'])
     try:
         print "About to call %s on %s from %s" % (nosetest_cmd, tests, iter_paths['vmp']['src'])
-        subprocess.check_call([nosetest_cmd, tests])
+        subprocess.check_output([nosetest_cmd, tests])
     except Exception as e:
         print repr(e)
-        print "returncode: %s" % e.returncode
-        print "command: %s" % e.cmd
-        print "output: %s" % e.output
+        try:
+            #these only exist if the exception is a CalledProcessError
+            print "returncode: %s" % e.returncode
+            print "command: %s" % e.cmd
+            print "output: %s" % e.output
+        except:
+            #more debug is best effort
+            pass
         sys.exit(1)
-    #remove dummy JSON file used during unit tests
-    summary = os.path.join(iter_paths['vmp']['src'],'summary.json')
-    if os.path.exists(summary):
-        os.remove(summary)
     os.chdir(top)
            
     #the version file consists of one line with the version string in it
@@ -94,6 +97,12 @@ def main():
         if os.path.exists(iter_paths[key]['dst']):
             rmtree(iter_paths[key]['dst'], ignore_errors=True)
         copytree(iter_paths[key]['src'], iter_paths[key]['dst'], ignore=ignore_patterns('*.pyc', '*tests*'))
+
+    #remove dummy JSON file used during unit tests
+    #do this after copy because deleting from source makes the unit tests non-reusable
+    summary = os.path.join(iter_paths['vmp']['dst'],'summary.json')
+    if os.path.exists(summary):
+        os.remove(summary)
         
     copy(sourceVersionFile, stage)
         
@@ -110,21 +119,36 @@ def main():
         for f in os.listdir(iter_paths[key]['dst']):
             if p.search(f):
                 vmp_files.append(str(os.path.join(iter_paths[key]['dst'], f)))
-        #exe's for those that don't
         #In a typical Windows install, pyinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         #BUT that's not true of the virtualenv that autobuild runs in, so hard code the canonical location
         pyinstaller_exe = [r'C:\Python27\Scripts\pyinstaller.exe']
-        args = [ "-y", "-w", "--clean", "--onefile", "--log-level ", "DEBUG", "-p ", iter_paths[key]['dst'], "--distpath ", iter_paths[key]['dst']]
+        args = [ "-y", "-w", "--clean", "--onefile", "--log-level", "DEBUG", "-p", iter_paths[key]['dst'], "--distpath", iter_paths[key]['dst']]
         for f in vmp_files:
             try:
                 target = []
                 target.append(f)
+                print "pyinstaller exists: %s" % os.path.exists(pyinstaller_exe[0])
+                print "target exists: %s" % os.path.exists(target[0])
                 print "about to call %s " % (pyinstaller_exe + args + target)
-                subprocess.check_call(pyinstaller_exe + args + target)
+                subprocess.check_output(pyinstaller_exe + args + target)
             except Exception as e:
                 print "Pyinstaller failed"
                 print repr(e)
+                try:
+                    print "returncode: %s" % e.returncode
+                    print "command: %s" % e.cmd
+                    print "output: %s" % e.output
+                except:
+                    pass
                 sys.exit(1)
+        #best effort cleanup after pyinstaller
+        rmtree(build, ignore_errors=True)
+        for f in os.listdir(top):
+            if f.endswith('spec'):
+                try:
+                    os.remove(f)
+                except:
+                    pass
         
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
