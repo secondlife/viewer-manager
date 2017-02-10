@@ -10,7 +10,7 @@
       <key>license</key>
       <string>Proprietary</string>
       <key>license_file</key>
-      <string>LICENSES/vmp.txt</string>
+      <string>LICENSE</string>
       <key>name</key>
       <string>vmp</string>
       <key>platforms</key>
@@ -38,7 +38,7 @@
           </map>
           <key>manifest</key>
           <array>
-            <string>LICENSES/vmp.txt</string>
+            <string>../LICENSE</string>
           </array>
           <key>name</key>
           <string>common</string>
@@ -60,7 +60,7 @@
           <key>manifest</key>
           <array>
             <string>VERSION.txt</string>
-            <string>stage/VMP/*.*</string>
+            <string>VMP/*.*</string>
           </array>
           <key>name</key>
           <string>darwin</string>
@@ -82,7 +82,7 @@
           <key>manifest</key>
           <array>
             <string>VERSION.txt</string>
-            <string>stage/VMP/*.*</string>
+            <string>VMP/*.*</string>
           </array>
           <key>name</key>
           <string>linux</string>
@@ -104,7 +104,7 @@
           <key>manifest</key>
           <array>
             <string>VERSION.txt</string>
-            <string>stage/VMP/*.*</string>
+            <string>VMP/*.*</string>
           </array>
           <key>name</key>
           <string>windows</string>
