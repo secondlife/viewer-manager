@@ -1,14 +1,9 @@
 #!/usr/bin/env python
 
 """\
-@file update_manager.py
-@author coyot
-@date 2016-05-16
-@brief executes viewer update checking and manages downloading and applying of updates
-
-$LicenseInfo:firstyear=2016&license=viewerlgpl$
+$LicenseInfo:firstyear=2006&license=viewerlgpl$
 Second Life Viewer Source Code
-Copyright (C) 2016, Linden Research, Inc.
+Copyright (C) 2006-2014, Linden Research, Inc.
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -26,6 +21,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
+"""
+
+"""
+@file   update_manager.py
+@author coyot
+@date   2016-06-23
 """
 
 from copy import deepcopy
