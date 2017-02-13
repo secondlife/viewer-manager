@@ -36,10 +36,6 @@
               <string>default</string>
             </map>
           </map>
-          <key>manifest</key>
-          <array>
-            <string>../LICENSE</string>
-          </array>
           <key>name</key>
           <string>common</string>
         </map>
@@ -61,6 +57,7 @@
           <array>
             <string>VERSION.txt</string>
             <string>VMP/*.*</string>
+            <string>VMP/icons/*.*</string>
           </array>
           <key>name</key>
           <string>darwin</string>
@@ -83,6 +80,7 @@
           <array>
             <string>VERSION.txt</string>
             <string>VMP/*.*</string>
+            <string>VMP/icons/*.*</string>
           </array>
           <key>name</key>
           <string>linux</string>
@@ -105,6 +103,7 @@
           <array>
             <string>VERSION.txt</string>
             <string>VMP/*.*</string>
+            <string>VMP/icons/*.*</string>
           </array>
           <key>name</key>
           <string>windows</string>
