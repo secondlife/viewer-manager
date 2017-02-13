@@ -2,7 +2,7 @@
 
 
 """
-@file   test_query_vvm.py
+@file   test_update_manager_query_vvm.py
 @author coyot
 @date   2016-06-08
 

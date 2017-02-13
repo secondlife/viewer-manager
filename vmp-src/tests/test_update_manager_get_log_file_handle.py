@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 """
-@file   test_make_download_dir.py
+@file   test_update_manager_get_log_file_handle.py
 @author coyot
-@date   2016-06-03
+@date   2016-06-08
 
 $LicenseInfo:firstyear=2016&license=viewerlgpl$
 Second Life Viewer Source Code
@@ -29,19 +29,29 @@ $/LicenseInfo$
 
 from nose.tools import *
 
+import os
+import shutil
+import tempfile
 import update_manager
+import with_setup_args
 
-def test_make_download_dir():
-    key = update_manager.get_platform_key()
-    path = update_manager.get_parent_path(key)
-    version = '1.2.3.456789'
-    try:
-        download_dir = update_manager.make_download_dir(path, version)
-    except OSError, e:
-        print "make_download_dir failed to eat OSError %s" % str(e)
-        assert False
-    except Exception, e:
-        print "make_download_dir raised an unexpected exception %s" % str(e)
-        assert False
+def get_log_file_handle_setup():
+    tmpdir1 = tempfile.mkdtemp(prefix = 'test1')
+    tmpdir2 = tempfile.mkdtemp(prefix = 'test2')
+    log_file_path = os.path.abspath(os.path.join(tmpdir1,"update_manager.log"))
+    #not using tempfile because we want a particular filename
+    open(log_file_path, 'w+').close
 
-    assert download_dir, "make_download_dir returned None for path %s and version %s" % (path, version)
+    return [tmpdir1,tmpdir2,log_file_path], {}
+
+def get_log_file_handle_teardown(tmpdir1,tmpdir2,log_file_path):
+    shutil.rmtree(tmpdir1, ignore_errors = True)
+    shutil.rmtree(tmpdir2, ignore_errors = True)
+       
+@with_setup_args.with_setup_args(get_log_file_handle_setup, get_log_file_handle_teardown)
+def test_missing_get_log_file_handle(tmpdir1,tmpdir2,log_file_path):
+    handle = update_manager.get_log_file_handle(tmpdir2)
+    if not os.path.exists(log_file_path):
+        print "Failed to touch new log file"
+        assert False
+    assert True

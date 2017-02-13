@@ -2,7 +2,7 @@
 
 
 """
-@file   test_summary.py
+@file   test_update_manager_silent_write.py
 @author coyot
 @date   2016-06-02
 
@@ -30,14 +30,20 @@ $/LicenseInfo$
 
 from nose.tools import *
 
-import os.path
 import tempfile
 import update_manager
 
-def test_get_summary():
-    key = update_manager.get_platform_key()
-    summary_json = update_manager.get_summary(key)
+def test_silent_write_to_file(): 
+    test_log = tempfile.TemporaryFile()
+    try:
+        update_manager.silent_write(test_log, "This is a test.")
+    except Exception, e:
+        print "Test failed due to: %s" % str(e)
+        assert False
 
-    #we aren't testing the JSON library, one key pair is enough
-    #so we will use the one pair that is actually a constant
-    assert_equal(summary_json['Type'],'viewer')
+def test_silent_write_to_null(): 
+    try:
+        update_manager.silent_write(None, "This is a test.")
+    except Exception, e:
+        print "Test failed due to: %s" % str(e)
+        assert False

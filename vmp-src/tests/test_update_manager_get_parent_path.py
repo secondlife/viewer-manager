@@ -2,7 +2,7 @@
 
 
 """
-@file   test_get_parent_path.py
+@file   test_update_manager_get_parent_path.py
 @author coyot
 @date   2016-06-02
 

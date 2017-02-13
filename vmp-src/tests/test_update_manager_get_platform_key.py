@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-"""\
-@file   test_convert_version_file_style.py
+"""
+@file   test_update_manager_get_platform_key.py
 @author coyot
 @date   2016-06-01
 
@@ -27,35 +27,18 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
-
 from nose.tools import assert_equal
 
+import platform
 import update_manager
 
-def test_normal_form():
-    version = '1.2.3.456789'
-    golden = '1_2_3_456789'
-    converted = update_manager.convert_version_file_style(version)
-    
-    assert_equal(golden, converted)
-
-def test_short_form():
-    version = '1.23'
-    golden = '1_23'
-    converted = update_manager.convert_version_file_style(version)
-    
-    assert_equal(golden, converted)
-
-def test_idempotent():
-    version = '123'
-    golden = '123'
-    converted = update_manager.convert_version_file_style(version)
-    
-    assert_equal(golden, converted)
-
-def test_none():
-    version = None
-    golden = None
-    converted = update_manager.convert_version_file_style(version)
-    
-    assert_equal(golden, converted)
+def test_get_platform_key():
+    key = update_manager.get_platform_key()
+    if key == 'mac':
+        assert_equal(platform.system(),'Darwin')
+    elif key == 'lnx':
+        assert_equal(platform.system(),'Linux')
+    elif key == 'win':
+        assert_equal(platform.system(),'Windows')
+    else:
+        assert_equal(key, None)

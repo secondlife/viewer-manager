@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 
-
 """
-@file   test_make_VVM_UUID_hash.py
+@file   test_update_manager_make_download_dir.py
 @author coyot
 @date   2016-06-03
 
@@ -32,16 +31,17 @@ from nose.tools import *
 
 import update_manager
 
-def test_make_VVM_UUID_hash():
-    #because the method returns different results on different hosts
-    #it is not easy to unit test it reliably.  
-    #About the best we can do is check for the exception from subprocess
+def test_make_download_dir():
     key = update_manager.get_platform_key()
+    path = update_manager.get_parent_path(key)
+    version = '1.2.3.456789'
     try:
-        UUID_hash = update_manager.make_VVM_UUID_hash(key)
+        download_dir = update_manager.make_download_dir(path, version)
+    except OSError, e:
+        print "make_download_dir failed to eat OSError %s" % str(e)
+        assert False
     except Exception, e:
-        print "Test failed due to: %s" % str(e)
+        print "make_download_dir raised an unexpected exception %s" % str(e)
         assert False
 
-    #make_UUID_hash returned None
-    assert UUID_hash, "make_UUID_hash failed to make a hash."
+    assert download_dir, "make_download_dir returned None for path %s and version %s" % (path, version)

@@ -2,9 +2,9 @@
 
 
 """
-@file   test_silent_write.py
+@file   test_update_manager_make_VVM_UUID_hash.py
 @author coyot
-@date   2016-06-02
+@date   2016-06-03
 
 $LicenseInfo:firstyear=2016&license=viewerlgpl$
 Second Life Viewer Source Code
@@ -30,20 +30,18 @@ $/LicenseInfo$
 
 from nose.tools import *
 
-import tempfile
 import update_manager
 
-def test_silent_write_to_file(): 
-    test_log = tempfile.TemporaryFile()
+def test_make_VVM_UUID_hash():
+    #because the method returns different results on different hosts
+    #it is not easy to unit test it reliably.  
+    #About the best we can do is check for the exception from subprocess
+    key = update_manager.get_platform_key()
     try:
-        update_manager.silent_write(test_log, "This is a test.")
+        UUID_hash = update_manager.make_VVM_UUID_hash(key)
     except Exception, e:
         print "Test failed due to: %s" % str(e)
         assert False
 
-def test_silent_write_to_null(): 
-    try:
-        update_manager.silent_write(None, "This is a test.")
-    except Exception, e:
-        print "Test failed due to: %s" % str(e)
-        assert False
+    #make_UUID_hash returned None
+    assert UUID_hash, "make_UUID_hash failed to make a hash."

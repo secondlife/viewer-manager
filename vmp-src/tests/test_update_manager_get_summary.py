@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
+
 """
-@file   test_get_log_file_handle.py
+@file   test_update_manager_get_summary.py
 @author coyot
-@date   2016-06-08
+@date   2016-06-02
 
 $LicenseInfo:firstyear=2016&license=viewerlgpl$
 Second Life Viewer Source Code
@@ -29,29 +30,14 @@ $/LicenseInfo$
 
 from nose.tools import *
 
-import os
-import shutil
+import os.path
 import tempfile
 import update_manager
-import with_setup_args
 
-def get_log_file_handle_setup():
-    tmpdir1 = tempfile.mkdtemp(prefix = 'test1')
-    tmpdir2 = tempfile.mkdtemp(prefix = 'test2')
-    log_file_path = os.path.abspath(os.path.join(tmpdir1,"update_manager.log"))
-    #not using tempfile because we want a particular filename
-    open(log_file_path, 'w+').close
+def test_get_summary():
+    key = update_manager.get_platform_key()
+    summary_json = update_manager.get_summary(key)
 
-    return [tmpdir1,tmpdir2,log_file_path], {}
-
-def get_log_file_handle_teardown(tmpdir1,tmpdir2,log_file_path):
-    shutil.rmtree(tmpdir1, ignore_errors = True)
-    shutil.rmtree(tmpdir2, ignore_errors = True)
-       
-@with_setup_args.with_setup_args(get_log_file_handle_setup, get_log_file_handle_teardown)
-def test_missing_get_log_file_handle(tmpdir1,tmpdir2,log_file_path):
-    handle = update_manager.get_log_file_handle(tmpdir2)
-    if not os.path.exists(log_file_path):
-        print "Failed to touch new log file"
-        assert False
-    assert True
+    #we aren't testing the JSON library, one key pair is enough
+    #so we will use the one pair that is actually a constant
+    assert_equal(summary_json['Type'],'viewer')

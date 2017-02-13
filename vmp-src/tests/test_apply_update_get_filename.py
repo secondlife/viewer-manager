@@ -2,7 +2,7 @@
 
 
 """
-@file   test_get_filename.py
+@file   test_apply_update_get_filename.py
 @author coyot
 @date   2016-06-30
 

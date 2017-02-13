@@ -2,7 +2,7 @@
 
 
 """
-@file   test_check_for_completed_download.py
+@file   test_update_manager_check_for_completed_download.py
 @author coyot
 @date   2016-06-03
 
