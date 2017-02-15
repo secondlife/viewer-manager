@@ -214,7 +214,6 @@ def check_for_completed_download(download_dir, expected_size = 0):
     return completed  
 
 def get_settings(log_file_handle, parent_dir):
-    print llsd.BINARY_MIME_TYPE
     #return the settings file parsed into a dict
     try:
         settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml'))
@@ -227,7 +226,7 @@ def get_settings(log_file_handle, parent_dir):
         silent_write(log_file_handle, "Could not parse settings file %s" % lpe)
         return None
     except Exception as e:
-        silent_write(log_file_handle, "Could not read settings file. %s" % e)
+        silent_write(log_file_handle, "Could not read settings file %s" % e)
         return None
     return settings
 

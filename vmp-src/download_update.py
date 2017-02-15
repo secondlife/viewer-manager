@@ -57,10 +57,11 @@ def silent_write(log_file_handle, text):
     #this is so we don't have to keep trapping for an exception with a None handle
     #oh and because it is best effort, it is also a holey_write ;)
     if (log_file_handle):
-       #prepend text for easy grepping
-       timestamp = datetime.utcnow().strftime("%m/%d/%Y %H:%M:%S")
-       log_file_handle.write(timestamp + " DOWNLOADER: " + text + "\n")
+        #prepend text for easy grepping
+        timestamp = datetime.utcnow().strftime("%m/%d/%Y %H:%M:%S")
+        log_file_handle.write(timestamp + " DOWNLOADER: " + text + "\n")
 
+#Note: No exception handling here! Response to exceptions is the responsibility of the caller
 def download_update(url = None, download_dir = None, size = None, progressbar = False, chunk_size = CHUNK_SIZE):
     #url to download from
     #download_dir to download to
