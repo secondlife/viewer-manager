@@ -60,19 +60,21 @@ def test_try_dismount():
     #we only dismount dmg files on Macs
     if plat is not 'Darwin':
         assert True
-    try:
-        apply_update.try_dismount(None, "SL TESTING", "/Volumes")
-    except Exception, e:
-        print "Test failed due to: %s" % str(e)
-        assert False    
+    else:
+        try:
+            apply_update.try_dismount(None, "SL TESTING", "/Volumes")
+        except Exception, e:
+            print "Test failed due to: %s" % str(e)
+            assert False    
 
 def test_try_dismount_missing_dmg():
     #this test runs after the previous one with no setup, so the dmg should alredy be unmounted
     #the idea is to test what happens when it tries to unmount something that isn't mounted.
     if plat is not 'Darwin':
-        assert True    
-    try:
-        apply_update.try_dismount(None, "Should Fail Silently", "/Volumes")
-    except Exception, e:
-        print "Test failed due to: %s" % str(e)
-        assert False
+        assert True  
+    else:  
+        try:
+            apply_update.try_dismount(None, "Should Fail Silently", "/Volumes")
+        except Exception, e:
+            print "Test failed due to: %s" % str(e)
+            assert False

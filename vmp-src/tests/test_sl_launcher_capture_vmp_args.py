@@ -2,7 +2,7 @@
 
 
 """
-@file   test_sl_launcher_get_capture_vmp_args.py
+@file   test_sl_launcher_capture_vmp_args.py
 @author coyot
 @date   2016-06-02
 
@@ -45,37 +45,41 @@ SLL = imp.load_source('SL_Launcher',launcher)
 
 #the {Resources}/app_settings dir is a sibling of the parent of the script dir
 source_dir = os.path.dirname(os.path.dirname(launcher))
-golden_cmd_xml = os.path.join(source_dir, 'vmp-src/tests/data/cmd_line.xml')
+golden_cmd_xml = os.path.join(source_dir, 'vmp-src', 'tests', 'data', 'cmd_line.xml')
 plat = platform.system()
-path_dict = {'Darwin':os.path.join(source_dir, 'Resources/app_settings/cmd_line.xml'),
-               'Linux':os.path.join(source_dir, 'app_settings/cmd_line.xml'),
-               'Windows':os.path.join(source_dir, 'app_settings/cmd_line.xml')}
+path_dict = {'Darwin':os.path.join(source_dir, 'Resources', 'app_settings', 'cmd_line.xml'),
+               'Linux':os.path.join(source_dir, 'app_settings', 'cmd_line.xml'),
+               'Windows':os.path.join(source_dir, 'app_settings', 'cmd_line.xml')}
 test_dir = os.path.dirname(path_dict[plat])
+test_file = os.path.join(test_dir, 'cmd_line.xml')
 
-def get_capture_vmp_args_setup():
+def capture_vmp_args_setup():
     #makedirs errors if there are borked leftovers from a previous test, so wipe the plate clean
     shutil.rmtree(test_dir, ignore_errors = True)
     os.makedirs(test_dir)
     shutil.copyfile(golden_cmd_xml, path_dict[plat])
     return [], {}
 
-def get_capture_vmp_args_teardown():
+def capture_vmp_args_teardown():
     shutil.rmtree(test_dir, ignore_errors = True)
 
-@with_setup_args.with_setup_args(get_capture_vmp_args_setup, get_capture_vmp_args_teardown)
-def test_get_capture_vmp_args_empty(): 
-    overrides = SLL.capture_vmp_args()
+@with_setup_args.with_setup_args(capture_vmp_args_setup, capture_vmp_args_teardown)
+def test_capture_vmp_args_empty():
+    cmd_settings_file = SLL.get_cmd_line(test_file)
+    overrides = SLL.capture_vmp_args(None, cmd_settings_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
     assert_equal(overrides['channel'], None)
 
-@with_setup_args.with_setup_args(get_capture_vmp_args_setup, get_capture_vmp_args_teardown)
-def test_get_capture_vmp_args_simple(): 
-    overrides = SLL.capture_vmp_args(['--channel', 'Bat'])
+@with_setup_args.with_setup_args(capture_vmp_args_setup, capture_vmp_args_teardown)
+def test_capture_vmp_args_simple():
+    cmd_settings_file = SLL.get_cmd_line(test_file) 
+    overrides = SLL.capture_vmp_args(['--channel', 'Bat'], cmd_settings_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
     assert_equal(overrides['channel'], ['Bat'])
 
-@with_setup_args.with_setup_args(get_capture_vmp_args_setup, get_capture_vmp_args_teardown)
-def test_get_capture_vmp_args_setter(): 
-    overrides = SLL.capture_vmp_args(['--set', 'UpdaterServiceCheckPeriod', '333'])
+@with_setup_args.with_setup_args(capture_vmp_args_setup, capture_vmp_args_teardown)
+def test_capture_vmp_args_setter(): 
+    cmd_settings_file = SLL.get_cmd_line(test_file)
+    overrides = SLL.capture_vmp_args(['--set', 'UpdaterServiceCheckPeriod', '333'], cmd_settings_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
     assert_equal(overrides['set']['UpdaterServiceCheckPeriod'], '333')

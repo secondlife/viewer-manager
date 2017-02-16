@@ -32,10 +32,10 @@ from nose.tools import *
 from nose import with_setup
 
 import os
+import platform
 import shutil
 import tempfile
 import update_manager
-import with_setup_args
 
 license_string = """
 @file   test_update_manager_md5file.py
@@ -64,25 +64,20 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
-def md5file_setup():
-    empty_fd, empty_name = tempfile.mkstemp()
-    empty_handle = open(empty_name, mode='r')
-    license_fd, license_name = tempfile.mkstemp()
-    #unbuffered or it will look like an empty file by the time we get to the test
-    license_handle = open(license_name, 'w', 0)
+def test_empty_md5file():
+    empty_handle = tempfile.TemporaryFile('r')
+    assert_equal(update_manager.md5file(None, empty_handle), 'd41d8cd98f00b204e9800998ecf8427e'), "md5sum of empty file did not match"
+
+def test_license_md5file():
+    license_handle = tempfile.NamedTemporaryFile(mode = 'w', bufsize = 0, delete = False)
     license_handle.write(license_string)
-    return [empty_handle, empty_name, license_handle, license_name], {}
-
-def md5file_teardown(empty_handle, empty_name, license_handle, license_name):
-    empty_handle.close()
     license_handle.close()
-    os.remove(empty_name)
-    os.remove(license_name)
-
-@with_setup_args.with_setup_args(md5file_setup, md5file_teardown)
-def test_empty_md5file(empty_handle, empty_name, license_handle, license_name):
-    assert_equal(update_manager.md5file(empty_name), 'd41d8cd98f00b204e9800998ecf8427e'), "md5sum of empty file did not match"
-
-@with_setup_args.with_setup_args(md5file_setup, md5file_teardown)
-def test_incomplete_md5file(empty_handle, empty_name, license_handle, license_name):
-    assert_equal(update_manager.md5file(license_name), '3e2f43ec1b5b84c0a2370e772fbe0ea2'), "md5sum of ASCII text file did not match"
+    plat = update_manager.get_platform_key()
+    if plat == 'mac':
+        assert_equal(update_manager.md5file(license_handle.name), '3e2f43ec1b5b84c0a2370e772fbe0ea2'), "md5sum of ASCII text file did not match"
+    elif plat == 'win':
+        assert_equal(update_manager.md5file(license_handle.name), 'b385c4eb96984648bfbd596f48319e3d'), "md5sum of ASCII text file did not match"
+    else:
+        #no linux machine to get golden value from atm, if it works on mac and win, it will likely work correctly on lnx
+        assert True
+    os.remove(license_handle.name)

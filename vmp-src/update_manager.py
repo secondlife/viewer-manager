@@ -88,12 +88,20 @@ def after_frame(message, timeout = 10000):
     frame.after(timeout, lambda: frame.destroy())
     frame.basic_message(message = message)
 
-def md5file(fname):
+def md5file(fname=None, handle=None):
     #utility method to compute the checksum of the contents of a file
     hash_md5 = hashlib.md5()
-    with open(fname, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
+    if fname is not None:
+        with open(fname, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+    #unit tests use tempfile temporary files which return handles to files that vanish if you
+    #close the handle while Windows will say permission denied to a second handle.
+    elif handle is not None:
+        for chunk in iter(lambda: handle.read(4096), b""):
             hash_md5.update(chunk)
+    else:
+        return None
     return hash_md5.hexdigest()
 
 def convert_version_file_style(version):
@@ -127,7 +135,7 @@ def get_summary(platform_name):
     summary_file = os.path.join(summary_dir,"summary.json")
     #for windows unit tests
     if not os.path.exists(summary_file):
-        summary_file = os.path.join(os.path.dirname(apply_update.__file__), "summary.json")
+        summary_file = os.path.join(os.path.dirname(apply_update.__file__), "tests", "summary.json")
         if not os.path.exists(summary_file):
             return None
     with open(summary_file) as summary_handle:

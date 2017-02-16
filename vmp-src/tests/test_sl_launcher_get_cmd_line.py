@@ -51,6 +51,7 @@ path_dict = {'Darwin':os.path.join(source_dir, 'Resources/app_settings/cmd_line.
                'Linux':os.path.join(source_dir, 'app_settings/cmd_line.xml'),
                'Windows':os.path.join(source_dir, 'app_settings/cmd_line.xml')}
 test_dir = os.path.dirname(path_dict[plat])
+test_file = os.path.join(test_dir, 'cmd_line.xml')
 
 def get_cmd_line_setup():
     #makedirs errors if there are borked leftovers from a previous test, so wipe the plate clean
@@ -62,8 +63,11 @@ def get_cmd_line_setup():
 def get_cmd_line_teardown():
     shutil.rmtree(test_dir, ignore_errors = True)
 
+#here we use a private to the repo copy the cmd line file so that the test is platform independent
+#in particular, on Windows, sys.executable is different for nose (python) than the compiled exe
+#which throws off various mechanisms that look for things relative to where they are.
 @with_setup_args.with_setup_args(get_cmd_line_setup, get_cmd_line_teardown)
 def test_get_cmd_line(): 
-    result = SLL.get_cmd_line()
+    result = SLL.get_cmd_line(test_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
     assert_equal(result['update-service']['map-to'], 'CmdLineUpdateService')

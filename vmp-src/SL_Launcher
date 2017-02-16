@@ -72,18 +72,19 @@ def silent_write(log_file_handle, text):
       timestamp = datetime.utcnow().strftime("%m/%d/%Y %H:%M:%S")
       log_file_handle.write(timestamp + " LAUNCHER: " + text + "\n")
   
-def get_cmd_line():
-   platform_name = platform.system()
-   #find the parent of the logs and user_settings directories
-   if (platform_name == 'Darwin'):
-      cmd_settings_file = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'Resources/app_settings/cmd_line.xml')
-   elif (platform_name == 'Linux'): 
-      cmd_settings_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'app_settings/cmd_line.xml')
-   #using list format of join is important here because the Windows pathsep in a string escapes the next char
-   elif (platform_name == 'Windows'):
-      cmd_settings_file = os.path.join(os.path.dirname(os.path.realpath(sys.executable)), 'app_settings/cmd_line.xml')
-   else:
-      cmd_settings_file = None
+def get_cmd_line(cmd_settings_file = None):
+   if cmd_settings_file is None:
+      platform_name = platform.system()
+      #find the parent of the logs and user_settings directories
+      if (platform_name == 'Darwin'):
+         cmd_settings_file = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'Resources/app_settings/cmd_line.xml')
+      elif (platform_name == 'Linux'): 
+         cmd_settings_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'app_settings/cmd_line.xml')
+      #using list format of join is important here because the Windows pathsep in a string escapes the next char
+      elif (platform_name == 'Windows'):
+         cmd_settings_file = os.path.join(os.path.dirname(os.path.realpath(sys.executable)), 'app_settings', 'cmd_line.xml')
+      else:
+         cmd_settings_file = None
       
    try:
       cmd_line = llsd.parse((open(cmd_settings_file)).read())
@@ -98,7 +99,8 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
    #take a copy of the viewer parameters that are of interest to VMP.
    #the regex for a parameter is --<param> {opt1} {opt2}
    cli_overrides = {}   
-   cmd_line = get_cmd_line()
+   if not cmd_line:
+      cmd_line = get_cmd_line()
    
    vmp_params = {'--channel':'channel', '--settings':'settings', '--update-service':'update-service', '--set':'set'}
    #the settings set with --set.  All such settings have only one argument.
