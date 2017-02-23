@@ -59,6 +59,10 @@ def getPlatform():
     elif linux.search(platform):
         return 'linux' + bitness
     elif windows.search(platform):
+        if platform.architecture()[0] == '32bit':
+            bitness = '32'
+        else:
+            bitness = '64'
         return 'win' + bitness
     else:
         return None
