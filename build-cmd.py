@@ -64,6 +64,7 @@ def getPlatform():
         return None
     
 def main():
+    print "Python version string: %s" % sys.version
     autobuild = os.environ.get('AUTOBUILD')
     platform = getPlatform()
 
