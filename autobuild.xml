@@ -28,7 +28,7 @@
                   <string>../build-cmd.py</string>
                 </array>
                 <key>command</key>
-                <string>$PYTHON_EXECUTABLE</string>
+                <string>$python_command</string>
               </map>
               <key>default</key>
               <boolean>true</boolean>
