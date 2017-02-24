@@ -29,6 +29,7 @@ from shutil import copy, copytree, ignore_patterns, rmtree
 import cgitb
 import os
 import os.path
+import platform
 import re
 import subprocess
 import sys
