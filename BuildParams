@@ -7,4 +7,4 @@
 build_autobuild_install = false
 
 #nothing to configure, either
-build_autobuild_configure - false
+build_autobuild_configure = false
