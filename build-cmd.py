@@ -50,15 +50,15 @@ windows = re.compile('win')
 
 #unify platform names and correctly return bitness
 def getPlatform():
-    platform = sys.platform.lower()
+    plat = sys.platform.lower()
     bitness = '32'
     if sys.maxsize > 2**32:
         bitness = '64'
-    if darwin.search(platform) is not None:
+    if darwin.search(plat) is not None:
         return 'darwin' + bitness
-    elif linux.search(platform):
+    elif linux.search(plat):
         return 'linux' + bitness
-    elif windows.search(platform):
+    elif windows.search(plat):
         if platform.architecture()[0] == '32bit':
             bitness = '32'
         else:
