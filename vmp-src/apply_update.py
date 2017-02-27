@@ -38,18 +38,26 @@ from datetime import datetime
 import argparse
 import errno
 import fnmatch
+import imp
 import InstallerUserMessage as IUM
 import os
 import os.path
 import plistlib
-if os.name == 'nt':
-    import psutil
 import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+
+#we only use this for a best effort process cleanup
+#if its not there, it doesn't matter.
+try:
+   if os.name == 'nt':
+      import psutil
+except:
+   pass
+    
 
 #Module level variables
 
