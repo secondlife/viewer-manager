@@ -48,6 +48,7 @@ cgitb.enable(format='text')
 darwin = re.compile('darwin')
 linux = re.compile('linux')
 windows = re.compile('win')
+bit32 = re.compile('32 bit')
 
 #unify platform names and correctly return bitness
 def getPlatform():
@@ -60,8 +61,11 @@ def getPlatform():
     elif linux.search(plat):
         return 'linux' + bitness
     elif windows.search(plat):
-        print "platform.arch: %s" % repr(platform.architecture())
-        if platform.architecture()[0] == '32bit':
+        print "sys.version: %s" % repr(sys.version)
+        #sadly, most of the ways that python uses to determine bitness
+        #in the end rely on the CPU/memory bitness and all return 64
+        #scraping sys.version is the only reliable method
+        if bit32.search(sys.version):
             bitness = '32'
         else:
             bitness = '64'
