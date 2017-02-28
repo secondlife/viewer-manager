@@ -167,7 +167,7 @@ def main():
                 vmp_files.append(str(os.path.join(iter_paths[key]['dst'], f)))
         #the only non-py file to be compiled.
         vmp_files.append(str(os.path.join(iter_paths[key]['dst'], 'SL_Launcher')))
-        print "Manifest of files to be compiled by pyinstaller: %s" % repr(iter_paths[key]['dst'])
+        print "Manifest of files to be compiled by pyinstaller: %s" % repr(vmp_files)
         #In a typical Windows install, pyinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         #BUT that's not true of the virtualenv that autobuild runs in, so hard code the canonical location
         pyinstaller_exe = [r'C:\Python27x86\Scripts\pyinstaller.exe']
