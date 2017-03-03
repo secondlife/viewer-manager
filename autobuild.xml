@@ -12,7 +12,7 @@
       <key>license_file</key>
       <string>LICENSE</string>
       <key>name</key>
-      <string>vmp</string>
+      <string>viewer-manager</string>
       <key>platforms</key>
       <map>
         <key>common</key>
