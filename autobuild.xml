@@ -40,6 +40,7 @@
           <array>
             <string>VERSION.txt</string>
             <string>VMP/*.*</string>
+            <string>VMP/SL_Launcher</string>
             <string>VMP/icons/*.*</string>
           </array>
           <key>name</key>
