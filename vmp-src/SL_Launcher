@@ -35,8 +35,7 @@ import sys
 
 #module globals
 log_file_handle = None
-cwd = os.path.dirname(os.path.realpath(str(sys.executable)))
-sys.path.insert(0, os.path.join(cwd, 'llbase'))
+cwd = None
 
 import argparse
 import collections
@@ -161,6 +160,8 @@ if __name__ == "__main__":
    #this and a few other update manager methods really should be refactored into a util lib
    parent_dir = update_manager.get_parent_path(update_manager.get_platform_key())
    log_file_handle = update_manager.get_log_file_handle(parent_dir, 'launcher.log')
+   cwd = os.path.dirname(os.path.realpath(str(sys.executable)))
+   sys.path.insert(0, os.path.join(cwd, 'llbase'))
    
    executable_name = ""
    if sys.platform.startswith('darwin'):
