@@ -671,5 +671,8 @@ def update_manager(cli_overrides = None):
 
 
 if __name__ == '__main__':
+    #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
+    if 'ython' in sys.executable:
+        sys.executable =  os.path.abspath(sys.argv[0])
     #there is no argument parsing or other main() work to be done
     update_manager()

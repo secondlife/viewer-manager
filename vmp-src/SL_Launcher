@@ -154,6 +154,10 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
    
 if __name__ == "__main__":
    #main entry point   
+   
+   #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
+   if 'ython' in sys.executable:
+      sys.executable =  os.path.abspath(sys.argv[0])   
    #this and a few other update manager methods really should be refactored into a util lib
    parent_dir = update_manager.get_parent_path(update_manager.get_platform_key())
    log_file_handle = update_manager.get_log_file_handle(parent_dir, 'launcher.log')
