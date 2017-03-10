@@ -321,4 +321,4 @@ if __name__ == "__main__":
    #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
    if 'ython' in sys.executable:
       sys.executable =  os.path.abspath(sys.argv[0])   
-    main()
+   main()
