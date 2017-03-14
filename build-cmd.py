@@ -182,8 +182,8 @@ def main():
                 target = []
                 target.append(f)
                 print "target exists: %s" % os.path.exists(target[0])
-                print "about to call %s " % (python_native + pyinstaller_exe + args + target)
-                subprocess.check_output(python_native + pyinstaller_exe + args + target)
+                print "about to call %s " % (list(python_native) + pyinstaller_exe + args + target)
+                subprocess.check_output(list(python_native) + pyinstaller_exe + args + target)
             except Exception as e:
                 print "Pyinstaller failed"
                 print repr(e)
