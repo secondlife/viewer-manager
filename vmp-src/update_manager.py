@@ -258,11 +258,11 @@ def get_log_file_handle(parent_dir, filename = None):
         f = None
     return f
 
-def make_VVM_UUID_hash(platform_key):
+def make_VVM_UUID_hash(platform_key, log_file_handle):
     #NOTE: There is no python library support for a persistent machine specific UUID (MUUID)
     #      AND all three platforms do this a different way, so exec'ing out is really the best we can do
     #Lastly, this is a best effort service.  If we fail, we should still carry on with the update 
-    uuid = None
+    muuid = None
     if (platform_key == 'lnx'):
         muuid = subprocess.check_output(['/usr/bin/hostid']).rstrip()
     elif (platform_key == 'mac'):
@@ -275,7 +275,7 @@ def make_VVM_UUID_hash(platform_key):
         muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
     elif (platform_key == 'win'):
         # wmic csproduct get UUID | grep -v UUID
-        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'])
+        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], stderr=log_file_handle)
         #outputs in two rows:
         #UUID
         #XXXXXXX-XXXX...
@@ -311,7 +311,7 @@ def query_vvm(log_file_handle = None, platform_key = None, settings = None, summ
     else:
         platform_version = platform.release()
     #this will always return something usable, error handling in method
-    UUID = str(make_VVM_UUID_hash(platform_key))
+    UUID = str(make_VVM_UUID_hash(platform_key, log_file_handle))
     #note that this will not normally be in a settings.xml file and is only here for test builds.
     #for test builds, add this key to the ../user_settings/settings.xml
     """
