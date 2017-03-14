@@ -29,6 +29,7 @@ $/LicenseInfo$
 @date   2016-06-23
 """
 
+import cgitb
 import os
 import os.path
 import sys
@@ -153,91 +154,95 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
    
 if __name__ == "__main__":
    #main entry point   
-   
-   #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
-   if 'ython' in sys.executable:
-      sys.executable =  os.path.abspath(sys.argv[0])   
-   #this and a few other update manager methods really should be refactored into a util lib
-   parent_dir = update_manager.get_parent_path(update_manager.get_platform_key())
-   log_file_handle = update_manager.get_log_file_handle(parent_dir, 'launcher.log')
-   silent_write(log_file_handle, "Found parent dir %s" % repr(parent_dir))
-   cwd = os.path.dirname(os.path.realpath(str(sys.executable)))
-   sys.path.insert(0, os.path.join(cwd, 'llbase'))
-   
-   executable_name = ""
-   if sys.platform.startswith('darwin'):
-      executable_name = "Second Life"
-   elif sys.platform.startswith("win") or sys.platform.startswith("cyg"):
-      filename = os.path.basename(cwd) + ".exe"
-      if os.path.isfile(os.path.join(cwd, filename)):
-         executable_name = filename
-      else:
-         sys.exit("Can't find Windows viewer binary")
-   elif sys.platform.startswith("linux"):
-      executable_name = "secondlife"
-   else:
-      #SL doesn't run on VMS or punch cards
-      sys.exit("Unsupported platform")
+
+   try:
+      #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
+      if 'ython' in sys.executable:
+         sys.executable =  os.path.abspath(sys.argv[0])   
+      #this and a few other update manager methods really should be refactored into a util lib
+      parent_dir = update_manager.get_parent_path(update_manager.get_platform_key())
+      cgitb.enable(logdir=os.path.join(parent_dir, "logs"), format='text')
+      log_file_handle = update_manager.get_log_file_handle(parent_dir, 'launcher.log')
+      silent_write(log_file_handle, "Found parent dir %s" % repr(parent_dir))
+      cwd = os.path.dirname(os.path.realpath(str(sys.executable)))
+      sys.path.insert(0, os.path.join(cwd, 'llbase'))
       
-   #find the viewer to be lauched
-   viewer_binary = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])),executable_name) 
-   
-   parser = argparse.ArgumentParser()
-   args = parser.parse_known_args(sys.argv)
-   #args[1] looks like ['./SL_Launcher', '--set', 'foo', 'bar', '-X', '-Y', 'qux'], dump the progname
-   args_list_to_pass = args[1][1:]
-   vmp_args = capture_vmp_args(args_list_to_pass)
-   #make a copy by value, not by reference
-   command = list(args_list_to_pass)
-   
-   silent_write(log_file_handle, "Calling update manager with %s" % repr(vmp_args))
-   (success, state, condition) = update_manager.update_manager(vmp_args)
-   silent_write(log_file_handle, "Update manager returned %s %s %s" % (success, state, condition))
-   if sys.platform.startswith('darwin') and isinstance(condition, basestring):
-      condition = os.path.join(condition,'Contents/MacOS/SL_Launcher')
-   # From update_manager:
-   #  (False, 'setup', None): error occurred before we knew what the update was (e.g., in setup or parsing)
-   #  (False, 'download', version): we failed to download the new version
-   #  (False, 'apply', version): we failed to apply the new version
-   #  (True, None, None): No update found
-   #  (True, 'in place', True): update applied in place
-   #  (True, 'in place', path_to_new_launcher): Update applied by a new install to a new location
-   #  (True, 'background', popen_object): background download initiated, object passed to wait on
-   #  (True, 'skip', True): User has chosen to skip this optional update
-   #These boil down three cases:
-   #  Success is False, then pop up a message and launch the current viewer
-   #  No update, update skipped, succeeded in place in foreground, or background update started: silently launch the current viewer channel
-   #  Updated succeed to a different channel, launch that viewer and exit
-   if not success:
-      msg = 'Update failed in the %s process.  Please check logs.  Viewer will launch starting momentarily.' % state
-      update_manager.after_frame(msg)
-      command.insert(0,viewer_binary)
-      viewer_process = subprocess.Popen(command)
-      #at the moment, we just exit here.  Later, the crash monitor will be launched at this point
-   elif (success == True and 
-         (state == None 
-          or (state == 'skip')
-          or (state ==  'background')
-          or (state == 'in place' and condition == True))):
-      silent_write(log_file_handle, "Launching current channel viewer, no required upgrade found.")
-      command.insert(0,viewer_binary)
-      viewer_process = subprocess.Popen(command)
-      #at the moment, we just exit here.  Later, the crash monitor will be launched at this point
-   else:
-      #'condition' is the path to the new launcher.
-      command.insert(0,condition)
-      silent_write(log_file_handle, "Launching new channel viewer: %s." % command)
-      try:
+      executable_name = ""
+      if sys.platform.startswith('darwin'):
+         executable_name = "Second Life"
+      elif sys.platform.startswith("win") or sys.platform.startswith("cyg"):
+         filename = os.path.basename(cwd) + ".exe"
+         if os.path.isfile(os.path.join(cwd, filename)):
+            executable_name = filename
+         else:
+            sys.exit("Can't find Windows viewer binary")
+      elif sys.platform.startswith("linux"):
+         executable_name = "secondlife"
+      else:
+         #SL doesn't run on VMS or punch cards
+         sys.exit("Unsupported platform")
+         
+      #find the viewer to be lauched
+      viewer_binary = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])),executable_name) 
+      
+      parser = argparse.ArgumentParser()
+      args = parser.parse_known_args(sys.argv)
+      #args[1] looks like ['./SL_Launcher', '--set', 'foo', 'bar', '-X', '-Y', 'qux'], dump the progname
+      args_list_to_pass = args[1][1:]
+      vmp_args = capture_vmp_args(args_list_to_pass)
+      #make a copy by value, not by reference
+      command = list(args_list_to_pass)
+      
+      silent_write(log_file_handle, "Calling update manager with %s" % repr(vmp_args))
+      (success, state, condition) = update_manager.update_manager(vmp_args)
+      silent_write(log_file_handle, "Update manager returned %s %s %s" % (success, state, condition))
+      if sys.platform.startswith('darwin') and isinstance(condition, basestring):
+         condition = os.path.join(condition,'Contents/MacOS/SL_Launcher')
+      # From update_manager:
+      #  (False, 'setup', None): error occurred before we knew what the update was (e.g., in setup or parsing)
+      #  (False, 'download', version): we failed to download the new version
+      #  (False, 'apply', version): we failed to apply the new version
+      #  (True, None, None): No update found
+      #  (True, 'in place', True): update applied in place
+      #  (True, 'in place', path_to_new_launcher): Update applied by a new install to a new location
+      #  (True, 'background', popen_object): background download initiated, object passed to wait on
+      #  (True, 'skip', True): User has chosen to skip this optional update
+      #These boil down three cases:
+      #  Success is False, then pop up a message and launch the current viewer
+      #  No update, update skipped, succeeded in place in foreground, or background update started: silently launch the current viewer channel
+      #  Updated succeed to a different channel, launch that viewer and exit
+      if not success:
+         msg = 'Update failed in the %s process.  Please check logs.  Viewer will launch starting momentarily.' % state
+         update_manager.after_frame(msg)
+         command.insert(0,viewer_binary)
          viewer_process = subprocess.Popen(command)
-      except Exception as e:
-         #if another viewer is running or windows install is in progress, subprocess will throw an unhandlable exception
-         silent_write(log_file_handle, "Exception spawning new viewer: %s" % repr(e))
-   
-   silent_write(log_file_handle, "Viewer successfully launched.")
-   
-   #update manager returns the argument dict to the downloader in the condition variable
-   if success == True and state ==  'background' and condition is not None:
-      silent_write(log_file_handle, "Launching background downloader with %s" % repr(condition))
-      download_update.download_update(**condition)
-      silent_write(log_file_handle, "Background download complete")
+         #at the moment, we just exit here.  Later, the crash monitor will be launched at this point
+      elif (success == True and 
+            (state == None 
+             or (state == 'skip')
+             or (state ==  'background')
+             or (state == 'in place' and condition == True))):
+         silent_write(log_file_handle, "Launching current channel viewer, no required upgrade found.")
+         command.insert(0,viewer_binary)
+         viewer_process = subprocess.Popen(command)
+         #at the moment, we just exit here.  Later, the crash monitor will be launched at this point
+      else:
+         #'condition' is the path to the new launcher.
+         command.insert(0,condition)
+         silent_write(log_file_handle, "Launching new channel viewer: %s." % command)
+         try:
+            viewer_process = subprocess.Popen(command)
+         except Exception as e:
+            #if another viewer is running or windows install is in progress, subprocess will throw an unhandlable exception
+            silent_write(log_file_handle, "Exception spawning new viewer: %s" % repr(e))
+      
+      silent_write(log_file_handle, "Viewer successfully launched.")
+      
+      #update manager returns the argument dict to the downloader in the condition variable
+      if success == True and state ==  'background' and condition is not None:
+         silent_write(log_file_handle, "Launching background downloader with %s" % repr(condition))
+         download_update.download_update(**condition)
+         silent_write(log_file_handle, "Background download complete")
+   except Exception, e:
+      silent_write(log_file_handle, "Launcher caught general exception %s" % repr(e))
 
