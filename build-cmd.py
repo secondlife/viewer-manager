@@ -75,7 +75,7 @@ def getPlatform():
     
 def main():
     print "Python version string: %s" % sys.version
-    python_native = os.environ.get('PYTHON_COMMAND')
+    python_native = os.environ.get('PYTHON_COMMAND_NATIVE')
     print "Using python from: %s" % python_native
     autobuild = os.environ.get('AUTOBUILD')
     platform = getPlatform()
