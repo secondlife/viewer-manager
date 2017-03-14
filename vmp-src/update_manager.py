@@ -580,26 +580,28 @@ def update_manager(cli_overrides = None):
     #nothing to do or error
     if not result_data:
         silent_write(log_file_handle, "No update found.")
-        silent_write(log_file_handle, "Update manager exited with (Success = %s, Update Required = %s)" % (True, None))
+        silent_write(log_file_handle, "Update manager exited with (Success = %s, Stage = %s, Update Required = %s)" % (True, None, None))
         #clean up any previous download dir on windows, see apply_update.apply_update()
-        if platform_key == 'win':
-            past_download_dir = make_download_dir(parent_dir, channel_override_summary['Version'])
-            #call make to convert our version into a previous download dir path
-            #call check to see if the winstall file is there
-            installed = check_for_completed_download(past_download_dir)
-            silent_write(log_file_handle, "Checked for previous Windows install in %s with result %s." % (past_download_dir, installed))
-            if installed == 'winstall':
-                try:
+        try:
+            if platform_key == 'win':
+                past_download_dir = make_download_dir(parent_dir, channel_override_summary['Version'])
+                #call make to convert our version into a previous download dir path
+                #call check to see if the winstall file is there
+                installed = check_for_completed_download(past_download_dir)
+                silent_write(log_file_handle, "Checked for previous Windows install in %s with result %s." % (past_download_dir, installed))
+                if installed == 'winstall':
                     shutil.rmtree(past_download_dir)
-                except:
-                    #cleanup is best effort
-                    pass
+        except Exception, e:
+            #cleanup is best effort
+            silent_write(log_file_handle, "Caught exception cleaning up Windows download dir %s" % repr(e))
+            pass
         return (True, None, None)
 
     #get download directory, if there are perm issues or similar problems, give up
     try:
         download_dir = make_download_dir(parent_dir, result_data['version'])
     except Exception, e:
+        silent_write(log_file_handle, "Caught exception making download dir %s" % repr(e))
         silent_write(log_file_handle, "Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
         return (False, 'setup', None)
     

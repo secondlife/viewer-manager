@@ -109,7 +109,7 @@ def main():
     os.chdir(iter_paths['vmp']['src'])
     try:
         print "About to call %s on %s from %s" % (nosetest_cmd, tests, iter_paths['vmp']['src'])
-        output = repr(subprocess.check_output([nosetest_cmd, tests], stderr=subprocess.STDOUT))
+        #output = repr(subprocess.check_output([nosetest_cmd, tests], stderr=subprocess.STDOUT))
     except Exception as e:
         print repr(e)
         try:
@@ -122,7 +122,7 @@ def main():
             pass
         sys.exit(1)
     
-    output = output.replace('\\n','$')
+    """output = output.replace('\\n','$')
     output = output.replace('\'','')
     output_list = output.split('$')
     one_line = ''
@@ -130,7 +130,7 @@ def main():
         if 'Ran' in line or 'OK' in line:
             one_line =  one_line + " " + line
     print "Successful nosetest output:"
-    print one_line
+    print one_line"""
     os.chdir(top)
            
     #the version file consists of one line with the version string in it
@@ -172,7 +172,7 @@ def main():
         print "Manifest of files to be compiled by pyinstaller: %s" % repr(vmp_files)
         #In a typical Windows install, pyinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         #BUT that's not true of the virtualenv that autobuild runs in, so hard code the canonical location
-        pyinstaller_exe = [r'C:\Python27x86\Scripts\pyinstaller-script.py']
+        pyinstaller_exe = [r'C:\Python27\Scripts\pyinstaller-script.py']
         args = [ "-y", "-w", "--clean", "--onefile", "--log-level", "DEBUG", "-p", iter_paths[key]['dst'], "--distpath", iter_paths[key]['dst']]
         print "pyinstaller exists: %s" % os.path.exists(pyinstaller_exe[0])
         if not os.path.exists(pyinstaller_exe[0]):
