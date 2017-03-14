@@ -75,6 +75,8 @@ def getPlatform():
     
 def main():
     print "Python version string: %s" % sys.version
+    python_native = os.environ.get('PYTHON_COMMAND')
+    print "Using python from: %s" % python_native
     autobuild = os.environ.get('AUTOBUILD')
     platform = getPlatform()
 
@@ -170,7 +172,7 @@ def main():
         print "Manifest of files to be compiled by pyinstaller: %s" % repr(vmp_files)
         #In a typical Windows install, pyinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         #BUT that's not true of the virtualenv that autobuild runs in, so hard code the canonical location
-        pyinstaller_exe = [r'C:\Python27x86\Scripts\pyinstaller.exe']
+        pyinstaller_exe = [r'C:\Python27x86\Scripts\pyinstaller-script.py']
         args = [ "-y", "-w", "--clean", "--onefile", "--log-level", "DEBUG", "-p", iter_paths[key]['dst'], "--distpath", iter_paths[key]['dst']]
         print "pyinstaller exists: %s" % os.path.exists(pyinstaller_exe[0])
         if not os.path.exists(pyinstaller_exe[0]):
@@ -180,8 +182,8 @@ def main():
                 target = []
                 target.append(f)
                 print "target exists: %s" % os.path.exists(target[0])
-                print "about to call %s " % (pyinstaller_exe + args + target)
-                subprocess.check_output(pyinstaller_exe + args + target)
+                print "about to call %s " % (python_native + pyinstaller_exe + args + target)
+                subprocess.check_output(python_native + pyinstaller_exe + args + target)
             except Exception as e:
                 print "Pyinstaller failed"
                 print repr(e)
