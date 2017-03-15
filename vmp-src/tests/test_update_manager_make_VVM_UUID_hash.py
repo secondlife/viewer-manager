@@ -38,7 +38,7 @@ def test_make_VVM_UUID_hash():
     #About the best we can do is check for the exception from subprocess
     key = update_manager.get_platform_key()
     try:
-        UUID_hash = update_manager.make_VVM_UUID_hash(key)
+        UUID_hash = update_manager.make_VVM_UUID_hash(key, None)
     except Exception, e:
         print "Test failed due to: %s" % str(e)
         assert False
