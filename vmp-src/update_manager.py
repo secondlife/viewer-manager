@@ -264,18 +264,18 @@ def make_VVM_UUID_hash(platform_key, log_file_handle):
     #Lastly, this is a best effort service.  If we fail, we should still carry on with the update 
     muuid = None
     if (platform_key == 'lnx'):
-        muuid = subprocess.check_output(['/usr/bin/hostid']).rstrip()
+        muuid = subprocess.check_output(['/usr/bin/hostid'], stderr=log_file_handle).rstrip()
     elif (platform_key == 'mac'):
         #this is absurdly baroque
         #/usr/sbin/system_profiler SPHardwareDataType | fgrep 'Serial' | awk '{print $NF}'
-        muuid = subprocess.check_output(["/usr/sbin/system_profiler", "SPHardwareDataType"])
+        muuid = subprocess.check_output(["/usr/sbin/system_profiler", "SPHardwareDataType"], stderr=log_file_handle)
         #findall[0] does the grep for the value we are looking for: "Serial Number (system): XXXXXXXX"
         #split(:)[1] gets us the XXXXXXX part
         #lstrip shaves off the leading space that was after the colon
         muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
     elif (platform_key == 'win'):
         # wmic csproduct get UUID | grep -v UUID
-        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], stderr=subprocess.PIPE)
+        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], stderr=log_file_handle)
         #outputs in two rows:
         #UUID
         #XXXXXXX-XXXX...
@@ -389,7 +389,8 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                 #arguments to execv() via popen() can only be strings, hence str(int)
                 silent_write(log_file_handle, "background downloader args: " + repr(["--url", url, "--dir", download_dir, 
                             "--size", str(size), "--chunk_size", str(chunk_size)]))
-                download_process_args = {'url':url, 'download_dir': download_dir, 'size':str(size), 'chunk_size':str(chunk_size)}
+                download_process = subprocess.Popen([path_to_downloader, "--url", url, "--dir", download_dir, 
+                                                     "--size", str(size), "--chunk_size", str(chunk_size)], stdin=None, stdout=None, stderr=None, close_fds=True)                
                 silent_write(log_file_handle, "Download of new version " + version + " spawned.")
                 download_success = True
             except  Exception, e:

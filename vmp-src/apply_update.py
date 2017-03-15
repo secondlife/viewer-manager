@@ -53,10 +53,10 @@ import tempfile
 #we only use this for a best effort process cleanup
 #if its not there, it doesn't matter.
 try:
-   if os.name == 'nt':
-      import psutil
+    if os.name == 'nt':
+        import psutil
 except:
-   pass
+    pass
     
 
 #Module level variables
@@ -109,7 +109,7 @@ def try_dismount(log_file_handle = None, installable = None, tmpdir = None):
         #Filesystem   512-blocks   Used Available Capacity iused  ifree %iused  Mounted on
         #/dev/disk1s2    2047936 643280   1404656    32%   80408 175582   31%   /private/tmp/mnt/Second Life Installer
         command = ["df", os.path.join(tmpdir, "Second Life Installer")]
-        output = subprocess.check_output(command)
+        output = subprocess.check_output(command, stderr=log_file_handle)
         #No point in trying to umount an fs that doesn't exist. 
         #This could happen, for example, if the user manually umounts it first
         try:
@@ -120,11 +120,11 @@ def try_dismount(log_file_handle = None, installable = None, tmpdir = None):
         mnt_dev = output.split('\n')[1].split()[0]
         #do the dismount
         command = ["hdiutil", "detach", "-force", mnt_dev]
-        output = subprocess.check_output(command)
+        output = subprocess.check_output(command, stderr=log_file_handle)
         silent_write(log_file_handle, "hdiutil detach succeeded")
         silent_write(log_file_handle, output)
         command = ["diskutil", "umount", mnt_dev]
-        output = subprocess.check_output(command)
+        output = subprocess.check_output(command, stderr=log_file_handle)
         silent_write(log_file_handle, "diskutil umount succeeded")
         silent_write(log_file_handle, output)        
     except Exception, e:
@@ -195,7 +195,7 @@ def apply_mac_update(installable = None, log_file_handle = None):
     #make temp dir and mount & attach dmg
     tmpdir = tempfile.mkdtemp()
     try:
-        output = subprocess.check_output(["hdiutil", "attach", installable, "-mountroot", tmpdir])
+        output = subprocess.check_output(["hdiutil", "attach", installable, "-mountroot", tmpdir], stderr=log_file_handle)
         silent_write(log_file_handle, "hdiutil attach succeeded")
         silent_write(log_file_handle, output)
     except Exception, e:
@@ -271,7 +271,7 @@ def apply_windows_update(installable = None, log_file_handle = None):
     #relying on the NSIS messaging subsystem to warn the resident on error.
     silent_write(log_file_handle, "Launching installer %s." % installable)
     #this is the P_NOWAIT version, returns immediately
-    subprocess.Popen(installable)
+    subprocess.Popen(installable, stderr=log_file_handle)
     return os.path.dirname(installable)
 
 def kill_em_all(level):

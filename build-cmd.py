@@ -173,7 +173,7 @@ def main():
         #In a typical Windows install, pyinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         #BUT that's not true of the virtualenv that autobuild runs in, so hard code the canonical location
         pyinstaller_exe = [r'C:\Python27\Scripts\pyinstaller-script.py']
-        args = [ "-y", "-w", "--clean", "--onefile", "--log-level", "DEBUG", "-p", iter_paths[key]['dst'], "--distpath", iter_paths[key]['dst']]
+        args = [ "-y", "--clean", "--onefile", "--log-level", "DEBUG", "-p", iter_paths[key]['dst'], "--distpath", iter_paths[key]['dst']]
         print "pyinstaller exists: %s" % os.path.exists(pyinstaller_exe[0])
         if not os.path.exists(pyinstaller_exe[0]):
             sys.exit(1)
