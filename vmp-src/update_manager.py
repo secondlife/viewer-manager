@@ -264,18 +264,18 @@ def make_VVM_UUID_hash(platform_key, log_file_handle):
     #Lastly, this is a best effort service.  If we fail, we should still carry on with the update 
     muuid = None
     if (platform_key == 'lnx'):
-        muuid = subprocess.check_output(['/usr/bin/hostid'], stderr=log_file_handle).rstrip()
+        muuid = subprocess.check_output(['/usr/bin/hostid'], stdin=None, stdout=log_file_handle, stderr=log_file_handle).rstrip()
     elif (platform_key == 'mac'):
         #this is absurdly baroque
         #/usr/sbin/system_profiler SPHardwareDataType | fgrep 'Serial' | awk '{print $NF}'
-        muuid = subprocess.check_output(["/usr/sbin/system_profiler", "SPHardwareDataType"], stderr=log_file_handle)
+        muuid = subprocess.check_output(["/usr/sbin/system_profiler", "SPHardwareDataType"], stdin=None, stdout=log_file_handle, stderr=log_file_handle)
         #findall[0] does the grep for the value we are looking for: "Serial Number (system): XXXXXXXX"
         #split(:)[1] gets us the XXXXXXX part
         #lstrip shaves off the leading space that was after the colon
         muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
     elif (platform_key == 'win'):
         # wmic csproduct get UUID | grep -v UUID
-        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], stderr=log_file_handle)
+        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], stdin=None, stdout=log_file_handle, stderr=log_file_handle)
         #outputs in two rows:
         #UUID
         #XXXXXXX-XXXX...
@@ -355,6 +355,11 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
     download_process_args = None
     if not chunk_size:
         chunk_size = 5*1024
+    #for background execution
+    if get_platform_key() == 'win':
+        path_to_downloader = os.path.join(os.path.dirname(os.path.realpath(sys.executable)), "download_update.exe")
+    else:
+        path_to_downloader = os.path.join(os.path.dirname(os.path.realpath(__file__)), "download_update.py")
 
     #three strikes and you're out
     silent_write(log_file_handle, "Preparing to download new version " + version + " destination " + download_dir + ".")
