@@ -109,7 +109,7 @@ def main():
     os.chdir(iter_paths['vmp']['src'])
     try:
         print "About to call %s on %s from %s" % (nosetest_cmd, tests, iter_paths['vmp']['src'])
-        #output = repr(subprocess.check_output([nosetest_cmd, tests], stderr=subprocess.STDOUT))
+        output = repr(subprocess.check_output([nosetest_cmd, tests], stderr=subprocess.STDOUT))
     except Exception as e:
         print repr(e)
         try:
@@ -122,7 +122,7 @@ def main():
             pass
         sys.exit(1)
     
-    """output = output.replace('\\n','$')
+    output = output.replace('\\n','$')
     output = output.replace('\'','')
     output_list = output.split('$')
     one_line = ''
@@ -130,7 +130,7 @@ def main():
         if 'Ran' in line or 'OK' in line:
             one_line =  one_line + " " + line
     print "Successful nosetest output:"
-    print one_line"""
+    print one_line
     os.chdir(top)
            
     #the version file consists of one line with the version string in it
