@@ -275,7 +275,7 @@ def make_VVM_UUID_hash(platform_key, log_file_handle):
         muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
     elif (platform_key == 'win'):
         # wmic csproduct get UUID | grep -v UUID
-        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], stderr=log_file_handle)
+        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], stderr=subprocess.PIPE)
         #outputs in two rows:
         #UUID
         #XXXXXXX-XXXX...
