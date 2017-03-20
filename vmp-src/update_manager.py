@@ -35,6 +35,7 @@ from llbase import llrest
 from llbase.llrest import RESTError
 from llbase import llsd    
 from urlparse import urljoin
+from vmp_util import subprocess_args
 
 import apply_update
 import download_update
@@ -265,24 +266,23 @@ def make_VVM_UUID_hash(platform_key, log_file_handle):
     muuid = None
     #for env without stdin, such as pythonw and pyinstaller, provide a legit empty handle, not the broken
     #thing we get from the env.
-    with open(os.devnull) as nullin:
-        if (platform_key == 'lnx'):
-            muuid = subprocess.check_output(['/usr/bin/hostid'], stdin=nullin, stderr=log_file_handle).rstrip()
-        elif (platform_key == 'mac'):
-            #this is absurdly baroque
-            #/usr/sbin/system_profiler SPHardwareDataType | fgrep 'Serial' | awk '{print $NF}'
-            muuid = subprocess.check_output(["/usr/sbin/system_profiler", "SPHardwareDataType"], stdin=nullin, stderr=log_file_handle)
-            #findall[0] does the grep for the value we are looking for: "Serial Number (system): XXXXXXXX"
-            #split(:)[1] gets us the XXXXXXX part
-            #lstrip shaves off the leading space that was after the colon
-            muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
-        elif (platform_key == 'win'):
-            # wmic csproduct get UUID | grep -v UUID
-            muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], stdin=nullin, stderr=log_file_handle)
-            #outputs in two rows:
-            #UUID
-            #XXXXXXX-XXXX...
-            muuid = re.split('\n',muuid)[1].rstrip()
+    if (platform_key == 'lnx'):
+        muuid = subprocess.check_output(['/usr/bin/hostid'], **subprocess_args(False, log_file_handle)).rstrip()
+    elif (platform_key == 'mac'):
+        #this is absurdly baroque
+        #/usr/sbin/system_profiler SPHardwareDataType | fgrep 'Serial' | awk '{print $NF}'
+        muuid = subprocess.check_output(["/usr/sbin/system_profiler", "SPHardwareDataType"], **subprocess_args(False, log_file_handle))
+        #findall[0] does the grep for the value we are looking for: "Serial Number (system): XXXXXXXX"
+        #split(:)[1] gets us the XXXXXXX part
+        #lstrip shaves off the leading space that was after the colon
+        muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
+    elif (platform_key == 'win'):
+        # wmic csproduct get UUID | grep -v UUID
+        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], **subprocess_args(False, log_file_handle))
+        #outputs in two rows:
+        #UUID
+        #XXXXXXX-XXXX...
+        muuid = re.split('\n',muuid)[1].rstrip()
             
     if muuid is not None:
         return hashlib.md5(muuid).hexdigest()
@@ -395,6 +395,7 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
             try:
                 #Python does not have a facility to multithread a method, so we make the method a standalone script
                 #and subprocess that.  The business with the file descriptors is how to tell subprocess not to wait.
+                #since we are using Popen and not check_output, subprocess_args isn't needed
                 #arguments to execv() via popen() can only be strings, hence str(int)
                 silent_write(log_file_handle, "background downloader args: " + repr(["--url", url, "--dir", download_dir, 
                             "--size", str(size), "--chunk_size", str(chunk_size)]))

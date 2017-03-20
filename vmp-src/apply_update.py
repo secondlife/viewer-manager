@@ -34,6 +34,7 @@ Applies an already downloaded update.
 """
 
 from datetime import datetime
+from vmp_util import subprocess_args
 
 import argparse
 import errno
@@ -109,7 +110,7 @@ def try_dismount(log_file_handle = None, installable = None, tmpdir = None):
         #Filesystem   512-blocks   Used Available Capacity iused  ifree %iused  Mounted on
         #/dev/disk1s2    2047936 643280   1404656    32%   80408 175582   31%   /private/tmp/mnt/Second Life Installer
         command = ["df", os.path.join(tmpdir, "Second Life Installer")]
-        output = subprocess.check_output(command, stdin=None, stderr=log_file_handle)
+        output = subprocess.check_output(command, **subprocess_args(False, log_file_handle))
         #No point in trying to umount an fs that doesn't exist. 
         #This could happen, for example, if the user manually umounts it first
         try:
@@ -120,11 +121,11 @@ def try_dismount(log_file_handle = None, installable = None, tmpdir = None):
         mnt_dev = output.split('\n')[1].split()[0]
         #do the dismount
         command = ["hdiutil", "detach", "-force", mnt_dev]
-        output = subprocess.check_output(command, stdin=None, stderr=log_file_handle)
+        output = subprocess.check_output(command, **subprocess_args(False, log_file_handle))
         silent_write(log_file_handle, "hdiutil detach succeeded")
         silent_write(log_file_handle, output)
         command = ["diskutil", "umount", mnt_dev]
-        output = subprocess.check_output(command, stdin=None, stderr=log_file_handle)
+        output = subprocess.check_output(command, **subprocess_args(False, log_file_handle))
         silent_write(log_file_handle, "diskutil umount succeeded")
         silent_write(log_file_handle, output)        
     except Exception, e:
@@ -186,7 +187,7 @@ def apply_mac_update(installable = None, log_file_handle = None):
     
     #verify dmg file
     try:
-        output = subprocess.check_output(["hdiutil", "verify", installable], stdin=None, stderr=subprocess.STDOUT)
+        output = subprocess.check_output(["hdiutil", "verify", installable], **subprocess_args(False, log_file_handle))
         silent_write(log_file_handle, "dmg verification succeeded")
         silent_write(log_file_handle, output)
     except Exception, e:
@@ -195,7 +196,7 @@ def apply_mac_update(installable = None, log_file_handle = None):
     #make temp dir and mount & attach dmg
     tmpdir = tempfile.mkdtemp()
     try:
-        output = subprocess.check_output(["hdiutil", "attach", installable, "-mountroot", tmpdir], stderr=log_file_handle)
+        output = subprocess.check_output(["hdiutil", "attach", installable, "-mountroot", tmpdir], **subprocess_args(False, log_file_handle))
         silent_write(log_file_handle, "hdiutil attach succeeded")
         silent_write(log_file_handle, output)
     except Exception, e:
