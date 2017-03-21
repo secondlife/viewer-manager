@@ -289,10 +289,59 @@ def make_VVM_UUID_hash(platform_key, log_file_handle):
     else:
         #fake it
         return hashlib.md5(str(uuid.uuid1())).hexdigest()
+    
+def getBitness(platform_key = None, log_file_handle = None):
+    if platform_key in ['lnx', 'mac']:
+        return 64
+    if 'PROGRAMFILES(X86)' not in os.environ:
+        return 32
+    else:
+        #see MAINT-6832 and IQA-4130
+        wmic_graphics = subprocess.check_output(['wmic','path','Win32_VideoController','get','NAME'], **subprocess_args(False, log_file_handle))
+        wmic_list = re.split('\n', wmic_graphics)
+        bad = False
+        for word in wmic_list:
+            if word.find("Intel(R) HD Graphics") > -1:
+                bad = True
+                silent_write(log_file_handle, "Setting bitness to 32 due to HD Graphics Win 64 Bit incompatibility.")
+                return 32
+        return 64
+    
+def isViewerMachineBitMatched(viewer_platform = None, platform_key = None, bitness = 64):
+    if not viewer_platform or not platform_key:
+        return False
+    #viewer_platform in (lnx, mac, win, win32)
+    #platform_key in (lnx, mac, win)
+    if (viewer_platform == 'lnx' and platform_key == 'lnx') or (viewer_platform == 'mac' and platform_key == 'mac'):
+        return True
+    #default is to ship 64 bit
+    win_plat_key = 'win'
+    if bitness == 32:
+        win_plat_key = 'win32'
+    return (viewer_platform == win_plat_key)
 
 def query_vvm(log_file_handle = None, platform_key = None, settings = None, summary_dict = None, UpdaterServiceURL = None, UpdaterWillingToTest = None):
     result_data = None
     baseURI = None
+    VMM_platform = platform_key
+    #to disambiguate, we have two sources of platform here
+    #  platform_key is the OS name of the computer VMP is running on
+    #  summary_dict['platform'] is the platform and for windows, bitness, of the _viewer_ that VMP is part of
+    #These are not always the same, in particular, for the first download of a VMP windows viewer which defaults to 64 bit
+    bitness = getBitness(platform_key, log_file_handle)
+    try:
+        if not isViewerMachineBitMatched(summary_dict['platform'], platform_key, bitness):
+            #there are two cases:
+            # the expected case where we downloaded a 64 bit viewer to a 32 bit machine on spec
+            # the unexpected case where someone was running a 32 bit viewer on a 32 bit Windows box and upgraded their Windows to 64 bit
+            #either way, the Windows bitness is the right bitness
+            if bitness == 32:
+                VMM_platform = 'win32'
+    except Exception, e:
+        silent_write(log_file_handle, "Could not parse viewer bitness from summary.json %s" % e)
+        #At these point, we have no idea what is really going on.  Since 32 installs on 64 and not vice-versa, fall back to safety
+        VMM_platform = 'win32'        
+    
     #URI template /update/v1.1/channelname/version/platformkey/platformversion/willing-to-test/uniqueid
     #https://wiki.lindenlab.com/wiki/Viewer_Version_Manager_REST_API#Viewer_Update_Query
     #note that the only two valid options are:
@@ -342,7 +391,7 @@ def query_vvm(log_file_handle = None, platform_key = None, settings = None, summ
             test_ok = 'testok'
     #because urljoin can't be arsed to take multiple elements
     #channelname is a list because although it is only one string, it is a kind of argument and viewer args can take multiple keywords.
-    query_string =  urllib.quote('v1.1/' + str(channelname) + '/' + version + '/' + platform_key + '/' + platform_version + '/' + test_ok + '/' + UUID)
+    query_string =  urllib.quote('v1.1/' + str(channelname) + '/' + version + '/' + VMM_platform + '/' + platform_version + '/' + test_ok + '/' + UUID)
     silent_write(log_file_handle, "About to query VVM: %s" % base_URI + query_string)
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=base_URI)
     try:
