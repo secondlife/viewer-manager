@@ -314,6 +314,9 @@ def isViewerMachineBitMatched(viewer_platform = None, platform_key = None, bitne
     #platform_key in (lnx, mac, win)
     if (viewer_platform == 'lnx' and platform_key == 'lnx') or (viewer_platform == 'mac' and platform_key == 'mac'):
         return True
+    #this happens if you try to install the viewer on the wrong OS: either lnx != lnx, mac != mac or win != either of those
+    if viewer_platform not in ['win', 'win32'] or platform_key != 'win':
+        return False
     #default is to ship 64 bit
     win_plat_key = 'win'
     if bitness == 32:
