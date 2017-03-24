@@ -41,6 +41,7 @@ import InstallerUserMessage as IUM
 import os.path
 import Queue
 import requests
+import sys
 #silences InsecurePlatformWarning
 # http://stackoverflow.com/questions/29099404/ssl-insecureplatform-error-when-using-requests-package 
 import requests.packages.urllib3
@@ -131,8 +132,6 @@ class ThreadedDownload(threading.Thread):
         tempfile.mkstemp(suffix=".done", dir=download_dir)    
 
 def main():
-    #main method is for standalone use such as support and QA and for background downloading
-    #Otherwise, VMP will import this module and run download_update directly
     parser = argparse.ArgumentParser("Download URI to directory")
     parser.add_argument('--url', dest='url', help='URL of file to be downloaded', required=True)
     parser.add_argument('--dir', dest='download_dir', help='directory to be downloaded to', required=True)

@@ -333,7 +333,7 @@ def query_vvm(log_file_handle = None, platform_key = None, settings = None, summ
     #These are not always the same, in particular, for the first download of a VMP windows viewer which defaults to 64 bit
     bitness = getBitness(platform_key, log_file_handle)
     try:
-        if not isViewerMachineBitMatched(summary_dict['platform'], platform_key, bitness):
+        if not isViewerMachineBitMatched(summary_dict['Platform'], platform_key, bitness):
             #there are two cases:
             # the expected case where we downloaded a 64 bit viewer to a 32 bit machine on spec
             # the unexpected case where someone was running a 32 bit viewer on a 32 bit Windows box and upgraded their Windows to 64 bit
@@ -449,10 +449,10 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                 #and subprocess that.  The business with the file descriptors is how to tell subprocess not to wait.
                 #since we are using Popen and not check_output, subprocess_args isn't needed
                 #arguments to execv() via popen() can only be strings, hence str(int)
-                silent_write(log_file_handle, "background downloader args: " + repr(["--url", url, "--dir", download_dir, 
+                silent_write(log_file_handle, "background downloader args: " + repr(["path to downloader", path_to_downloader, "--url", url, "--dir", download_dir, 
                             "--size", str(size), "--chunk_size", str(chunk_size)]))
                 download_process = subprocess.Popen([path_to_downloader, "--url", url, "--dir", download_dir, 
-                                                     "--size", str(size), "--chunk_size", str(chunk_size)], stdin=None, stdout=None, stderr=None, close_fds=True)                
+                                                     "--size", str(size), "--chunk_size", str(chunk_size)], stdin=None, stdout=log_file_handle, stderr=subprocess.STDOUT)                
                 silent_write(log_file_handle, "Download of new version " + version + " spawned.")
                 download_success = True
             except  Exception, e:

@@ -3,6 +3,11 @@ import os
 import os.path
 import sys
 
+#Because of the evolution over time of the specification of VMP, some methods were added "in place", in particular in update manager which should someday be refactored into this
+#utility class.  Examples include, but are not limited to silent_write() and get_parent_path()
+
+# ######################
+
 #This utility method is lifted from https://github.com/pyinstaller/pyinstaller/wiki/Recipe-subprocess
 #and gets us around the issue of pythonw breaking subprocess when default values for I/O handles are used.
 #it is slightly modified to always write to the log file rather than provide pipes
