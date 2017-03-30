@@ -51,7 +51,7 @@ def subprocess_args(include_stdout=True, handle=None):
     #
     # So, add it only if it's needed.
     if include_stdout:
-        ret = {'stdout:': handle}
+        ret = {'stdout': handle}
     else:
         ret = {}
 

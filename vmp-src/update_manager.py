@@ -452,7 +452,7 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                 silent_write(log_file_handle, "background downloader args: " + repr(["path to downloader", path_to_downloader, "--url", url, "--dir", download_dir, 
                             "--size", str(size), "--chunk_size", str(chunk_size)]))
                 download_process = subprocess.Popen([path_to_downloader, "--url", url, "--dir", download_dir, 
-                                                     "--size", str(size), "--chunk_size", str(chunk_size)], stdin=None, stdout=log_file_handle, stderr=subprocess.STDOUT)                
+                                                     "--size", str(size), "--chunk_size", str(chunk_size)], **subprocess_args(True, log_file_handle))                
                 silent_write(log_file_handle, "Download of new version " + version + " spawned.")
                 download_success = True
             except  Exception, e:
