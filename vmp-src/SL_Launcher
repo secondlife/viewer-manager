@@ -258,8 +258,9 @@ if __name__ == "__main__":
    silent_write(log_file_handle, "Viewer successfully launched.")
    
    #update manager returns the argument dict to the downloader in the condition variable
-   if success == True and state ==  'background' and condition is not None:
+   if success == True and state ==  'background' and type(condition) == 'dict':
       silent_write(log_file_handle, "Launching background downloader with %s" % repr(condition))
       download_update.download_update(**condition)
       silent_write(log_file_handle, "Background download complete")
-
+   elif success == True and state ==  'background' and type(condition) != 'dict':
+      silent_write(log_file_handle, "Received erroneous condition %s from update manager, launching old viewer" % repr(condition))
