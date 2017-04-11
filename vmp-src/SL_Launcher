@@ -57,7 +57,7 @@ log_file_handle = None
 if 'ython' in sys.executable:
    sys.executable =  os.path.abspath(sys.argv[0])
 cwd = os.path.dirname(os.path.realpath(str(sys.executable)))
-python266 = os.path.join(cwd,"2.6")
+python266 = os.path.join(cwd,"python26")
 #make sure we find our local llbase
 sys.path.insert(0, os.path.join(cwd, 'llbase'))
 #python 2.6.6 is missing a few things we need
