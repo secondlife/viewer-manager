@@ -236,7 +236,7 @@ if __name__ == "__main__":
       update_manager.after_frame(msg)
       command.insert(0,viewer_binary)
       viewer_process = subprocess.Popen(command)
-      silent_write(log_file_handle, "Viewer successfully launched.")
+      silent_write(log_file_handle, "Viewer successfully launched after failure to get a valid update response.")
       #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
       viewer_process.wait()
    elif (success == True and 
@@ -254,7 +254,7 @@ if __name__ == "__main__":
       silent_write(log_file_handle, "Launching current channel viewer, no required upgrade found.")
       command.insert(0,viewer_binary)
       viewer_process = subprocess.Popen(command)
-      silent_write(log_file_handle, "Viewer successfully launched.")
+      silent_write(log_file_handle, "Viewer successfully launched after launching background downloader.")
       #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
       viewer_process.wait()
    else:
@@ -263,10 +263,11 @@ if __name__ == "__main__":
       silent_write(log_file_handle, "Launching new channel viewer: %s." % command)
       try:
          viewer_process = subprocess.Popen(command)
-         silent_write(log_file_handle, "Viewer successfully launched.")
+         silent_write(log_file_handle, "Newly updated viewer successfully launched.")
+         #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
          viewer_process.wait()
       except Exception as e:
          #if another viewer is running or windows install is in progress, subprocess will throw an unhandlable exception
          silent_write(log_file_handle, "Exception spawning new viewer: %s" % repr(e))
-   
-
+         
+   silent_write(log_file_handle, "Launcher exiting after viewer exit.")
