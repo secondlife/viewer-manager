@@ -190,7 +190,8 @@ if __name__ == "__main__":
    if sys.platform.startswith('darwin'):
       executable_name = "Second Life"
    elif sys.platform.startswith("win") or sys.platform.startswith("cyg"):
-      filename = os.path.basename(cwd) + ".exe"
+      #MAINT-7292: do not infer name from directory, instead read it from summary.json as produced by the build
+      filename = update_manager.get_summary('win')['Executable']
       if os.path.isfile(os.path.join(cwd, filename)):
          executable_name = filename
       else:
@@ -202,7 +203,7 @@ if __name__ == "__main__":
       sys.exit("Unsupported platform")
       
    #find the viewer to be lauched
-   viewer_binary = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])),executable_name) 
+   viewer_binary = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), executable_name) 
    
    parser = argparse.ArgumentParser()
    args = parser.parse_known_args(sys.argv)
