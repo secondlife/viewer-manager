@@ -34,8 +34,6 @@ import os
 import os.path
 import sys
 import collections
-import download_update
-import InstallerUserMessage
 #NOTA BENE: 
 #   For POSIX platforms, llsd.py will be imported from the same directory.  
 #   For Windows, llsd.py will be compiled into the executable by pyinstaller
@@ -47,7 +45,6 @@ except:
       pass
 import platform
 import subprocess
-import update_manager
 
 from datetime import datetime
 
@@ -61,6 +58,8 @@ python266 = os.path.join(cwd,"python26")
 #make sure we find our local llbase
 sys.path.insert(0, os.path.join(cwd, 'llbase'))
 #python 2.6.6 is missing a few things we need
+#since the other modules also use some of these, such as argparse,
+#imports of other VMP modules must happen after this.
 try:
    import argparse
 except:
@@ -82,6 +81,11 @@ try:
 except:
    sys.path.append(python266)
    import ttk
+   
+#imports of other VMP modules
+import download_update
+import InstallerUserMessage
+import update_manager
 
 #this is to support pyinstaller, which uses sys._MEIPASS to point to the location
 #the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
