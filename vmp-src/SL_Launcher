@@ -229,38 +229,43 @@ if __name__ == "__main__":
    #These boil down three cases:
    #  Success is False, then pop up a message and launch the current viewer
    #  No update, update skipped, succeeded in place in foreground, or background update started: silently launch the current viewer channel
-   #  Updated succeed to a different channel, launch that viewer and exit
+   #  Updated succeed to a different channel, launch that viewer and wait
    if not success:
       msg = 'Update failed in the %s process.  Please check logs.  Viewer will launch starting momentarily.' % state
       update_manager.after_frame(msg)
       command.insert(0,viewer_binary)
       viewer_process = subprocess.Popen(command)
-      #at the moment, we just exit here.  Later, the crash monitor will be launched at this point
+      silent_write(log_file_handle, "Viewer successfully launched.")
+      #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
+      viewer_process.wait()
    elif (success == True and 
          (state == None 
           or (state == 'skip')
           or (state ==  'background')
           or (state == 'in place' and condition == True))):
+      #update manager returns the argument dict to the downloader in the condition variable
+      if success == True and state ==  'background' and type(condition) == 'dict':
+         silent_write(log_file_handle, "Launching background downloader with %s" % repr(condition))
+         download_update.download_update(**condition)
+         silent_write(log_file_handle, "Background download complete")
+      elif success == True and state ==  'background' and type(condition) != 'dict':
+         silent_write(log_file_handle, "Received erroneous condition %s from update manager, launching old viewer" % repr(condition))      
       silent_write(log_file_handle, "Launching current channel viewer, no required upgrade found.")
       command.insert(0,viewer_binary)
       viewer_process = subprocess.Popen(command)
-      #at the moment, we just exit here.  Later, the crash monitor will be launched at this point
+      silent_write(log_file_handle, "Viewer successfully launched.")
+      #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
+      viewer_process.wait()
    else:
       #'condition' is the path to the new launcher.
       command.insert(0,condition)
       silent_write(log_file_handle, "Launching new channel viewer: %s." % command)
       try:
          viewer_process = subprocess.Popen(command)
+         silent_write(log_file_handle, "Viewer successfully launched.")
+         viewer_process.wait()
       except Exception as e:
          #if another viewer is running or windows install is in progress, subprocess will throw an unhandlable exception
          silent_write(log_file_handle, "Exception spawning new viewer: %s" % repr(e))
    
-   silent_write(log_file_handle, "Viewer successfully launched.")
-   
-   #update manager returns the argument dict to the downloader in the condition variable
-   if success == True and state ==  'background' and type(condition) == 'dict':
-      silent_write(log_file_handle, "Launching background downloader with %s" % repr(condition))
-      download_update.download_update(**condition)
-      silent_write(log_file_handle, "Background download complete")
-   elif success == True and state ==  'background' and type(condition) != 'dict':
-      silent_write(log_file_handle, "Received erroneous condition %s from update manager, launching old viewer" % repr(condition))
+
