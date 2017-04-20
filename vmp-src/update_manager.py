@@ -158,9 +158,7 @@ def make_download_dir(parent_dir, new_version):
         os.makedirs(download_dir)
     except (OSError, WindowsError) as hell:
         #Directory already exists, that's okay.  Other OSErrors are not okay.
-        #on Windows, because it is not POSIX compliant, the errno is different:
-        #   "WindowsError(183, 'Cannot create a file when that file already exists')""
-        if (hell[0] == errno.EEXIST or hell[0] == 183) and os.path.isdir(download_dir): 
+        if hell.err == errno.EEXIST and os.path.isdir(download_dir): 
             pass
         else:
             raise
@@ -683,9 +681,7 @@ def update_manager(log=None, cli_overrides = None):
             try:
                 os.makedirs(download_dir)
             except OSError as err:
-                #on Windows, because it is not POSIX compliant, the errno is different:
-                #   "WindowsError(183, 'Cannot create a file when that file already exists')""
-                if (err.errno == errno.EEXIST or err.errno == 183) and os.path.isdir(download_dir):
+                if err.errno == errno.EEXIST and os.path.isdir(download_dir):
                     pass
                 else:
                     raise

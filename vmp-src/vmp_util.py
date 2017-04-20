@@ -65,9 +65,7 @@ class SL_Logging:
         try:
             os.makedirs(logdir)
         except OSError as err:
-            #on Windows, because it is not POSIX compliant, the errno is different:
-            #   "WindowsError(183, 'Cannot create a file when that file already exists')""
-            if (err.errno == errno.EEXIST or err.errno == 183) and os.path.isdir(logdir):
+            if err.errno == errno.EEXIST and os.path.isdir(logdir):
                 pass
             else:
                 raise
