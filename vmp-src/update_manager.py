@@ -46,6 +46,7 @@ import hashlib
 import InstallerUserMessage
 import json
 import os
+import os.path
 import platform
 import re
 import shutil
@@ -159,7 +160,7 @@ def make_download_dir(parent_dir, new_version):
         #Directory already exists, that's okay.  Other OSErrors are not okay.
         #on Windows, because it is not POSIX compliant, the errno is different:
         #   "WindowsError(183, 'Cannot create a file when that file already exists')""
-        if hell[0] == errno.EEXIST or hell[0] == 183: 
+        if (hell[0] == errno.EEXIST or hell[0] == 183) and os.path.isdir(download_dir): 
             pass
         else:
             raise
@@ -679,8 +680,16 @@ def update_manager(log=None, cli_overrides = None):
         choice = -1
         if downloaded is None:        
             #multithread a download           
-            if not os.path.exists(download_dir):
-                os.mkdir(download_dir)             
+            try:
+                os.makedirs(download_dir)
+            except OSError as err:
+                #on Windows, because it is not POSIX compliant, the errno is different:
+                #   "WindowsError(183, 'Cannot create a file when that file already exists')""
+                if (err.errno == errno.EEXIST or err.errno == 183) and os.path.isdir(download_dir):
+                    pass
+                else:
+                    raise
+                
             log.info("Found optional update. Downloading in background to: " + download_dir)
             result = download(url = result_data['url'], version = result_data['version'], download_dir = download_dir, 
                               hash = result_data['hash'], size = result_data['size'], background = True)

@@ -5,6 +5,7 @@ import sys
 import time
 import logging
 import argparse
+import errno
 
 #Because of the evolution over time of the specification of VMP, some methods were added "in place", in particular in update manager which should someday be refactored into this
 #utility class.  
@@ -44,23 +45,32 @@ class SL_Logging:
         with the addition of an environment override for use by tests
         """
 
-        if 'SECONDLIFE_LOGDIR' in os.environ:
+        try:
             logdir = os.environ['SECONDLIFE_LOGDIR']
-        elif sys.platform.startswith('darwin'):
-            logdir = os.path.join(os.environ['HOME'],'Library','Application Support','SecondLife','logs')
-        elif sys.platform.startswith("win") or sys.platform.startswith("cyg"):
-            logdir = os.path.join(os.environ['APPDATA'],'SecondLife','logs')
-        elif sys.platform.startswith("linux"):
-            logdir = os.path.join(os.environ['HOME'],'.secondlife','logs')
-        else:
-            #SL doesn't run on VMS or punch cards
-            sys.exit("Unsupported platform")
+        except KeyError:
+            pass
 
-        if not os.path.exists(logdir):
-            try:
-                os.mkdir(logdir)
-            except:
-                pass # can't fix it ... ignore it
+        if not logdir:
+            if sys.platform.startswith('darwin'):
+                logdir = os.path.join(os.environ['HOME'],'Library','Application Support','SecondLife','logs')
+            elif sys.platform.startswith("win") or sys.platform.startswith("cyg"):
+                logdir = os.path.join(os.environ['APPDATA'],'SecondLife','logs')
+            elif sys.platform.startswith("linux"):
+                logdir = os.path.join(os.environ['HOME'],'.secondlife','logs')
+            else:
+                #SL doesn't run on VMS or punch cards
+                sys.exit("Unsupported platform")
+
+        try:
+            os.makedirs(logdir)
+        except OSError as err:
+            #on Windows, because it is not POSIX compliant, the errno is different:
+            #   "WindowsError(183, 'Cannot create a file when that file already exists')""
+            if (err.errno == errno.EEXIST or err.errno == 183) and os.path.isdir(logdir):
+                pass
+            else:
+                raise
+
         return logdir
 
     @staticmethod
