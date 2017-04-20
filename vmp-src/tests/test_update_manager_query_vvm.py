@@ -44,11 +44,11 @@ from argparse import Namespace
 def test_query_vvm():
     key = update_manager.get_platform_key()
     parent = update_manager.get_parent_path(key)
-    settings = update_manager.get_settings(parent)
-    launcher_path = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
-    summary = update_manager.get_summary(key)
     args=Namespace(verbosity=logging.DEBUG)
     log=SL_Logging.log('test_update', args)
+    settings = update_manager.get_settings(parent, log=log)
+    launcher_path = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
+    summary = update_manager.get_summary(key)
     #for unit testing purposes, just testing a value from results.  If no update, then None and it falls through
     #for formal QA see:
     #   https://docs.google.com/document/d/1WNjOPdKlq0j_7s7gdNe_3QlyGnQDa3bFNvtyVM6Hx8M/edit
@@ -56,7 +56,7 @@ def test_query_vvm():
     #for test plans on all cases, as it requires setting up a fake VVM service
 
     try:
-        results = update_manager.query_vvm(log, key, None, summary)
+        results = update_manager.query_vvm(log=log, platform_key=key, settings=None, summary_dict=summary)
     except Exception, e:
         print "query_vvm threw unexpected exception %s" % str(e)
         assert False
