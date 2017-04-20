@@ -49,7 +49,7 @@ import subprocess
 from datetime import datetime
 
 #module globals
-log_file_handle = None
+
 #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
 if 'ython' in sys.executable:
    sys.executable =  os.path.abspath(sys.argv[0])
@@ -86,6 +86,7 @@ except:
 import download_update
 import InstallerUserMessage
 import update_manager
+import vmp_util
 
 #this is to support pyinstaller, which uses sys._MEIPASS to point to the location
 #the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
@@ -93,15 +94,6 @@ import update_manager
 if getattr(sys, 'frozen', False):
    __file__ = sys._MEIPASS
 
-def silent_write(log_file_handle, text):
-   #if we have a log file, write.  If not, do nothing.
-   #this is so we don't have to keep trapping for an exception with a None handle
-   #oh and because it is best effort, it is also a holey_write ;)
-   if (log_file_handle):
-      #prepend text for easy grepping
-      timestamp = datetime.utcnow().strftime("%m/%d/%Y %H:%M:%S")
-      log_file_handle.write(timestamp + " LAUNCHER: " + text + "\n")
-  
 def get_cmd_line(cmd_settings_file = None):
    if cmd_settings_file is None:
       platform_name = platform.system()
@@ -119,7 +111,7 @@ def get_cmd_line(cmd_settings_file = None):
    try:
       cmd_line = llsd.parse((open(cmd_settings_file)).read())
    except:
-      silent_write(log_file_handle, "Could not parse settings file %s" % cmd_settings_file)
+      log.warning("Could not parse settings file %s" % cmd_settings_file)
       cmd_line = None
    
    return cmd_line
@@ -187,9 +179,14 @@ if __name__ == "__main__":
    #this and a few other update manager methods really should be refactored into a util lib
    parent_dir = update_manager.get_parent_path(update_manager.get_platform_key())
    cgitb.enable(logdir=os.path.join(parent_dir, "logs"), format='text')
-   log_file_handle = update_manager.get_log_file_handle(parent_dir, 'launcher.log')
-   silent_write(log_file_handle, "Found parent dir %s" % repr(parent_dir))
    
+   parser = argparse.ArgumentParser()
+   vmp_util.SL_Logging.add_verbosity_options(parser)
+   args, args_list_to_pass = parser.parse_known_args()
+   #args[1] looks like ['./SL_Launcher', '--set', 'foo', 'bar', '-X', '-Y', 'qux'], dump the progname
+
+   log = vmp_util.SL_Logging.log('SL_Launcher', args)
+
    executable_name = ""
    if sys.platform.startswith('darwin'):
       executable_name = "Second Life"
@@ -208,18 +205,13 @@ if __name__ == "__main__":
       
    #find the viewer to be lauched
    viewer_binary = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), executable_name) 
-   
-   parser = argparse.ArgumentParser()
-   args = parser.parse_known_args(sys.argv)
-   #args[1] looks like ['./SL_Launcher', '--set', 'foo', 'bar', '-X', '-Y', 'qux'], dump the progname
-   args_list_to_pass = args[1][1:]
    vmp_args = capture_vmp_args(args_list_to_pass)
    #make a copy by value, not by reference
    command = list(args_list_to_pass)
    
-   silent_write(log_file_handle, "Calling update manager with %s" % repr(vmp_args))
-   (success, state, condition) = update_manager.update_manager(vmp_args)
-   silent_write(log_file_handle, "Update manager returned %s %s %s" % (success, state, condition))
+   log.debug("Calling update manager with %s" % repr(vmp_args))
+   (success, state, condition) = update_manager.update_manager(log, vmp_args)
+   log.debug("Update manager returned success %s state %s condition %s" % (success, state, condition))
    if sys.platform.startswith('darwin') and isinstance(condition, basestring):
       condition = os.path.join(condition,'Contents/MacOS/SL_Launcher')
    # From update_manager:
@@ -240,7 +232,7 @@ if __name__ == "__main__":
       update_manager.after_frame(msg)
       command.insert(0,viewer_binary)
       viewer_process = subprocess.Popen(command)
-      silent_write(log_file_handle, "Viewer successfully launched after failure to get a valid update response.")
+      log.warning("Viewer successfully launched after failure to get a valid update response.")
       #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
       viewer_process.wait()
    elif (success == True and 
@@ -250,29 +242,29 @@ if __name__ == "__main__":
           or (state == 'in place' and condition == True))):
       #update manager returns the argument dict to the downloader in the condition variable
       if success == True and state ==  'background' and type(condition) == 'dict':
-         silent_write(log_file_handle, "Launching background downloader with %s" % repr(condition))
+         log.info("Launching background downloader with %s" % repr(condition))
          download_update.download_update(**condition)
-         silent_write(log_file_handle, "Background download complete")
+         log.info("Background download complete")
       elif success == True and state ==  'background':
-         silent_write(log_file_handle, "Received erroneous condition %s from update manager, launching old viewer" % repr(condition)) 
+         log.warning("Received erroneous condition %s from update manager, launching old viewer" % repr(condition))      
       else:
-         silent_write(log_file_handle, "Launching current channel viewer, no required upgrade found.")
+         log.info("Launching current channel viewer, no required upgrade found.")
       command.insert(0,viewer_binary)
       viewer_process = subprocess.Popen(command)
-      silent_write(log_file_handle, "Viewer successfully launched after launching background downloader or no update.")
+      log.info("Viewer successfully launched after launching background downloader or no update.")
       #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
       viewer_process.wait()
    else:
       #'condition' is the path to the new launcher.
       command.insert(0,condition)
-      silent_write(log_file_handle, "Launching new channel viewer: %s." % command)
+      log.info("Launching new channel viewer: %s." % command)
       try:
          viewer_process = subprocess.Popen(command)
-         silent_write(log_file_handle, "Newly updated viewer successfully launched.")
+         log.debug("Newly updated viewer successfully launched.")
          #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
          viewer_process.wait()
       except Exception as e:
          #if another viewer is running or windows install is in progress, subprocess will throw an unhandlable exception
-         silent_write(log_file_handle, "Exception spawning new viewer: %s" % repr(e))
+         log.error("Exception spawning new viewer: %s" % repr(e))
          
-   silent_write(log_file_handle, "Launcher exiting after viewer exit.")
+   log.info("Launcher exiting after viewer exit.")

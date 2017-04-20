@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 """\
-$LicenseInfo:firstyear=2006&license=viewerlgpl$
+$LicenseInfo:firstyear=2017&license=viewerlgpl$
 Second Life Viewer Source Code
-Copyright (C) 2006-2014, Linden Research, Inc.
+Copyright (C) 2017, Linden Research, Inc.
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -99,7 +99,9 @@ def main():
         sys.exit(1)    
     
     #run nosetests
-    if darwin.search(platform):
+    if 'nosetests' in os.environ:
+        nosetest_cmd = os.environ['nosetests']
+    elif darwin.search(platform):
         nosetest_cmd = '/usr/local/bin/nosetests'
     elif linux.search(platform):
         nosetest_cmd = '/usr/bin/nosetests'

@@ -34,7 +34,7 @@ Applies an already downloaded update.
 """
 
 from datetime import datetime
-from vmp_util import subprocess_args
+from vmp_util import subprocess_args, SL_Logging
 
 import argparse
 import errno
@@ -82,13 +82,6 @@ BUNDLE_IDENTIFIER = "com.secondlife.indra.viewer"
 if getattr(sys, 'frozen', False):
     __file__ = sys._MEIPASS
 
-def silent_write(log_file_handle, text):
-    #if we have a log file, write.  If not, do nothing.
-    if (log_file_handle):
-        #prepend text for easy grepping
-        timestamp = datetime.utcnow().strftime("%m/%d/%Y %H:%M:%S")      
-        log_file_handle.write(timestamp + " APPLY UPDATE: " + text + "\n")
-
 def get_filename(download_dir = None):
     #given a directory that supposedly has the download, find the installable
     #if you are on platform X and you give the updater a directory with an installable  
@@ -102,7 +95,7 @@ def get_filename(download_dir = None):
     #someone gave us a bad directory
     return None  
           
-def try_dismount(log_file_handle = None, installable = None, tmpdir = None):
+def try_dismount(installable = None, tmpdir = None):
     #best effort cleanup try to dismount the dmg file if we have mounted one
     #the French judge gave it a 5.8
     try:
@@ -110,7 +103,7 @@ def try_dismount(log_file_handle = None, installable = None, tmpdir = None):
         #Filesystem   512-blocks   Used Available Capacity iused  ifree %iused  Mounted on
         #/dev/disk1s2    2047936 643280   1404656    32%   80408 175582   31%   /private/tmp/mnt/Second Life Installer
         command = ["df", os.path.join(tmpdir, "Second Life Installer")]
-        output = subprocess.check_output(command, **subprocess_args(False, log_file_handle))
+        output = subprocess.check_output(command, **subprocess_args(include_stdout=False))
         #No point in trying to umount an fs that doesn't exist. 
         #This could happen, for example, if the user manually umounts it first
         try:
@@ -121,17 +114,17 @@ def try_dismount(log_file_handle = None, installable = None, tmpdir = None):
         mnt_dev = output.split('\n')[1].split()[0]
         #do the dismount
         command = ["hdiutil", "detach", "-force", mnt_dev]
-        output = subprocess.check_output(command, **subprocess_args(False, log_file_handle))
-        silent_write(log_file_handle, "hdiutil detach succeeded")
-        silent_write(log_file_handle, output)
+        output = subprocess.check_output(command, **subprocess_args(include_stdout=False))
+        log.info("hdiutil detach succeeded")
+        log.info(output)
         command = ["diskutil", "umount", mnt_dev]
-        output = subprocess.check_output(command, **subprocess_args(False, log_file_handle))
-        silent_write(log_file_handle, "diskutil umount succeeded")
-        silent_write(log_file_handle, output)        
+        output = subprocess.check_output(command, **subprocess_args(include_stdout=False))
+        log.info("diskutil umount succeeded")
+        log.info(output)        
     except Exception, e:
-        silent_write(log_file_handle, "Could not detach dmg file %s.  Error messages: %s" % (installable, e.message))    
+        log.error("Could not detach dmg file %s.  Error messages: %s" % (installable, e.message))    
 
-def apply_update(download_dir = None, platform_key = None, log_file_handle = None, in_place = True):
+def apply_update(download_dir = None, platform_key = None, in_place = True):
     #for lnx and mac, returns path to newly installed viewer
     #for win, return the name of the executable
     #returns None on failure for all three
@@ -146,11 +139,11 @@ def apply_update(download_dir = None, platform_key = None, log_file_handle = Non
     
     #apply update using the platform specific tools
     if platform_key == 'lnx':
-        installed = apply_linux_update(installable, log_file_handle)
+        installed = apply_linux_update(installable)
     elif platform_key == 'mac':
-        installed = apply_mac_update(installable, log_file_handle)
+        installed = apply_mac_update(installable)
     elif platform_key == 'win':
-        installed = apply_windows_update(installable, log_file_handle)
+        installed = apply_windows_update(installable)
 
         #in the Windows case, we launch NSIS and never get a return to check
         #assume that if we got this far, NSIS succeeds
@@ -162,7 +155,7 @@ def apply_update(download_dir = None, platform_key = None, log_file_handle = Non
         
     return installed
     
-def apply_linux_update(installable = None, log_file_handle = None):
+def apply_linux_update(installable = None):
     try:
         #untar to tmpdir
         tmpdir = tempfile.mkdtemp()
@@ -176,31 +169,31 @@ def apply_linux_update(installable = None, log_file_handle = None):
         #delete tarball on success
         os.remove(installable)
     except Exception, e:
-        silent_write(log_file_handle, "Update failed due to " + repr(e))
+        log.error("Update failed due to " + repr(e))
         return None
     return INSTALL_DIR
 
-def apply_mac_update(installable = None, log_file_handle = None):
+def apply_mac_update(installable = None):
     #INSTALL_DIR is something like /Applications/Second Life Viewer.app/Contents/MacOS, need to jump up two levels for the install base
     install_base = os.path.dirname(INSTALL_DIR)
     install_base = os.path.dirname(install_base)
     
     #verify dmg file
     try:
-        output = subprocess.check_output(["hdiutil", "verify", installable], **subprocess_args(False, log_file_handle))
-        silent_write(log_file_handle, "dmg verification succeeded")
-        silent_write(log_file_handle, output)
+        output = subprocess.check_output(["hdiutil", "verify", installable], **subprocess_args(False))
+        log.info("dmg verification succeeded")
+        log.info(output)
     except Exception, e:
-        silent_write(log_file_handle, "Could not verify dmg file %s.  Error messages: %s" % (installable, e.message))
+        log.error("Could not verify dmg file %s.  Error messages: %s" % (installable, e.message))
         return None
     #make temp dir and mount & attach dmg
     tmpdir = tempfile.mkdtemp()
     try:
-        output = subprocess.check_output(["hdiutil", "attach", installable, "-mountroot", tmpdir], **subprocess_args(False, log_file_handle))
-        silent_write(log_file_handle, "hdiutil attach succeeded")
-        silent_write(log_file_handle, output)
+        output = subprocess.check_output(["hdiutil", "attach", installable, "-mountroot", tmpdir], **subprocess_args(include_stdout=False))
+        log.info("hdiutil attach succeeded")
+        log.info(output)
     except Exception, e:
-        silent_write(log_file_handle, "Could not attach dmg file %s.  Error messages: %s" % (installable, e.message))
+        log.error("Could not attach dmg file %s.  Error messages: %s" % (installable, e.message))
         return None
     #verify plist
     mounted_appdir = None
@@ -216,21 +209,21 @@ def apply_mac_update(installable = None, log_file_handle = None):
                     #there is no except for this try because there are multiple directories that legimately don't have what we are looking for
                     pass
     if not mounted_appdir:
-        silent_write(log_file_handle, "Could not find app bundle in dmg %s." % (installable,))
+        log.error("Could not find app bundle in dmg %s." % (installable,))
         return None        
     if CFBundleIdentifier != BUNDLE_IDENTIFIER:
-        silent_write(log_file_handle, "Wrong or null bundle identifier for dmg %s.  Bundle identifier: %s" % (installable, CFBundleIdentifier))
-        try_dismount(log_file_handle, installable, tmpdir)                   
+        log.error("Wrong or null bundle identifier for dmg %s.  Bundle identifier: %s" % (installable, CFBundleIdentifier))
+        try_dismount(installable, tmpdir)                   
         return None
     #do the install, finally
     if IN_PLACE:
         #  swap out old install directory
         bundlename = os.path.basename(mounted_appdir)
-        silent_write(log_file_handle, "Updating %s" % bundlename)
+        log.info("Updating %s" % bundlename)
         swapped_out = os.path.join(tmpdir, INSTALL_DIR.lstrip('/'))
         shutil.move(install_base, swapped_out)               
     else:
-        silent_write(log_file_handle, "Installing %s" % install_base)
+        log.info("Installing %s" % install_base)
         
     #   copy over the new bits    
     try:
@@ -239,11 +232,11 @@ def apply_mac_update(installable = None, log_file_handle = None):
     except Exception, e:
         # try to restore previous viewer
         if os.path.exists(swapped_out):
-            silent_write(log_file_handle, "Install of %s failed, rolling back to previous viewer." % installable)
+            log.error("Install of %s failed, rolling back to previous viewer." % installable)
             shutil.move(swapped_out, installed_test)
             retcode = 1
     finally:
-        try_dismount(log_file_handle, installable, tmpdir)
+        try_dismount(installable, tmpdir)
         if retcode:
             return None
             
@@ -263,16 +256,16 @@ def apply_mac_update(installable = None, log_file_handle = None):
     os.remove(installable)
     return install_base
     
-def apply_windows_update(installable = None, log_file_handle = None):
+def apply_windows_update(installable = None):
     #the windows install is just running the NSIS installer executable
     #from VMP's perspective, it is a black box
     kill_em_all(2)
 
     #This is the point of no return for VMP.  The executable is launched and we exit immediately
     #relying on the NSIS messaging subsystem to warn the resident on error.
-    silent_write(log_file_handle, "Launching installer %s." % installable)
+    log.info("Launching installer %s." % installable)
     #this is the P_NOWAIT version, returns immediately
-    subprocess.Popen(installable, stdin=None, stderr=log_file_handle)
+    subprocess.Popen(installable, stdin=None, stderr=None) # was log_file_handle)
     return os.path.dirname(installable)
 
 def kill_em_all(level):
@@ -295,31 +288,25 @@ def kill_em_all(level):
             if process.pid != my_pid:
                 process.send_signal(signal.SIGTERM)
 
-def main():
-    parser = argparse.ArgumentParser("Apply Downloaded Update")
-    parser.add_argument('--dir', dest = 'download_dir', help = 'directory to find installable', required = True)
-    parser.add_argument('--pkey', dest = 'platform_key', help =' OS: lnx|mac|win', required = True)
-    parser.add_argument('--in_place', action = 'store_false', help = 'This upgrade is for a different channel', default = True)
-    parser.add_argument('--log_file', dest = 'log_file', default = None, help = 'file to write messages to')
-    args = parser.parse_args()
-    
-    if args.log_file:
-        try:
-            f = open(args.log_file,'w+') 
-        except:
-            print "%s could not be found or opened" % args.log_file
-            sys.exit(1)
-    
-    IN_PLACE = args.in_place
-    result = apply_update(download_dir = args.download_dir, platform_key = args.platform_key, log_file_handle = f)
-    if not result:
-        sys.exit("Update failed")
-    else:
-        sys.exit(0)
-
-
 if __name__ == "__main__":
    #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
    if 'ython' in sys.executable:
       sys.executable =  os.path.abspath(sys.argv[0])   
-   main()
+      parser = argparse.ArgumentParser("Apply Downloaded Update")
+      SL_Logging.add_verbosity_options(parser)
+
+      parser.add_argument('--dir', dest = 'download_dir', help = 'directory to find installable', required = True)
+      parser.add_argument('--pkey', dest = 'platform_key', help =' OS: lnx|mac|win', required = True)
+      parser.add_argument('--in_place', action = 'store_false', help = 'This upgrade is for a different channel', default = True)
+
+      args = parser.parse_args()
+    
+      log = vmp_util.SL_Logging.log('SL_Installer', args)
+
+      IN_PLACE = args.in_place
+      result = apply_update(download_dir = args.download_dir, platform_key = args.platform_key)
+      if not result:
+          sys.exit("Update failed")
+      else:
+          sys.exit(0)
+

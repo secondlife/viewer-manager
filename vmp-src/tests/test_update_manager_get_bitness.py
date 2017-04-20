@@ -34,11 +34,11 @@ import os
 import update_manager
 
 def test_linux():
-    bitness = update_manager.getBitness('lnx', None)
+    bitness = update_manager.getBitness('lnx')
     assert_equal(bitness, 64)
 
 def test_mac():
-    bitness = update_manager.getBitness('mac', None)
+    bitness = update_manager.getBitness('mac')
     assert_equal(bitness, 64)
 
 #deliberately not testing the HD Graphics part 
@@ -48,5 +48,5 @@ def test_win():
         bitness = 64
     else:
         bitness = 32
-    assert_equal(bitness, update_manager.getBitness('win', None))
+    assert_equal(bitness, update_manager.getBitness('win'))
     

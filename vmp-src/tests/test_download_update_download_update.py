@@ -38,6 +38,9 @@ import platform
 import shutil
 import tempfile
 import update_manager
+import logging
+from vmp_util import SL_Logging
+from argparse import Namespace
 import with_setup_args
 
 #Nota Bene: testing Tkinter UI elements should be done by a QA engineer as we don't have test infrastructure
@@ -51,15 +54,17 @@ marker_regex = '*' + '.done'
 
 def download_update_setup():
     tmpdir1 = tempfile.mkdtemp(prefix = 'test1')
-    return [tmpdir1], {}
+    args=Namespace(verbosity=logging.DEBUG)
+    log=SL_Logging.log('test1', args)
+    return [tmpdir1, log], {}
 
-def download_update_teardown(tmpdir1):
+def download_update_teardown(tmpdir1,log):
     shutil.rmtree(tmpdir1, ignore_errors = True)
 
 @with_setup_args.with_setup_args(download_update_setup, download_update_teardown)
-def test_download_update_null_url(tmpdir1): 
+def test_download_update_null_url(tmpdir1,log): 
     try:
-        download_update.download_update(None, tmpdir1, None, False, 1024)
+        download_update.download_update(log=log, url=None, download_dir=tmpdir1, size=None, progressbar=False, chunk_size=1024)
     #this is the expected error when d_u tries to apply split() to None
     except AttributeError, e:
         assert True
@@ -72,9 +77,9 @@ def test_download_update_null_url(tmpdir1):
         assert False
         
 @with_setup_args.with_setup_args(download_update_setup, download_update_teardown)
-def test_download_update_correct_url(tmpdir1):
+def test_download_update_correct_url(tmpdir1, log):
     try:
-        download_update.download_update(URL, tmpdir1, None, False, 1024)
+        download_update.download_update(log=log, url=URL, download_dir=tmpdir1, size=None, progressbar=False, chunk_size=1024)
     except Exception, e:
         print "download_update threw an exception on a correct URL: %s" % repr(e)
         assert False

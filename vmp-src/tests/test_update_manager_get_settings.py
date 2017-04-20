@@ -35,27 +35,30 @@ import shutil
 import tempfile
 import update_manager
 import with_setup_args
+import logging
+from vmp_util import SL_Logging
+from argparse import Namespace
 
 data_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data')
 
 def get_settings_setup():
     tmpdir1 = tempfile.mkdtemp()
-    log_file_path = os.path.abspath(os.path.join(tmpdir1,"update_manager.log"))
-    log_file_handle = open(log_file_path, 'w', 0)
-    return [tmpdir1, log_file_path, log_file_handle], {}
+    args=Namespace(verbosity=logging.DEBUG)
+    log=SL_Logging.log('test1', args)
+    return [tmpdir1, log], {}
 
-def get_settings_teardown(tmpdir1, log_file_path, log_file_handle):
+def get_settings_teardown(tmpdir1,log):
     shutil.rmtree(tmpdir1, ignore_errors = True)
 
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
-def test_get_settings(tmpdir1, log_file_path, log_file_handle):   
-    settings_llsd = update_manager.get_settings(log_file_handle, data_dir)
+def test_get_settings(tmpdir1,log):   
+    settings_llsd = update_manager.get_settings(data_dir, log=log)
     #we aren't testing the LLSD library, one dictionary value is enough
     assert_equal(settings_llsd['CurrentGrid']['Value'],'util.agni.lindenlab.com')
 
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
-def test_get_settings_bad_key(tmpdir1, log_file_path, log_file_handle):
-    settings_llsd = update_manager.get_settings(log_file_handle, data_dir)
+def test_get_settings_bad_key(tmpdir1,log):
+    settings_llsd = update_manager.get_settings(data_dir, log=log)
     try:
         settings_llsd['LagAmount']['Value']
     except KeyError:
@@ -65,10 +68,10 @@ def test_get_settings_bad_key(tmpdir1, log_file_path, log_file_handle):
         assert False
         
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
-def test_get_settings_bad_path(tmpdir1, log_file_path, log_file_handle):
+def test_get_settings_bad_path(tmpdir1,log):
     flag = False
     try:
-        settings_llsd = update_manager.get_settings(log_file_handle, os.path.dirname(data_dir))
+        settings_llsd = update_manager.get_settings(os.path.dirname(data_dir),log=log)
     except Exception, e:
         #should not happen, get_settings should consume the exception and log it
         print "get settings not quiet, threw %s" % e

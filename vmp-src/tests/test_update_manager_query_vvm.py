@@ -37,24 +37,18 @@ import shutil
 import tempfile
 import update_manager
 import with_setup_args
+import logging
+from vmp_util import SL_Logging
+from argparse import Namespace
 
-def query_vvm_setup():
-    tmpdir1 = tempfile.mkdtemp(prefix = 'test1')
-    handle = update_manager.get_log_file_handle(tmpdir1)
-
-    return [tmpdir1,handle], {}
-
-def query_vvm_teardown(tmpdir1, handle):
-    shutil.rmtree(tmpdir1, ignore_errors = True)
-
-@with_setup_args.with_setup_args(query_vvm_setup, query_vvm_teardown)
-def test_query_vvm(tmpdir1, handle):
+def test_query_vvm():
     key = update_manager.get_platform_key()
     parent = update_manager.get_parent_path(key)
-    settings = update_manager.get_settings(handle, parent)
+    settings = update_manager.get_settings(parent)
     launcher_path = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
     summary = update_manager.get_summary(key)
-
+    args=Namespace(verbosity=logging.DEBUG)
+    log=SL_Logging.log('test_update', args)
     #for unit testing purposes, just testing a value from results.  If no update, then None and it falls through
     #for formal QA see:
     #   https://docs.google.com/document/d/1WNjOPdKlq0j_7s7gdNe_3QlyGnQDa3bFNvtyVM6Hx8M/edit
@@ -62,7 +56,7 @@ def test_query_vvm(tmpdir1, handle):
     #for test plans on all cases, as it requires setting up a fake VVM service
 
     try:
-        results = update_manager.query_vvm(handle, key, None, summary)
+        results = update_manager.query_vvm(log, key, None, summary)
     except Exception, e:
         print "query_vvm threw unexpected exception %s" % str(e)
         assert False

@@ -49,41 +49,31 @@ requests.packages.urllib3.disable_warnings()
 import tempfile
 import threading
 import update_manager
+import logging
+import vmp_util
 
 #module default
 CHUNK_SIZE = 1024
 
-def silent_write(log_file_handle, text):
-    #if we have a log file, write.  If not, do nothing.
-    #this is so we don't have to keep trapping for an exception with a None handle
-    #oh and because it is best effort, it is also a holey_write ;)
-    if (log_file_handle):
-        #prepend text for easy grepping
-        timestamp = datetime.utcnow().strftime("%m/%d/%Y %H:%M:%S")
-        log_file_handle.write(timestamp + " DOWNLOADER: " + text + "\n")
-
 #Note: No exception handling here! Response to exceptions is the responsibility of the caller
-def download_update(url = None, download_dir = None, size = None, progressbar = False, chunk_size = CHUNK_SIZE):
+def download_update(log=None, url = None, download_dir = None, size = None, progressbar = False, chunk_size = CHUNK_SIZE):
     #url to download from
     #download_dir to download to
     #total size (for progressbar) of download
     #progressbar: whether to display one (not used for background downloads)
     #chunk_size is in bytes, amount to download at once
-    
-    parent_dir = update_manager.get_parent_path(update_manager.get_platform_key())
-    log_file_handle = update_manager.get_log_file_handle(parent_dir, 'downloader.log')
-    silent_write(log_file_handle, "In downloader: download_update args %s, %s, %s, %s, %s" % (url, download_dir, size, progressbar, chunk_size))
-    silent_write(log_file_handle, "directory to download to: %s" % download_dir)
+
+    log.debug(" url %s, download_dir %s, size %s, progressbar %s, chunk_size %s" % (url, download_dir, size, progressbar, chunk_size))
     queue = Queue.Queue()
     if not os.path.exists(download_dir):
         os.makedirs(download_dir)
     #the url split provides the basename of the filename
     filename = os.path.join(download_dir, url.split('/')[-1])
-    silent_write(log_file_handle, "filename to download to: %s" % filename)
+    log.info("downloading to: %s" % filename)
     req = requests.get(url, stream=True)
-    down_thread = ThreadedDownload(req, filename, chunk_size, progressbar, queue, log_file_handle)
+    down_thread = ThreadedDownload(req, filename, chunk_size, progressbar, queue)
     down_thread.start()
-    silent_write(log_file_handle, "Started download thread.")
+    log.debug("Started download thread.")
     
     if progressbar:
         frame = IUM.InstallerUserMessage(title = "Second Life Downloader", icon_name="head-sl-logo.gif")
@@ -94,7 +84,7 @@ def download_update(url = None, download_dir = None, size = None, progressbar = 
         down_thread.join()
 
 class ThreadedDownload(threading.Thread):
-    def __init__(self, req, filename, chunk_size, progressbar, in_queue, log_file_handle):
+    def __init__(self, req, filename, chunk_size, progressbar, in_queue):
         #req is a python request object
         #target filename to download to
         #chunk_size is in bytes, amount to download at once
@@ -106,10 +96,10 @@ class ThreadedDownload(threading.Thread):
         self.chunk_size = int(chunk_size)
         self.progressbar = progressbar
         self.in_queue = in_queue
-        self.log_file_handle = log_file_handle
+        self.log = logging.getLogger('SL_Updater')
         
     def run(self):
-        silent_write(self.log_file_handle, "Download thread running.")
+        self.log.debug("Download thread running.")
         with open(self.filename, 'wb') as fd:
             #keep downloading until we run out of chunks, then download the last bit
             for chunk in self.req.iter_content(self.chunk_size):
@@ -121,7 +111,7 @@ class ThreadedDownload(threading.Thread):
             #if len(chunk) is ever -1, we get to file a bug against Python
             self.in_queue.put(-1)
             self.cleanup()
-            silent_write(self.log_file_handle, "Download thread finished.")
+            self.log.debug("Download thread finished.")
             
     def cleanup(self):
         #on success remove .next file if any and mark done
@@ -131,20 +121,27 @@ class ThreadedDownload(threading.Thread):
                 os.remove(os.path.join(download_dir, fname))
         tempfile.mkstemp(suffix=".done", dir=download_dir)    
 
-def main():
-    parser = argparse.ArgumentParser("Download URI to directory")
-    parser.add_argument('--url', dest='url', help='URL of file to be downloaded', required=True)
-    parser.add_argument('--dir', dest='download_dir', help='directory to be downloaded to', required=True)
-    parser.add_argument('--pb', dest='progressbar', help='whether or not to show a progressbar', action="store_true", default = False)
-    parser.add_argument('--size', dest='size', help='size of download for progressbar')
-    parser.add_argument('--chunk_size', dest='chunk_size', default=CHUNK_SIZE, help='max portion size of download to be loaded in memory in bytes.')
-    args = parser.parse_args()
-
-    download_update(url = args.url, download_dir = args.download_dir, size = args.size, progressbar = args.progressbar, chunk_size = args.chunk_size)
 
 
 if __name__ == "__main__":
     #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
     if 'ython' in sys.executable:
         sys.executable =  os.path.abspath(sys.argv[0])    
-    main()
+
+        parser = argparse.ArgumentParser("Download URI to directory")
+        parser.add_argument('--url', dest='url', help='URL of file to be downloaded', required=True)
+        parser.add_argument('--dir', dest='download_dir', help='directory to be downloaded to', required=True)
+        parser.add_argument('--pb', dest='progressbar', help='whether or not to show a progressbar', action="store_true", default = False)
+        parser.add_argument('--size', dest='size', help='size of download for progressbar')
+        parser.add_argument('--chunk_size', dest='chunk_size', default=CHUNK_SIZE, help='max portion size of download to be loaded in memory in bytes.')
+        vmp_util.SL_Logging.add_verbosity_options(parser)
+        args = parser.parse_args()
+        log = vmp_util.SL_Logging.log('SL_Downloader', args)
+
+        download_update(log = log,
+                        url = args.url,
+                        download_dir = args.download_dir,
+                        size = args.size,
+                        progressbar = args.progressbar,
+                        chunk_size = args.chunk_size)
+

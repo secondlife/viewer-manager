@@ -35,6 +35,7 @@ from llbase import llrest
 from llbase.llrest import RESTError
 from llbase import llsd    
 from urlparse import urljoin
+from argparse import Namespace
 from vmp_util import subprocess_args
 
 import apply_update
@@ -71,15 +72,6 @@ except NameError:
 #normal Python environment.
 if getattr(sys, 'frozen', False):
     __file__ = sys._MEIPASS
-
-def silent_write(log_file_handle, text):
-    #if we have a log file, write.  If not, do nothing.
-    #this is so we don't have to keep trapping for an exception with a None handle
-    #oh and because it is best effort, it is also a holey_write ;)
-    if (log_file_handle):
-        #prepend text for easy grepping
-        timestamp = datetime.utcnow().strftime("%m/%d/%Y %H:%M:%S")
-        log_file_handle.write(timestamp + " UPDATE MANAGER: " + text + "\n")
 
 def after_frame(message, timeout = 10000):
     #pop up a InstallerUserMessage.basic_message that kills itself after timeout milliseconds
@@ -222,7 +214,7 @@ def check_for_completed_download(download_dir, expected_size = 0):
             return None
     return completed  
 
-def get_settings(log_file_handle, parent_dir):
+def get_settings(parent_dir, log=None):
     #return the settings file parsed into a dict
     try:
         settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml'))
@@ -232,34 +224,14 @@ def get_settings(log_file_handle, parent_dir):
             settings_file = parent_dir
         settings = llsd.parse((open(settings_file)).read())
     except llsd.LLSDParseError as lpe:
-        silent_write(log_file_handle, "Could not parse settings file %s" % lpe)
+        log.warning("Could not parse settings file %s" % lpe)
         return None
     except Exception as e:
-        silent_write(log_file_handle, "Could not read settings file %s" % e)
+        log.warning("Could not read settings file %s" % e)
         return None
     return settings
 
-def get_log_file_handle(parent_dir, filename = None):
-    #return a write handle on the log file
-    #plus log rotation and not dying on failure
-    if not filename:
-        return None
-    log_file = os.path.join(parent_dir, "logs", filename)
-    try:
-        if not os.path.exists(log_file):
-            #reimplement TOUCH(1) in Python
-            #perms default to 644 which is fine
-            open(log_file, 'w+').close()        
-        #0 is unbuffered writes.  The writes to logs are not each that large
-        #and unbuffered gives us a chance at a write if the program is interrrupted
-        f = open(log_file,'a+', 0)
-    except Exception as e:
-        #we don't have a log file to write to, make a best effort and sally onward
-        print "Could not create or open update manager log file %s" % log_file
-        f = None
-    return f
-
-def make_VVM_UUID_hash(platform_key, log_file_handle):
+def make_VVM_UUID_hash(platform_key):
     #NOTE: There is no python library support for a persistent machine specific UUID (MUUID)
     #      AND all three platforms do this a different way, so exec'ing out is really the best we can do
     #Lastly, this is a best effort service.  If we fail, we should still carry on with the update 
@@ -267,18 +239,18 @@ def make_VVM_UUID_hash(platform_key, log_file_handle):
     #for env without stdin, such as pythonw and pyinstaller, provide a legit empty handle, not the broken
     #thing we get from the env.
     if (platform_key == 'lnx'):
-        muuid = subprocess.check_output(['/usr/bin/hostid'], **subprocess_args(False, log_file_handle)).rstrip()
+        muuid = subprocess.check_output(['/usr/bin/hostid'], **subprocess_args(include_stdout=False)).rstrip()
     elif (platform_key == 'mac'):
         #this is absurdly baroque
         #/usr/sbin/system_profiler SPHardwareDataType | fgrep 'Serial' | awk '{print $NF}'
-        muuid = subprocess.check_output(["/usr/sbin/system_profiler", "SPHardwareDataType"], **subprocess_args(False, log_file_handle))
+        muuid = subprocess.check_output(["/usr/sbin/system_profiler", "SPHardwareDataType"], **subprocess_args(include_stdout=False))
         #findall[0] does the grep for the value we are looking for: "Serial Number (system): XXXXXXXX"
         #split(:)[1] gets us the XXXXXXX part
         #lstrip shaves off the leading space that was after the colon
         muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
     elif (platform_key == 'win'):
         # wmic csproduct get UUID | grep -v UUID
-        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], **subprocess_args(False, log_file_handle))
+        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], **subprocess_args(include_stdout=False))
         #outputs in two rows:
         #UUID
         #XXXXXXX-XXXX...
@@ -290,20 +262,20 @@ def make_VVM_UUID_hash(platform_key, log_file_handle):
         #fake it
         return hashlib.md5(str(uuid.uuid1())).hexdigest()
     
-def getBitness(platform_key = None, log_file_handle = None):
+def getBitness(platform_key = None):
     if platform_key in ['lnx', 'mac']:
         return 64
     if 'PROGRAMFILES(X86)' not in os.environ:
         return 32
     else:
         #see MAINT-6832 and IQA-4130
-        wmic_graphics = subprocess.check_output(['wmic','path','Win32_VideoController','get','NAME'], **subprocess_args(False, log_file_handle))
+        wmic_graphics = subprocess.check_output(['wmic','path','Win32_VideoController','get','NAME'], **subprocess_args(include_stdout=False)) # was log_file_handle
         wmic_list = re.split('\n', wmic_graphics)
         bad = False
         for word in wmic_list:
             if word.find("Intel(R) HD Graphics") > -1:
                 bad = True
-                silent_write(log_file_handle, "Setting bitness to 32 due to HD Graphics Win 64 Bit incompatibility.")
+                log.info("Setting bitness to 32 due to HD Graphics Win 64 Bit incompatibility.")
                 return 32
         return 64
     
@@ -323,7 +295,7 @@ def isViewerMachineBitMatched(viewer_platform = None, platform_key = None, bitne
         win_plat_key = 'win32'
     return (viewer_platform == win_plat_key)
 
-def query_vvm(log_file_handle = None, platform_key = None, settings = None, summary_dict = None, UpdaterServiceURL = None, UpdaterWillingToTest = None):
+def query_vvm(log=None, platform_key = None, settings = None, summary_dict = None, UpdaterServiceURL = None, UpdaterWillingToTest = None):
     result_data = None
     baseURI = None
     VMM_platform = platform_key
@@ -331,7 +303,7 @@ def query_vvm(log_file_handle = None, platform_key = None, settings = None, summ
     #  platform_key is the OS name of the computer VMP is running on
     #  summary_dict['platform'] is the platform and for windows, bitness, of the _viewer_ that VMP is part of
     #These are not always the same, in particular, for the first download of a VMP windows viewer which defaults to 64 bit
-    bitness = getBitness(platform_key, log_file_handle)
+    bitness = getBitness(platform_key)
     try:
         if not isViewerMachineBitMatched(summary_dict['Platform'], platform_key, bitness):
             #there are two cases:
@@ -341,7 +313,7 @@ def query_vvm(log_file_handle = None, platform_key = None, settings = None, summ
             if bitness == 32:
                 VMM_platform = 'win32'
     except Exception, e:
-        silent_write(log_file_handle, "Could not parse viewer bitness from summary.json %s" % e)
+        log.warning("Could not parse viewer bitness from summary.json %s" % e)
         #At these point, we have no idea what is really going on.  Since 32 installs on 64 and not vice-versa, fall back to safety
         VMM_platform = 'win32'        
     
@@ -367,7 +339,7 @@ def query_vvm(log_file_handle = None, platform_key = None, settings = None, summ
     else:
         platform_version = platform.release()
     #this will always return something usable, error handling in method
-    UUID = str(make_VVM_UUID_hash(platform_key, log_file_handle))
+    UUID = str(make_VVM_UUID_hash(platform_key))
     #note that this will not normally be in a settings.xml file and is only here for test builds.
     #for test builds, add this key to the ../user_settings/settings.xml
     """
@@ -394,17 +366,20 @@ def query_vvm(log_file_handle = None, platform_key = None, settings = None, summ
             test_ok = 'testok'
     #because urljoin can't be arsed to take multiple elements
     #channelname is a list because although it is only one string, it is a kind of argument and viewer args can take multiple keywords.
+    log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
+             (str(channelname), version, VMM_platform, platform_version, test_ok, UUID))
     query_string =  urllib.quote('v1.1/' + str(channelname) + '/' + version + '/' + VMM_platform + '/' + platform_version + '/' + test_ok + '/' + UUID)
-    silent_write(log_file_handle, "About to query VVM: %s" % base_URI + query_string)
+    log.debug("Sending query to VVM: %s" % base_URI + query_string)
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=base_URI)
     try:
         result_data = VVMService.get(query_string)
     except RESTError as res:
-        silent_write(log_file_handle, "Failed to query VVM using %s failed as %s" % (urljoin(base_URI,query_string), res))
+        if res.status != 404: # 404 is how the Viewer Version Manager indicates no-update
+            log.warning("Failed to query VVM using %s failed as %s" % (urljoin(base_URI,query_string), res))
         return None
     return result_data
 
-def download(url = None, version = None, download_dir = None, size = 0, hash = None, background = False, chunk_size = None, log_file_handle = None):
+def download(url = None, version = None, download_dir = None, size = 0, hash = None, background = False, chunk_size = None):
     download_tries = 0
     download_success = False
     download_process = None
@@ -418,11 +393,11 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
         path_to_downloader = os.path.join(os.path.dirname(os.path.realpath(__file__)), "download_update.py")
 
     #three strikes and you're out
-    silent_write(log_file_handle, "Preparing to download new version " + version + " destination " + download_dir + ".")
+    log.info("Preparing to download new version " + version + " destination " + download_dir + ".")
     while download_tries < 3 and not download_success:
         #323: Check for a partial update of the required update; in either event, display an alert that a download is required, initiate the download, and then install and launch
         if not background:
-            silent_write(log_file_handle, "foreground downloader args: " + repr(["--url", url, "--dir", download_dir, 
+            log.debug("foreground downloader args: " + repr(["--url", url, "--dir", download_dir, 
                             "--size", str(size), "--chunk_size", str(chunk_size)]))
             if download_tries == 0:
                 after_frame(message = "Downloading new version " + version + " Please wait.", timeout = 5000)
@@ -433,8 +408,8 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                 download_success = True
             except Exception, e:
                 download_tries += 1    
-                silent_write(log_file_handle, "Failed to download new version " + version + " in foreground downloader. Trying again.")
-                silent_write(log_file_handle, "Logging download exception: %s" % repr(e))
+                log.warning("Failed to download new version " + version + " in foreground downloader. Trying again.")
+                log.error("Logging download exception: %s" % repr(e))
             #check to make sure the downloaded file is correct
             filename = os.path.join(download_dir, url.split('/')[-1])
             down_hash = md5file(filename)
@@ -442,27 +417,30 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                 #try again
                 download_tries += 1
                 download_success = False
-                silent_write(log_file_handle, "Hash mismatch: Expected: %s Received: %s" % (hash, down_hash))
+                log.warning("Hash mismatch: Expected: %s Received: %s" % (hash, down_hash))
         else:
             try:
                 #Python does not have a facility to multithread a method, so we make the method a standalone script
                 #and subprocess that.  The business with the file descriptors is how to tell subprocess not to wait.
                 #since we are using Popen and not check_output, subprocess_args isn't needed
                 #arguments to execv() via popen() can only be strings, hence str(int)
-                silent_write(log_file_handle, "background downloader args: " + repr(["path to downloader", path_to_downloader, "--url", url, "--dir", download_dir, 
-                            "--size", str(size), "--chunk_size", str(chunk_size)]))
-                download_process = subprocess.Popen([path_to_downloader, "--url", url, "--dir", download_dir, 
-                                                     "--size", str(size), "--chunk_size", str(chunk_size)], **subprocess_args(True, log_file_handle))                
-                silent_write(log_file_handle, "Download of new version " + version + " spawned.")
+                downloader_cmd = ["path to downloader", path_to_downloader,
+                                  "--url", url,
+                                  "--dir", download_dir, 
+                                  "--size", str(size),
+                                  "--chunk_size", str(chunk_size)]
+                log.debug("background downloader args: " + repr(downloader_cmd))
+                download_process = subprocess.Popen(downloader_cmd, **subprocess_args(include_stdout=True))
+                log.debug("Download of new version " + version + " spawned.")
                 download_success = True
             except  Exception, e:
                 download_tries += 1
                 download_success = False
-                silent_write(log_file_handle, "Failed to download new version in background downloader " + version + ". Trying again.")
-                silent_write(log_file_handle, "Logging download exception: %s, subprocess returned: %s" % (repr(e), repr(download_process)))
+                log.warning("Failed to download new version in background downloader " + version + ". Trying again.")
+                log.error("Logging download exception: %s, subprocess returned: %s" % (repr(e), repr(download_process)))
 
     if not download_success:
-        silent_write(log_file_handle, "Failed to download new version " + version + " from " + str(url) + " Please check connectivity.")
+        log.warning("Failed to download new version " + version + " from " + str(url) + " Please check connectivity.")
         if not background:
             after_frame(message = "Failed to download new version " + version + " from " + str(url) + " Please check connectivity.")
         return False    
@@ -473,19 +451,19 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
             os.remove(os.path.join(download_dir, filename))
 
     if download_process_args is not None:
-        silent_write(log_file_handle, "Returning downloader process args: " + repr(download_process_args))
+        log.debug("Returning downloader process args: " + repr(download_process_args))
         return download_process_args
     else:
         return True
 
-def install(platform_key = None, download_dir = None, log_file_handle = None, in_place = None, downloaded = None):
+def install(platform_key = None, download_dir = None, in_place = None, downloaded = None):
     #user said no to this one
     if downloaded != 'skip':
         after_frame(message = "New version downloaded.\nInstalling now, please wait.")
-        success = apply_update.apply_update(download_dir, platform_key, log_file_handle, in_place)
+        success = apply_update.apply_update(download_dir, platform_key, in_place)
         version = download_dir.split('/')[-1]
         if success:
-            silent_write(log_file_handle, "successfully updated to " + version)
+            log.info("successfully updated to " + version)
             #windows is cleaned up on the following run, see apply_update.apply_update()
             if platform_key != 'win':
                 shutil.rmtree(download_dir)
@@ -493,21 +471,21 @@ def install(platform_key = None, download_dir = None, log_file_handle = None, in
             return success
         else:
             after_frame(message = "Failed to apply " + version)
-            silent_write(log_file_handle, "Failed to update viewer to " + version)
+            log.warning("Failed to update viewer to " + version)
             return False
         
 def download_and_install(downloaded = None, url = None, version = None, download_dir = None, size = None, 
-                        hash = None, platform_key = None, log_file_handle = None, in_place = None, chunk_size = 1024):
+                        hash = None, platform_key = None, in_place = None, chunk_size = 1024):
     #extracted to a method because we do it twice in update_manager() and this makes the logic clearer
     #also, mandatory downloads ignore the distinction between skip and done, either result means we are gtg
     if downloaded is None:
         #do the download, exit if we fail
         if not download(url = url, version = version, download_dir = download_dir, size = size, background = False,
-                        hash = hash, chunk_size = chunk_size, log_file_handle = log_file_handle): 
+                        hash = hash, chunk_size = chunk_size): 
             return (False, 'download', version)  
     #do the install
     path_to_new_launcher = install(platform_key = platform_key, download_dir = download_dir, 
-                                   log_file_handle = log_file_handle, in_place = in_place, downloaded = downloaded)
+                                   in_place = in_place, downloaded = downloaded)
     if path_to_new_launcher:
         #if we succeed, propagate the success type upwards
         if in_place:
@@ -518,7 +496,7 @@ def download_and_install(downloaded = None, url = None, version = None, download
         #propagate failure
         return (False, 'apply', version)    
             
-def update_manager(cli_overrides = None):
+def update_manager(log=None, cli_overrides = None):
     #cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments to 
     #comments that begin with '323:' are steps taken from the algorithm in the description of SL-323. 
     #  Note that in the interest of efficiency, such as determining download success once at the top
@@ -537,7 +515,6 @@ def update_manager(cli_overrides = None):
     #setup and getting initial parameters
     platform_key = get_platform_key()
     parent_dir = get_parent_path(platform_key)
-    log_file_handle = get_log_file_handle(parent_dir, 'update_manager.log')
     settings = None
 
     #check to see if user has install rights
@@ -550,30 +527,30 @@ def update_manager(cli_overrides = None):
             import pwd
             script_owner_name = pwd.getpwuid(script_owner_id)[0]
             username = pwd.getpwuid(user_id)[0]
-            silent_write(log_file_handle, "Upgrade notification attempted by userid " + username)    
+            log.info("Upgrade notification attempted by userid " + username)    
             frame = InstallerUserMessage.InstallerUserMessage(title = "Second Life Installer", icon_name="head-sl-logo.gif")
             frame.binary_choice_message(message = "Second Life was installed by userid " + script_owner_name 
                 + ".  Do you have privileges to install?", true = "Yes", false = 'No')
             if not frame.choice.get():
-                silent_write(log_file_handle, "Upgrade attempt declined by userid " + username)
+                log.info("Upgrade attempt declined by userid " + username)
                 after_frame(message = "Please find a system admin to upgrade Second Life")
-                silent_write(log_file_handle, "Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
+                log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
                 return (False, 'setup', None)
     except (AttributeError, ImportError):
         #Windows throws AttributeError on getuid() and ImportError on pwd
         #Just ignore it and consider the ID check as passed.
         pass
 
-    settings = get_settings(log_file_handle, parent_dir)
+    settings = get_settings(parent_dir, log=log)
     if cli_overrides is not None: 
         if 'settings' in cli_overrides.keys():
             if cli_overrides['settings'] is not None:
-                settings = get_settings(log_file_handle, cli_overrides['settings'][0])
+                settings = get_settings(cli_overrides['settings'][0], log=log)
         
     if settings is None:
-        silent_write(log_file_handle, "Failed to load viewer settings from " 
+        log.warning("Failed to load viewer settings from " 
                      +  os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml')))
-        silent_write(log_file_handle, "Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
+        log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
         return (False, 'setup', None)
 
     #323: If a complete download of that update is found, check the update preference:
@@ -623,9 +600,9 @@ def update_manager(cli_overrides = None):
             if 'channel' in cli_overrides.keys():
                 channel_override_summary['Channel'] = cli_overrides['channel']
     except Exception, e:
-        silent_write(log_file_handle, "Could not obtain channel and version, exiting.")
-        silent_write(log_file_handle, repr(e))
-        silent_write(log_file_handle, "Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
+        log.warning("Could not obtain channel and version, exiting.")
+        log.warning(repr(e))
+        log.warning("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
         return (False, 'setup', None)        
 
     #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
@@ -638,12 +615,17 @@ def update_manager(cli_overrides = None):
     else:
         UpdaterServiceURL = None
 
-    result_data = query_vvm(log_file_handle, platform_key, settings, channel_override_summary, UpdaterServiceURL, UpdaterWillingToTest)
+    result_data = query_vvm(log=log,
+                            platform_key=platform_key,
+                            settings=settings,
+                            summary_dict=channel_override_summary,
+                            UpdaterServiceURL=UpdaterServiceURL,
+                            UpdaterWillingToTest=UpdaterWillingToTest)
 
     #nothing to do or error
     if not result_data:
-        silent_write(log_file_handle, "No update found.")
-        silent_write(log_file_handle, "Update manager exited with (Success = %s, Stage = %s, Update Required = %s)" % (True, None, None))
+        log.info("No update.")
+        log.debug("Update manager exited with (Success = %s, Stage = %s, Update Required = %s)" % (True, None, None))
         #clean up any previous download dir on windows, see apply_update.apply_update()
         try:
             if platform_key == 'win':
@@ -651,12 +633,12 @@ def update_manager(cli_overrides = None):
                 #call make to convert our version into a previous download dir path
                 #call check to see if the winstall file is there
                 installed = check_for_completed_download(past_download_dir)
-                silent_write(log_file_handle, "Checked for previous Windows install in %s with result %s." % (past_download_dir, installed))
+                log.debug("Checked for previous Windows install in %s with result %s." % (past_download_dir, installed))
                 if installed == 'winstall':
                     shutil.rmtree(past_download_dir)
         except Exception, e:
             #cleanup is best effort
-            silent_write(log_file_handle, "Caught exception cleaning up Windows download dir %s" % repr(e))
+            log.error("Caught exception cleaning up Windows download dir %s" % repr(e))
             pass
         return (True, None, None)
 
@@ -664,8 +646,8 @@ def update_manager(cli_overrides = None):
     try:
         download_dir = make_download_dir(parent_dir, result_data['version'])
     except Exception, e:
-        silent_write(log_file_handle, "Caught exception making download dir %s" % repr(e))
-        silent_write(log_file_handle, "Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
+        log.error("Caught exception making download dir %s" % repr(e))
+        log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
         return (False, 'setup', None)
     
     #if the channel name of the response is the same as the channel we are launched from, the update is "in place"
@@ -678,11 +660,11 @@ def update_manager(cli_overrides = None):
 
     #323: If the response indicates that there is a required update: 
     if result_data['required'] or ((not result_data['required']) and (install_automatically == 1)):
-        silent_write(log_file_handle, "Found required update.")
+        log.info("Found required update.")
         #323: Check for a completed download of the required update; if found, display an alert, install the required update, and launch the newly installed viewer.
         #323: If [optional download and] Install Automatically: display an alert, install the update and launch updated viewer.
         return download_and_install(downloaded = downloaded, url = result_data['url'], version = result_data['version'], download_dir = download_dir, 
-                        hash = result_data['hash'], size = result_data['size'], platform_key = platform_key, log_file_handle = log_file_handle, in_place = in_place, chunk_size = chunk_size)
+                        hash = result_data['hash'], size = result_data['size'], platform_key = platform_key, in_place = in_place, chunk_size = chunk_size)
     else:
         #323: If the update response indicates that there is an optional update: 
         #323: Check to see if the optional update has already been downloaded.
@@ -693,45 +675,45 @@ def update_manager(cli_overrides = None):
         #     but leave the download in place so that if it becomes required it will be there.
         #323: Install next time: create a marker that skips the prompt and installs on the next launch
         #323: Install and launch now: do it.
-        silent_write(log_file_handle, "Found optional update. Download directory is: " + download_dir)
+        log.info("Found optional update. Download directory is: " + download_dir)
         choice = -1
         if downloaded is None:        
             #multithread a download           
             if not os.path.exists(download_dir):
                 os.mkdir(download_dir)             
-            silent_write(log_file_handle, "Found optional update. Downloading in background to: " + download_dir)
+            log.info("Found optional update. Downloading in background to: " + download_dir)
             result = download(url = result_data['url'], version = result_data['version'], download_dir = download_dir, 
-                              hash = result_data['hash'], size = result_data['size'], background = True, log_file_handle = log_file_handle)
-            silent_write(log_file_handle, "Update manager exited with (Success = %s, Stage = %s, Result = %s)" 
+                              hash = result_data['hash'], size = result_data['size'], background = True)
+            log.debug("Update manager exited with (Success = %s, Stage = %s, Result = %s)" 
                 % (True, 'background download', result))   
             return (True, 'background', result)                 
         elif downloaded == 'done' or downloaded == 'next':
-            silent_write(log_file_handle, "Found previously downloaded update in: " + download_dir)
+            log.info("Found previously downloaded update in: " + download_dir)
             skip_frame = InstallerUserMessage.InstallerUserMessage(title = "Second Life Installer", icon_name="head-sl-logo.gif")
             skip_frame.trinary_choice_link_message(message = "Optional Update %s ready to install. Install this version?\nClick here for Release Notes" % summary_dict['Version'], 
                 url = str(result_data['more_info']), one = "Yes", two = "No", three = "Not Now")
             skip_me = skip_frame.choice3.get()
             if skip_me == 1:
-                result = install(platform_key = platform_key, download_dir = download_dir, log_file_handle = log_file_handle, in_place = in_place, downloaded = downloaded)
+                result = install(platform_key = platform_key, download_dir = download_dir, in_place = in_place, downloaded = downloaded)
                 #overwrite path with in place signal value
                 if in_place:
                     result = True
-                silent_write(log_file_handle, "Update manager exited with (Success = %s, Install Type = %s, Install Type Decision = %s)" % (True, 'in place', str(result)))
+                log.debug("Update manager exited with (Success = %s, Install Type = %s, Install Type Decision = %s)" % (True, 'in place', str(result)))
                 return (True, 'in place', result)
             elif skip_me == 2:                  
                 tempfile.mkstemp(suffix=".skip", dir=download_dir)
-                silent_write(log_file_handle, "Update manager exited with (Success = %s, Install Type = %s, Install Type Decision = %s)" % (True, 'in place', True))
+                log.debug("Update manager exited with (Success = %s, Install Type = %s, Install Type Decision = %s)" % (True, 'in place', True))
                 return (True, 'in place', True)
             else:
                 tempfile.mkstemp(suffix=".next", dir=download_dir)
-                silent_write(log_file_handle, "Update manager exited with (Success = %s, Install Type = %s, Install Type Decision = %s)" % (True, 'in place', True))
+                log.debug("Update manager exited with (Success = %s, Install Type = %s, Install Type Decision = %s)" % (True, 'in place', True))
                 return (True, 'in place', True)                
         elif downloaded == 'skip':
-            silent_write(log_file_handle, "Skipping this update per previous choice.  Delete the .skip file in " + download_dir + " to change this.")
+            log.info("Skipping this update per previous choice.  Delete the .skip file in " + download_dir + " to change this.")
             return (True, 'skip', True)        
         else:
             #shouldn't be here
-            silent_write(log_file_handle, "Found nonempty download dir but no flag file. Check returned: %s" % repr(downloaded))
+            log.warning("Found nonempty download dir but no flag file. Check returned: %s" % repr(downloaded))
             return (True, 'skip', True)
 
 
@@ -740,4 +722,6 @@ if __name__ == '__main__':
     if 'ython' in sys.executable:
         sys.executable =  os.path.abspath(sys.argv[0])
     #there is no argument parsing or other main() work to be done
-    update_manager()
+    args = Namespace(verbosity=logging.INFO)
+    log = vmp_util.SL_Logging.log('SL_Updater', no_args)
+    update_manager(log=log)
