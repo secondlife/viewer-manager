@@ -45,6 +45,7 @@ class SL_Logging:
         with the addition of an environment override for use by tests
         """
 
+        logdir=None
         try:
             logdir = os.environ['SECONDLIFE_LOGDIR']
         except KeyError:
