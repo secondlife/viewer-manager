@@ -49,7 +49,7 @@ class SL_Logging:
         elif sys.platform.startswith('darwin'):
             logdir = os.path.join(os.environ['HOME'],'Library','Application Support','SecondLife','logs')
         elif sys.platform.startswith("win") or sys.platform.startswith("cyg"):
-            logdir = os.path.join(os.getenv['APPDATA'],'SecondLife','logs')
+            logdir = os.path.join(os.environ['APPDATA'],'SecondLife','logs')
         elif sys.platform.startswith("linux"):
             logdir = os.path.join(os.environ['HOME'],'.secondlife','logs')
         else:
