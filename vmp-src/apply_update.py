@@ -103,7 +103,7 @@ def try_dismount(installable = None, tmpdir = None):
         #Filesystem   512-blocks   Used Available Capacity iused  ifree %iused  Mounted on
         #/dev/disk1s2    2047936 643280   1404656    32%   80408 175582   31%   /private/tmp/mnt/Second Life Installer
         command = ["df", os.path.join(tmpdir, "Second Life Installer")]
-        output = subprocess.check_output(command, **subprocess_args(include_stdout=False))
+        output = subprocess.check_output(command, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(command)))
         #No point in trying to umount an fs that doesn't exist. 
         #This could happen, for example, if the user manually umounts it first
         try:
@@ -114,11 +114,11 @@ def try_dismount(installable = None, tmpdir = None):
         mnt_dev = output.split('\n')[1].split()[0]
         #do the dismount
         command = ["hdiutil", "detach", "-force", mnt_dev]
-        output = subprocess.check_output(command, **subprocess_args(include_stdout=False))
+        output = subprocess.check_output(command, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(command)))
         log.info("hdiutil detach succeeded")
         log.info(output)
         command = ["diskutil", "umount", mnt_dev]
-        output = subprocess.check_output(command, **subprocess_args(include_stdout=False))
+        output = subprocess.check_output(command, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(command)))
         log.info("diskutil umount succeeded")
         log.info(output)        
     except Exception, e:
@@ -189,7 +189,8 @@ def apply_mac_update(installable = None):
     #make temp dir and mount & attach dmg
     tmpdir = tempfile.mkdtemp()
     try:
-        output = subprocess.check_output(["hdiutil", "attach", installable, "-mountroot", tmpdir], **subprocess_args(include_stdout=False))
+        hdiutil_cmd=["hdiutil", "attach", installable, "-mountroot", tmpdir]
+        output = subprocess.check_output(hdiutil_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(hdiutil_cmd)))
         log.info("hdiutil attach succeeded")
         log.info(output)
     except Exception, e:
@@ -293,7 +294,6 @@ if __name__ == "__main__":
    if 'ython' in sys.executable:
       sys.executable =  os.path.abspath(sys.argv[0])   
       parser = argparse.ArgumentParser("Apply Downloaded Update")
-      SL_Logging.add_verbosity_options(parser)
 
       parser.add_argument('--dir', dest = 'download_dir', help = 'directory to find installable', required = True)
       parser.add_argument('--pkey', dest = 'platform_key', help =' OS: lnx|mac|win', required = True)
@@ -301,7 +301,7 @@ if __name__ == "__main__":
 
       args = parser.parse_args()
     
-      log = vmp_util.SL_Logging.log('SL_Installer', args)
+      log = vmp_util.SL_Logging.getLogger('SL_Installer')
 
       IN_PLACE = args.in_place
       result = apply_update(download_dir = args.download_dir, platform_key = args.platform_key)

@@ -4,7 +4,6 @@ import os.path
 import sys
 import time
 import logging
-import argparse
 import errno
 
 #Because of the evolution over time of the specification of VMP, some methods were added "in place", in particular in update manager which should someday be refactored into this
@@ -12,8 +11,73 @@ import errno
 
 # ######################
 
-class SL_Logging:
-    
+class SL_Logging(object):
+    """
+    This is a wrapper for the python standard 'logging' class that provides for
+    Second Life logging conventions.
+    It should be backward-compatible, but relies on the first call to getLogger
+    being made through this wrapper to initialize the formatting, put the log file 
+    in the correct directory, and rotate any previous log file that has exceeded
+    the maximum allowed size.
+    """
+    logger=None
+    logStream=None
+
+    @staticmethod
+    def getLogger(basename, extension='.log', verbosity=None, maxsize=10*1024):
+        """
+        Open the name.log file in the conventional location, with rotation of
+        any existing log over the maxsize to name.old
+        Initialize the standard python logging system to log use Second Life
+        standard log format; the verbosity can be any of:
+          'DEBUG', 'INFO', 'WARNING'
+        and may be set by environment variable SL_LAUNCH_LOGLEVEL
+        the default is 'INFO'
+        Returns the python logging object.
+        """
+        if not SL_Logging.logger:
+            log_basepath=os.path.join(SL_Logging.directory(),basename)
+            log_name = SL_Logging.rotate(log_basepath, extension=extension, maxsize=maxsize)
+
+            SL_Logging.logStream = open(log_name,'a')
+
+            log_handler = logging.StreamHandler(SL_Logging.logStream)
+            log_handler.setFormatter(SL_Logging.Formatter())
+
+            SL_Logging.logger=logging.getLogger(basename)
+
+            SL_Logging.logger.addHandler(log_handler)
+
+            SL_Logging.logger.setLevel(SL_Logging.get_verbosity(verbosity))
+            SL_Logging.logger.info("================ Running %s" % basename)
+
+        return logging.getLogger(basename)
+        
+    @staticmethod
+    def get_verbosity(verbosity=None):
+        if not verbosity:
+            verbosity_env = os.getenv('SL_LAUNCH_LOGLEVEL','INFO')
+            if verbosity_env == 'INFO':
+                verbosity=logging.INFO
+            elif verbosity_env == 'DEBUG':
+                verbosity=logging.DEBUG
+            elif verbosity_env == 'WARNING':
+                verbosity=logging.WARNING
+            else:
+                raise ValueError("Unknown log level '%s'" % verbosity_env)
+        return verbosity
+
+    @staticmethod
+    def stream(subcommand):
+        """
+        Return the file object that was used to initialize the log stream.
+        This is provided for use with the subprocess_args method below; by 
+        passing this stream to the log_stream parameter of subprocess_args, 
+        any stderr output from the subprocess will be directed into the log
+        """
+        SL_Logging.logger.info("======== Including output from subcommand %s" % repr(subcommand))
+        return SL_Logging.logStream
+
     class Formatter(logging.Formatter):
         """
         Makes python logging follow Second Life log file format
@@ -29,14 +93,6 @@ class SL_Logging:
 
         def formatTime(self, record):
             return self.sl_format.format(record);
-
-    @staticmethod
-    def add_verbosity_options(arg_parser, default=logging.WARNING):
-        verbosities=arg_parser.add_argument_group('verbosity levels')
-        verbosities.add_argument('--quiet',   dest='verbosity', action='store_const', const=logging.ERROR)
-        verbosities.add_argument('--verbose', dest='verbosity', action='store_const', const=logging.INFO)
-        verbosities.add_argument('--debug',   dest='verbosity', action='store_const', const=logging.DEBUG)
-        verbosities.set_defaults(verbosity=default)
 
     @staticmethod
     def directory():
@@ -86,42 +142,26 @@ class SL_Logging:
                 pass # nothing to be done about this either
         return new_name
 
-    @staticmethod
-    def log(name, args):
-        """
-        Open the name.log file in the conventional location, with rotation of
-        any existing log to name.old.
-        Initialize the standard python logging system to log use Second Life
-        standard log format.
-        Returns the python logging object.
-        """
-        log_basename=os.path.join(SL_Logging.directory(),name)
-        log_name = SL_Logging.rotate(log_basename,extension='.log',maxsize=10*1024)
-        log_stream = logging.FileHandler(log_name,'a',newline='\n')
-        log_stream.setFormatter(SL_Logging.Formatter())
-        log=logging.getLogger(name)
-        log.addHandler(log_stream)
-        log.setLevel(args.verbosity)
-        return log
 
-#This utility method is lifted from https://github.com/pyinstaller/pyinstaller/wiki/Recipe-subprocess
-#and gets us around the issue of pythonw breaking subprocess when default values for I/O handles are used.
-#it is slightly modified to always write to the log file rather than provide pipes
+# This utility method is lifted from https://github.com/pyinstaller/pyinstaller/wiki/Recipe-subprocess
+# and gets us around the issue of pythonw breaking subprocess when default values for I/O handles are used.
+# it is slightly modified to provide for writing to the log file rather than provide pipes
 
-#example usage is now 
-# subprocess.check_output(['python', '--help'], **subprocess_args(False, log_file_handle)
+# example usage is now 
+#   subprocess.check_output(['python', '--help'], **subprocess_args(False, log_file_handle)
 
 # Create a set of arguments which make a ``subprocess.Popen`` (and
 # variants) call work with or without Pyinstaller, ``--noconsole`` or
 # not, on Windows and Linux. Typical use::
 #
-#   subprocess.call(['program_to_run', 'arg_1'], **subprocess_args())
+#   command = ['program_to_run', 'arg_1']
+#   subprocess.call(command, **subprocess_args(log_stream=SL_Logging.stream(command)))
 #
 # When calling ``check_output``::
 #
 #   subprocess.check_output(['program_to_run', 'arg_1'],
 #                           **subprocess_args(False))
-def subprocess_args(include_stdout=True, handle=None):
+def subprocess_args(include_stdout=True, log_stream=None):
     # The following is true only on Windows.
     if hasattr(subprocess, 'STARTUPINFO'):
         # On Windows, subprocess calls will pop up a command window by default
@@ -147,7 +187,7 @@ def subprocess_args(include_stdout=True, handle=None):
     #
     # So, add it only if it's needed.
     if include_stdout:
-        ret = {'stdout': handle}
+        ret = {'stdout': log_stream}
     else:
         ret = {}
 
@@ -156,7 +196,7 @@ def subprocess_args(include_stdout=True, handle=None):
     # (stdin, stdout, stderr) to avoid an OSError exception
     # "[Error 6] the handle is invalid."
     ret.update({'stdin': subprocess.PIPE,
-                'stderr': handle,
+                'stderr': log_stream,
                 'startupinfo': si,
                 'env': env })
     return ret

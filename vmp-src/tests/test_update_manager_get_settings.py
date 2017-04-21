@@ -37,28 +37,27 @@ import update_manager
 import with_setup_args
 import logging
 from vmp_util import SL_Logging
-from argparse import Namespace
 
 data_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data')
+log=SL_Logging.getLogger('test_settings', verbosity='DEBUG')
 
 def get_settings_setup():
     tmpdir1 = tempfile.mkdtemp()
-    args=Namespace(verbosity=logging.DEBUG)
-    log=SL_Logging.log('test1', args)
-    return [tmpdir1, log], {}
+    
+    return [tmpdir1], {}
 
-def get_settings_teardown(tmpdir1,log):
+def get_settings_teardown(tmpdir1):
     shutil.rmtree(tmpdir1, ignore_errors = True)
 
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
-def test_get_settings(tmpdir1,log):   
-    settings_llsd = update_manager.get_settings(data_dir, log=log)
+def test_get_settings(tmpdir1):   
+    settings_llsd = update_manager.get_settings(data_dir)
     #we aren't testing the LLSD library, one dictionary value is enough
     assert_equal(settings_llsd['CurrentGrid']['Value'],'util.agni.lindenlab.com')
 
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
-def test_get_settings_bad_key(tmpdir1,log):
-    settings_llsd = update_manager.get_settings(data_dir, log=log)
+def test_get_settings_bad_key(tmpdir1):
+    settings_llsd = update_manager.get_settings(data_dir)
     try:
         settings_llsd['LagAmount']['Value']
     except KeyError:
@@ -68,10 +67,10 @@ def test_get_settings_bad_key(tmpdir1,log):
         assert False
         
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
-def test_get_settings_bad_path(tmpdir1,log):
+def test_get_settings_bad_path(tmpdir1):
     flag = False
     try:
-        settings_llsd = update_manager.get_settings(os.path.dirname(data_dir),log=log)
+        settings_llsd = update_manager.get_settings(os.path.dirname(data_dir))
     except Exception, e:
         #should not happen, get_settings should consume the exception and log it
         print "get settings not quiet, threw %s" % e

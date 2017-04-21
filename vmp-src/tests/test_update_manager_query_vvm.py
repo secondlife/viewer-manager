@@ -39,14 +39,12 @@ import update_manager
 import with_setup_args
 import logging
 from vmp_util import SL_Logging
-from argparse import Namespace
 
 def test_query_vvm():
     key = update_manager.get_platform_key()
     parent = update_manager.get_parent_path(key)
-    args=Namespace(verbosity=logging.DEBUG)
-    log=SL_Logging.log('test_update', args)
-    settings = update_manager.get_settings(parent, log=log)
+    log=SL_Logging.getLogger('test_update', verbosity='DEBUG')
+    settings = update_manager.get_settings(parent)
     launcher_path = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
     summary = update_manager.get_summary(key)
     #for unit testing purposes, just testing a value from results.  If no update, then None and it falls through
@@ -56,7 +54,7 @@ def test_query_vvm():
     #for test plans on all cases, as it requires setting up a fake VVM service
 
     try:
-        results = update_manager.query_vvm(log=log, platform_key=key, settings=None, summary_dict=summary)
+        results = update_manager.query_vvm(platform_key=key, settings=None, summary_dict=summary)
     except Exception, e:
         print "query_vvm threw unexpected exception %s" % str(e)
         assert False

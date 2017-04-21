@@ -56,13 +56,14 @@ import vmp_util
 CHUNK_SIZE = 1024
 
 #Note: No exception handling here! Response to exceptions is the responsibility of the caller
-def download_update(log=None, url = None, download_dir = None, size = None, progressbar = False, chunk_size = CHUNK_SIZE):
+def download_update(url = None, download_dir = None, size = None, progressbar = False, chunk_size = CHUNK_SIZE):
     #url to download from
     #download_dir to download to
     #total size (for progressbar) of download
     #progressbar: whether to display one (not used for background downloads)
     #chunk_size is in bytes, amount to download at once
 
+    log=logging.getLogger('download_update')
     log.debug(" url %s, download_dir %s, size %s, progressbar %s, chunk_size %s" % (url, download_dir, size, progressbar, chunk_size))
     queue = Queue.Queue()
     if not os.path.exists(download_dir):
@@ -134,12 +135,10 @@ if __name__ == "__main__":
         parser.add_argument('--pb', dest='progressbar', help='whether or not to show a progressbar', action="store_true", default = False)
         parser.add_argument('--size', dest='size', help='size of download for progressbar')
         parser.add_argument('--chunk_size', dest='chunk_size', default=CHUNK_SIZE, help='max portion size of download to be loaded in memory in bytes.')
-        vmp_util.SL_Logging.add_verbosity_options(parser)
         args = parser.parse_args()
-        log = vmp_util.SL_Logging.log('SL_Downloader', args)
+        log = vmp_util.SL_Logging.getLogger('SL_Downloader')
 
-        download_update(log = log,
-                        url = args.url,
+        download_update(url = args.url,
                         download_dir = args.download_dir,
                         size = args.size,
                         progressbar = args.progressbar,

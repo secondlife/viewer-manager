@@ -181,11 +181,10 @@ if __name__ == "__main__":
    cgitb.enable(logdir=os.path.join(parent_dir, "logs"), format='text')
    
    parser = argparse.ArgumentParser()
-   vmp_util.SL_Logging.add_verbosity_options(parser)
    args, args_list_to_pass = parser.parse_known_args()
    #args[1] looks like ['./SL_Launcher', '--set', 'foo', 'bar', '-X', '-Y', 'qux'], dump the progname
 
-   log = vmp_util.SL_Logging.log('SL_Launcher', args)
+   log = vmp_util.SL_Logging.getLogger('SL_Launcher')
 
    executable_name = ""
    if sys.platform.startswith('darwin'):
@@ -210,7 +209,7 @@ if __name__ == "__main__":
    command = list(args_list_to_pass)
    
    log.debug("Calling update manager with %s" % repr(vmp_args))
-   (success, state, condition) = update_manager.update_manager(log, vmp_args)
+   (success, state, condition) = update_manager.update_manager(vmp_args)
    log.debug("Update manager returned success %s state %s condition %s" % (success, state, condition))
    if sys.platform.startswith('darwin') and isinstance(condition, basestring):
       condition = os.path.join(condition,'Contents/MacOS/SL_Launcher')

@@ -35,8 +35,7 @@ from llbase import llrest
 from llbase.llrest import RESTError
 from llbase import llsd    
 from urlparse import urljoin
-from argparse import Namespace
-from vmp_util import subprocess_args
+from vmp_util import SL_Logging, subprocess_args
 
 import apply_update
 import download_update
@@ -45,6 +44,7 @@ import fnmatch
 import hashlib
 import InstallerUserMessage
 import json
+import logging
 import os
 import os.path
 import platform
@@ -213,8 +213,10 @@ def check_for_completed_download(download_dir, expected_size = 0):
             return None
     return completed  
 
-def get_settings(parent_dir, log=None):
+def get_settings(parent_dir):
     #return the settings file parsed into a dict
+    settings=None
+    log=logging.getLogger('get_settings')
     try:
         settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml'))
         #this happens when the path to settings file happens on the command line
@@ -224,10 +226,8 @@ def get_settings(parent_dir, log=None):
         settings = llsd.parse((open(settings_file)).read())
     except llsd.LLSDParseError as lpe:
         log.warning("Could not parse settings file %s" % lpe)
-        return None
     except Exception as e:
         log.warning("Could not read settings file %s" % e)
-        return None
     return settings
 
 def make_VVM_UUID_hash(platform_key):
@@ -238,18 +238,24 @@ def make_VVM_UUID_hash(platform_key):
     #for env without stdin, such as pythonw and pyinstaller, provide a legit empty handle, not the broken
     #thing we get from the env.
     if (platform_key == 'lnx'):
-        muuid = subprocess.check_output(['/usr/bin/hostid'], **subprocess_args(include_stdout=False)).rstrip()
+        hostid_cmd=['/usr/bin/hostid']
+        muuid = subprocess.check_output(hostid_cmd,
+                                        **subprocess_args(include_stdout=False,
+                                                          log_stream=SL_Logging.stream(hostid_cmd)
+                                                          )).rstrip()
     elif (platform_key == 'mac'):
         #this is absurdly baroque
         #/usr/sbin/system_profiler SPHardwareDataType | fgrep 'Serial' | awk '{print $NF}'
-        muuid = subprocess.check_output(["/usr/sbin/system_profiler", "SPHardwareDataType"], **subprocess_args(include_stdout=False))
+        profiler_cmd=["/usr/sbin/system_profiler", "SPHardwareDataType"]
+        muuid = subprocess.check_output(profiler_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(profiler_cmd)))
         #findall[0] does the grep for the value we are looking for: "Serial Number (system): XXXXXXXX"
         #split(:)[1] gets us the XXXXXXX part
         #lstrip shaves off the leading space that was after the colon
         muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
     elif (platform_key == 'win'):
         # wmic csproduct get UUID | grep -v UUID
-        muuid = subprocess.check_output(['wmic','csproduct','get','UUID'], **subprocess_args(include_stdout=False))
+        wmic_cmd=['wmic','csproduct','get','UUID']
+        muuid = subprocess.check_output(wmic_cmd, **subprocess_args(include_stdout=False,log_stream=SL_Logging.stream(wmic_cmd)))
         #outputs in two rows:
         #UUID
         #XXXXXXX-XXXX...
@@ -268,7 +274,8 @@ def getBitness(platform_key = None):
         return 32
     else:
         #see MAINT-6832 and IQA-4130
-        wmic_graphics = subprocess.check_output(['wmic','path','Win32_VideoController','get','NAME'], **subprocess_args(include_stdout=False)) # was log_file_handle
+        wmic_cmd=['wmic','path','Win32_VideoController','get','NAME']
+        wmic_graphics = subprocess.check_output(wmic_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(wmic_cmd)))
         wmic_list = re.split('\n', wmic_graphics)
         bad = False
         for word in wmic_list:
@@ -294,10 +301,11 @@ def isViewerMachineBitMatched(viewer_platform = None, platform_key = None, bitne
         win_plat_key = 'win32'
     return (viewer_platform == win_plat_key)
 
-def query_vvm(log=None, platform_key = None, settings = None, summary_dict = None, UpdaterServiceURL = None, UpdaterWillingToTest = None):
+def query_vvm(platform_key = None, settings = None, summary_dict = None, UpdaterServiceURL = None, UpdaterWillingToTest = None):
     result_data = None
     baseURI = None
     VMM_platform = platform_key
+    log=logging.getLogger('query_vvm')
     #to disambiguate, we have two sources of platform here
     #  platform_key is the OS name of the computer VMP is running on
     #  summary_dict['platform'] is the platform and for windows, bitness, of the _viewer_ that VMP is part of
@@ -429,7 +437,7 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                                   "--size", str(size),
                                   "--chunk_size", str(chunk_size)]
                 log.debug("background downloader args: " + repr(downloader_cmd))
-                download_process = subprocess.Popen(downloader_cmd, **subprocess_args(include_stdout=True))
+                download_process = subprocess.Popen(downloader_cmd, **subprocess_args(include_stdout=True, log_stream=SL_Logging.stream(downloader_cmd)))
                 log.debug("Download of new version " + version + " spawned.")
                 download_success = True
             except  Exception, e:
@@ -495,7 +503,8 @@ def download_and_install(downloaded = None, url = None, version = None, download
         #propagate failure
         return (False, 'apply', version)    
             
-def update_manager(log=None, cli_overrides = None):
+
+def update_manager(cli_overrides = None):
     #cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments to 
     #comments that begin with '323:' are steps taken from the algorithm in the description of SL-323. 
     #  Note that in the interest of efficiency, such as determining download success once at the top
@@ -515,6 +524,7 @@ def update_manager(log=None, cli_overrides = None):
     platform_key = get_platform_key()
     parent_dir = get_parent_path(platform_key)
     settings = None
+    log = SL_Logging.getLogger('SL_Updater')
 
     #check to see if user has install rights
     #get the owner of the install and the current user
@@ -540,11 +550,11 @@ def update_manager(log=None, cli_overrides = None):
         #Just ignore it and consider the ID check as passed.
         pass
 
-    settings = get_settings(parent_dir, log=log)
+    settings = get_settings(parent_dir)
     if cli_overrides is not None: 
         if 'settings' in cli_overrides.keys():
             if cli_overrides['settings'] is not None:
-                settings = get_settings(cli_overrides['settings'][0], log=log)
+                settings = get_settings(cli_overrides['settings'][0])
         
     if settings is None:
         log.warning("Failed to load viewer settings from " 
@@ -614,8 +624,7 @@ def update_manager(log=None, cli_overrides = None):
     else:
         UpdaterServiceURL = None
 
-    result_data = query_vvm(log=log,
-                            platform_key=platform_key,
+    result_data = query_vvm(platform_key=platform_key,
                             settings=settings,
                             summary_dict=channel_override_summary,
                             UpdaterServiceURL=UpdaterServiceURL,
@@ -727,6 +736,4 @@ if __name__ == '__main__':
     if 'ython' in sys.executable:
         sys.executable =  os.path.abspath(sys.argv[0])
     #there is no argument parsing or other main() work to be done
-    args = Namespace(verbosity=logging.INFO)
-    log = vmp_util.SL_Logging.log('SL_Updater', no_args)
-    update_manager(log=log)
+    update_manager()

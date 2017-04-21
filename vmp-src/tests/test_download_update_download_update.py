@@ -51,20 +51,19 @@ parent_dir = update_manager.get_parent_path(update_manager.get_platform_key())
 #we allegedly never purge S3, so this should always be there
 URL = "http://automated-builds-secondlife-com.s3.amazonaws.com/hg/repo/viewer-lynx/rev/323027/arch/Darwin/installer/Second_Life_5_0_1_323027_i386.dmg"
 marker_regex = '*' + '.done'
+log=SL_Logging.getLogger('test_download', verbosity='DEBUG')
 
 def download_update_setup():
     tmpdir1 = tempfile.mkdtemp(prefix = 'test1')
-    args=Namespace(verbosity=logging.DEBUG)
-    log=SL_Logging.log('test1', args)
-    return [tmpdir1, log], {}
+    return [tmpdir1], {}
 
-def download_update_teardown(tmpdir1,log):
+def download_update_teardown(tmpdir1):
     shutil.rmtree(tmpdir1, ignore_errors = True)
 
 @with_setup_args.with_setup_args(download_update_setup, download_update_teardown)
-def test_download_update_null_url(tmpdir1,log): 
+def test_download_update_null_url(tmpdir1): 
     try:
-        download_update.download_update(log=log, url=None, download_dir=tmpdir1, size=None, progressbar=False, chunk_size=1024)
+        download_update.download_update(url=None, download_dir=tmpdir1, size=None, progressbar=False, chunk_size=1024)
     #this is the expected error when d_u tries to apply split() to None
     except AttributeError, e:
         assert True
@@ -77,9 +76,9 @@ def test_download_update_null_url(tmpdir1,log):
         assert False
         
 @with_setup_args.with_setup_args(download_update_setup, download_update_teardown)
-def test_download_update_correct_url(tmpdir1, log):
+def test_download_update_correct_url(tmpdir1):
     try:
-        download_update.download_update(log=log, url=URL, download_dir=tmpdir1, size=None, progressbar=False, chunk_size=1024)
+        download_update.download_update(url=URL, download_dir=tmpdir1, size=None, progressbar=False, chunk_size=1024)
     except Exception, e:
         print "download_update threw an exception on a correct URL: %s" % repr(e)
         assert False
