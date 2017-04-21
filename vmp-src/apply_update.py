@@ -289,24 +289,26 @@ def kill_em_all(level):
             if process.pid != my_pid:
                 process.send_signal(signal.SIGTERM)
 
-if __name__ == "__main__":
-   #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
-   if 'ython' in sys.executable:
-      sys.executable =  os.path.abspath(sys.argv[0])   
-      parser = argparse.ArgumentParser("Apply Downloaded Update")
+def main():
+    parser = argparse.ArgumentParser("Apply Downloaded Update")
+    parser.add_argument('--dir', dest = 'download_dir', help = 'directory to find installable', required = True)
+    parser.add_argument('--pkey', dest = 'platform_key', help =' OS: lnx|mac|win', required = True)
+    parser.add_argument('--in_place', action = 'store_false', help = 'This upgrade is for a different channel', default = True)
 
-      parser.add_argument('--dir', dest = 'download_dir', help = 'directory to find installable', required = True)
-      parser.add_argument('--pkey', dest = 'platform_key', help =' OS: lnx|mac|win', required = True)
-      parser.add_argument('--in_place', action = 'store_false', help = 'This upgrade is for a different channel', default = True)
+    args = parser.parse_args()
+   
+    log = vmp_util.SL_Logging.getLogger('SL_Installer')
 
-      args = parser.parse_args()
+    IN_PLACE = args.in_place
+    result = apply_update(download_dir = args.download_dir, platform_key = args.platform_key)
+    if not result:
+        sys.exit("Update failed")
+    else:
+        sys.exit(0)
     
-      log = vmp_util.SL_Logging.getLogger('SL_Installer')
-
-      IN_PLACE = args.in_place
-      result = apply_update(download_dir = args.download_dir, platform_key = args.platform_key)
-      if not result:
-          sys.exit("Update failed")
-      else:
-          sys.exit(0)
+if __name__ == "__main__":
+    #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
+    if 'ython' in sys.executable:
+        sys.executable =  os.path.abspath(sys.argv[0])
+    main()
 

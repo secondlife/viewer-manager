@@ -122,25 +122,24 @@ class ThreadedDownload(threading.Thread):
                 os.remove(os.path.join(download_dir, fname))
         tempfile.mkstemp(suffix=".done", dir=download_dir)    
 
+def main():
+    parser = argparse.ArgumentParser("Download URI to directory")
+    parser.add_argument('--url', dest='url', help='URL of file to be downloaded', required=True)
+    parser.add_argument('--dir', dest='download_dir', help='directory to be downloaded to', required=True)
+    parser.add_argument('--pb', dest='progressbar', help='whether or not to show a progressbar', action="store_true", default = False)
+    parser.add_argument('--size', dest='size', help='size of download for progressbar')
+    parser.add_argument('--chunk_size', dest='chunk_size', default=CHUNK_SIZE, help='max portion size of download to be loaded in memory in bytes.')
+    args = parser.parse_args()
+    log = vmp_util.SL_Logging.getLogger('SL_Downloader')
 
+    download_update(url = args.url,
+                    download_dir = args.download_dir,
+                    size = args.size,
+                    progressbar = args.progressbar,
+                    chunk_size = args.chunk_size)
 
 if __name__ == "__main__":
     #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
     if 'ython' in sys.executable:
         sys.executable =  os.path.abspath(sys.argv[0])    
-
-        parser = argparse.ArgumentParser("Download URI to directory")
-        parser.add_argument('--url', dest='url', help='URL of file to be downloaded', required=True)
-        parser.add_argument('--dir', dest='download_dir', help='directory to be downloaded to', required=True)
-        parser.add_argument('--pb', dest='progressbar', help='whether or not to show a progressbar', action="store_true", default = False)
-        parser.add_argument('--size', dest='size', help='size of download for progressbar')
-        parser.add_argument('--chunk_size', dest='chunk_size', default=CHUNK_SIZE, help='max portion size of download to be loaded in memory in bytes.')
-        args = parser.parse_args()
-        log = vmp_util.SL_Logging.getLogger('SL_Downloader')
-
-        download_update(url = args.url,
-                        download_dir = args.download_dir,
-                        size = args.size,
-                        progressbar = args.progressbar,
-                        chunk_size = args.chunk_size)
-
+    main()
