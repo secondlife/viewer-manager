@@ -28,7 +28,7 @@ $/LicenseInfo$
 """
 
 from nose.tools import *
-
+import sys
 import update_manager
 
 def test_make_download_dir():
@@ -37,11 +37,11 @@ def test_make_download_dir():
     version = '1.2.3.456789'
     try:
         download_dir = update_manager.make_download_dir(path, version)
-    except OSError, e:
-        print "make_download_dir failed to eat OSError %s" % str(e)
+    except OSError as e:
+        print >>sys.stderr, "make_download_dir failed to eat OSError %s" % str(e)
         assert False
-    except Exception, e:
-        print "make_download_dir raised an unexpected exception %s" % str(e)
+    except Exception as e:
+        print >>sys.stderr, "make_download_dir raised an unexpected exception %s" % str(e)
         assert False
 
     assert download_dir, "make_download_dir returned None for path %s and version %s" % (path, version)

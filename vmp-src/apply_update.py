@@ -246,9 +246,9 @@ def apply_mac_update(installable = None):
         STATE_DIR = os.path.join(os.environ["HOME"], "Library", "Saved Application State",
             BUNDLE_IDENTIFIER + ".savedState")
         shutil.rmtree(STATE_DIR)  
-    except Exception, e:
+    except Exception as e:
         #if we fail to delete something that isn't there, that's okay
-        if e[0] == errno.ENOENT:
+        if e.errno == errno.ENOENT:
             pass
         else:
             raise e

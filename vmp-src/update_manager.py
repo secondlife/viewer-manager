@@ -158,7 +158,7 @@ def make_download_dir(parent_dir, new_version):
         os.makedirs(download_dir)
     except (OSError, WindowsError) as hell:
         #Directory already exists, that's okay.  Other OSErrors are not okay.
-        if hell.err == errno.EEXIST and os.path.isdir(download_dir): 
+        if hell.errno == errno.EEXIST and os.path.isdir(download_dir): 
             pass
         else:
             raise
