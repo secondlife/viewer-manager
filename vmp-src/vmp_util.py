@@ -44,13 +44,7 @@ class SL_Logging:
         Implement the standard Second Life log directory convention,
         with the addition of an environment override for use by tests
         """
-
-        logdir=None
-        try:
-            logdir = os.environ['SECONDLIFE_LOGDIR']
-        except KeyError:
-            pass
-
+        logdir=os.getenv('SECONDLIFE_LOGDIR')
         if not logdir:
             if sys.platform.startswith('darwin'):
                 logdir = os.path.join(os.environ['HOME'],'Library','Application Support','SecondLife','logs')
@@ -73,19 +67,19 @@ class SL_Logging:
         return logdir
 
     @staticmethod
-    def rotate(basename, extension):
+    def rotate(basename, extension='.log', maxsize=0):
         """
         Changes basename + extension to basename + '.old'
         Returns basename + extension
         """
-        old_name=basename+'.old'
-        if os.path.exists(old_name):
-            try:
-                os.remove(old_name)
-            except:
-                pass # nothing to be done about this
         new_name=basename+extension
-        if os.path.exists(new_name):
+        if os.path.exists(new_name) and os.path.getsize(new_name) >= maxsize:
+            old_name=basename+'.old'
+            if os.path.exists(old_name):
+                try:
+                    os.remove(old_name)
+                except:
+                    pass # nothing to be done about this
             try:
                 os.rename(new_name, old_name)
             except:
@@ -102,8 +96,8 @@ class SL_Logging:
         Returns the python logging object.
         """
         log_basename=os.path.join(SL_Logging.directory(),name)
-        log_name = SL_Logging.rotate(log_basename,'.log')
-        log_stream = logging.FileHandler(log_name,'wb')
+        log_name = SL_Logging.rotate(log_basename,extension='.log',maxsize=10*1024)
+        log_stream = logging.FileHandler(log_name,'a',newline='\n')
         log_stream.setFormatter(SL_Logging.Formatter())
         log=logging.getLogger(name)
         log.addHandler(log_stream)
