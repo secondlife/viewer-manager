@@ -208,7 +208,7 @@ if __name__ == "__main__":
    #make a copy by value, not by reference
    command = list(args_list_to_pass)
    
-   log.debug("Calling update manager with %s" % repr(vmp_args))
+   log.debug("Calling update manager with %r" % vmp_args)
    (success, state, condition) = update_manager.update_manager(vmp_args)
    log.debug("Update manager returned success %s state %s condition %s" % (success, state, condition))
    if sys.platform.startswith('darwin') and isinstance(condition, basestring):
@@ -241,11 +241,11 @@ if __name__ == "__main__":
           or (state == 'in place' and condition == True))):
       #update manager returns the argument dict to the downloader in the condition variable
       if success == True and state ==  'background' and type(condition) == 'dict':
-         log.info("Launching background downloader with %s" % repr(condition))
+         log.info("Launching background downloader with %r" % condition)
          download_update.download_update(**condition)
          log.info("Background download complete")
       elif success == True and state ==  'background':
-         log.warning("Received erroneous condition %s from update manager, launching old viewer" % repr(condition))      
+         log.warning("Received erroneous condition %r from update manager, launching old viewer" % condition)      
       else:
          log.info("Launching current channel viewer, no required upgrade found.")
       command.insert(0,viewer_binary)
@@ -264,6 +264,6 @@ if __name__ == "__main__":
          viewer_process.wait()
       except Exception as e:
          #if another viewer is running or windows install is in progress, subprocess will throw an unhandlable exception
-         log.error("Exception spawning new viewer: %s" % repr(e))
+         log.error("Exception spawning new viewer: %r" % e)
          
    log.info("Launcher exiting after viewer exit.")

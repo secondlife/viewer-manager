@@ -319,8 +319,8 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None, Updater
             #either way, the Windows bitness is the right bitness
             if bitness == 32:
                 VMM_platform = 'win32'
-    except Exception, e:
-        log.warning("Could not parse viewer bitness from summary.json %s" % e)
+    except Exception as e:
+        log.warning("Could not parse viewer bitness from summary.json %r" % e)
         #At these point, we have no idea what is really going on.  Since 32 installs on 64 and not vice-versa, fall back to safety
         VMM_platform = 'win32'        
     
@@ -404,8 +404,8 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
     while download_tries < 3 and not download_success:
         #323: Check for a partial update of the required update; in either event, display an alert that a download is required, initiate the download, and then install and launch
         if not background:
-            log.debug("foreground downloader args: " + repr(["--url", url, "--dir", download_dir, 
-                            "--size", str(size), "--chunk_size", str(chunk_size)]))
+            log.debug("foreground downloader args: %r" % ["--url", url, "--dir", download_dir, 
+                            "--size", str(size), "--chunk_size", str(chunk_size)])
             if download_tries == 0:
                 after_frame(message = "Downloading new version " + version + " Please wait.", timeout = 5000)
             else:
@@ -413,10 +413,10 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
             try:
                 download_update.download_update(url = url, download_dir = download_dir, size = size, progressbar = True, chunk_size = chunk_size)
                 download_success = True
-            except Exception, e:
+            except Exception as e:
                 download_tries += 1    
                 log.warning("Failed to download new version " + version + " in foreground downloader. Trying again.")
-                log.error("Logging download exception: %s" % repr(e))
+                log.error("Logging download exception: %r" % e)
             #check to make sure the downloaded file is correct
             filename = os.path.join(download_dir, url.split('/')[-1])
             down_hash = md5file(filename)
@@ -436,15 +436,15 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                                   "--dir", download_dir, 
                                   "--size", str(size),
                                   "--chunk_size", str(chunk_size)]
-                log.debug("background downloader args: " + repr(downloader_cmd))
+                log.debug("background downloader args: %r" % downloader_cmd)
                 download_process = subprocess.Popen(downloader_cmd, **subprocess_args(include_stdout=True, log_stream=SL_Logging.stream(downloader_cmd)))
                 log.debug("Download of new version " + version + " spawned.")
                 download_success = True
             except  Exception, e:
                 download_tries += 1
                 download_success = False
+                log.debug("Logging download exception: %r, subprocess returned: %r" % (e, download_process))
                 log.warning("Failed to download new version in background downloader " + version + ". Trying again.")
-                log.error("Logging download exception: %s, subprocess returned: %s" % (repr(e), repr(download_process)))
 
     if not download_success:
         log.warning("Failed to download new version " + version + " from " + str(url) + " Please check connectivity.")
@@ -458,7 +458,7 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
             os.remove(os.path.join(download_dir, filename))
 
     if download_process_args is not None:
-        log.debug("Returning downloader process args: " + repr(download_process_args))
+        log.debug("Returning downloader process args: %r" % download_process_args)
         return download_process_args
     else:
         return True
@@ -608,10 +608,9 @@ def update_manager(cli_overrides = None):
         if cli_overrides is not None:
             if 'channel' in cli_overrides.keys():
                 channel_override_summary['Channel'] = cli_overrides['channel']
-    except Exception, e:
-        log.warning("Could not obtain channel and version, exiting.")
-        log.warning(repr(e))
-        log.warning("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
+    except Exception as e:
+        log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
+        log.warning("Could not obtain channel and version.\n%r" % e)
         return (False, 'setup', None)        
 
     #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
@@ -644,17 +643,17 @@ def update_manager(cli_overrides = None):
                 log.debug("Checked for previous Windows install in %s with result %s." % (past_download_dir, installed))
                 if installed == 'winstall':
                     shutil.rmtree(past_download_dir)
-        except Exception, e:
+        except Exception as e:
             #cleanup is best effort
-            log.error("Caught exception cleaning up Windows download dir %s" % repr(e))
+            log.error("Caught exception cleaning up Windows download dir %r" % e)
             pass
         return (True, None, None)
 
     #get download directory, if there are perm issues or similar problems, give up
     try:
         download_dir = make_download_dir(parent_dir, result_data['version'])
-    except Exception, e:
-        log.error("Caught exception making download dir %s" % repr(e))
+    except Exception as e:
+        log.error("Caught exception making download dir %r" % e)
         log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
         return (False, 'setup', None)
     
@@ -727,7 +726,7 @@ def update_manager(cli_overrides = None):
             return (True, 'skip', True)        
         else:
             #shouldn't be here
-            log.warning("Found nonempty download dir but no flag file. Check returned: %s" % repr(downloaded))
+            log.warning("Found nonempty download dir but no flag file. Check returned: %r" % downloaded)
             return (True, 'skip', True)
 
 

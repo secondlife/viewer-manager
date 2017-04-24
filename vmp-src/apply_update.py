@@ -96,6 +96,7 @@ def get_filename(download_dir = None):
     return None  
           
 def try_dismount(installable = None, tmpdir = None):
+    log = logging.getLogger(__module__)
     #best effort cleanup try to dismount the dmg file if we have mounted one
     #the French judge gave it a 5.8
     try:
@@ -156,6 +157,7 @@ def apply_update(download_dir = None, platform_key = None, in_place = True):
     return installed
     
 def apply_linux_update(installable = None):
+    log = logging.getLogger(__module__)
     try:
         #untar to tmpdir
         tmpdir = tempfile.mkdtemp()
@@ -168,12 +170,14 @@ def apply_linux_update(installable = None):
         shutil.move(tmpdir, INSTALL_DIR)
         #delete tarball on success
         os.remove(installable)
-    except Exception, e:
-        log.error("Update failed due to " + repr(e))
+    except Exception as e:
+        log.error("Update failed due to %r" % e)
         return None
     return INSTALL_DIR
 
 def apply_mac_update(installable = None):
+    log = logging.getLogger(__module__)
+
     #INSTALL_DIR is something like /Applications/Second Life Viewer.app/Contents/MacOS, need to jump up two levels for the install base
     install_base = os.path.dirname(INSTALL_DIR)
     install_base = os.path.dirname(install_base)
@@ -183,7 +187,7 @@ def apply_mac_update(installable = None):
         output = subprocess.check_output(["hdiutil", "verify", installable], **subprocess_args(False))
         log.info("dmg verification succeeded")
         log.info(output)
-    except Exception, e:
+    except Exception as e:
         log.error("Could not verify dmg file %s.  Error messages: %s" % (installable, e.message))
         return None
     #make temp dir and mount & attach dmg
@@ -193,7 +197,7 @@ def apply_mac_update(installable = None):
         output = subprocess.check_output(hdiutil_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(hdiutil_cmd)))
         log.info("hdiutil attach succeeded")
         log.info(output)
-    except Exception, e:
+    except Exception as e:
         log.error("Could not attach dmg file %s.  Error messages: %s" % (installable, e.message))
         return None
     #verify plist
@@ -230,7 +234,7 @@ def apply_mac_update(installable = None):
     try:
         shutil.copytree(mounted_appdir, install_base, symlinks=True)
         retcode = 0
-    except Exception, e:
+    except Exception as e:
         # try to restore previous viewer
         if os.path.exists(swapped_out):
             log.error("Install of %s failed, rolling back to previous viewer." % installable)
@@ -247,17 +251,18 @@ def apply_mac_update(installable = None):
         STATE_DIR = os.path.join(os.environ["HOME"], "Library", "Saved Application State",
             BUNDLE_IDENTIFIER + ".savedState")
         shutil.rmtree(STATE_DIR)  
-    except Exception as e:
+    except OSError as e:
         #if we fail to delete something that isn't there, that's okay
         if e.errno == errno.ENOENT:
             pass
         else:
-            raise e
+            raise
     
     os.remove(installable)
     return install_base
     
 def apply_windows_update(installable = None):
+    log = logging.getLogger(__module__)
     #the windows install is just running the NSIS installer executable
     #from VMP's perspective, it is a black box
     kill_em_all(2)

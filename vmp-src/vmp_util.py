@@ -75,7 +75,7 @@ class SL_Logging(object):
         passing this stream to the log_stream parameter of subprocess_args, 
         any stderr output from the subprocess will be directed into the log
         """
-        SL_Logging.logger.info("======== Including output from subcommand %s" % repr(subcommand))
+        SL_Logging.logger.info("======== Including output from subcommand %r" % subcommand)
         return SL_Logging.logStream
 
     class Formatter(logging.Formatter):
