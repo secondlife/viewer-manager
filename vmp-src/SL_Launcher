@@ -63,12 +63,12 @@ sys.path.insert(0, os.path.join(cwd, 'llbase'))
 try:
    import argparse
 except:
-   sys.path.append(python266)
+   sys.path.insert(0, python266)
    import argparse
 try:
    import Tkinter
 except:
-   sys.path.append(python266)
+   sys.path.insert(0, python266)
    import Tkinter
 finally:
    #older versions of do not have XView and ttk needs it
@@ -79,7 +79,7 @@ finally:
 try:
    import ttk
 except:
-   sys.path.append(python266)
+   sys.path.insert(0, python266)
    import ttk
    
 #imports of other VMP modules
