@@ -524,6 +524,8 @@ def update_manager(cli_overrides = None):
     platform_key = get_platform_key()
     parent_dir = get_parent_path(platform_key)
     settings = None
+
+    # Initialize the python logging system to SL Logging format and destination
     log = SL_Logging.getLogger('SL_Updater')
 
     #check to see if user has install rights

@@ -130,6 +130,7 @@ def main():
     parser.add_argument('--size', dest='size', help='size of download for progressbar')
     parser.add_argument('--chunk_size', dest='chunk_size', default=CHUNK_SIZE, help='max portion size of download to be loaded in memory in bytes.')
     args = parser.parse_args()
+    # Initialize the python logging system to SL Logging format and destination
     log = vmp_util.SL_Logging.getLogger('SL_Downloader')
 
     download_update(url = args.url,

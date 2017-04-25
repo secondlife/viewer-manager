@@ -184,6 +184,7 @@ if __name__ == "__main__":
    args, args_list_to_pass = parser.parse_known_args()
    #args[1] looks like ['./SL_Launcher', '--set', 'foo', 'bar', '-X', '-Y', 'qux'], dump the progname
 
+   # Initialize the python logging system to SL Logging format and destination
    log = vmp_util.SL_Logging.getLogger('SL_Launcher')
 
    executable_name = ""

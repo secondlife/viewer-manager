@@ -302,6 +302,7 @@ def main():
 
     args = parser.parse_args()
    
+    # Initialize the python logging system to SL Logging format and destination
     log = vmp_util.SL_Logging.getLogger('SL_Installer')
 
     IN_PLACE = args.in_place
