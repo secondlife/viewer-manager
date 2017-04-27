@@ -44,7 +44,6 @@ import fnmatch
 import hashlib
 import InstallerUserMessage
 import json
-import logging
 import os
 import os.path
 import platform
@@ -216,7 +215,7 @@ def check_for_completed_download(download_dir, expected_size = 0):
 def get_settings(parent_dir):
     #return the settings file parsed into a dict
     settings=None
-    log=logging.getLogger('get_settings')
+    log=SL_Logging.getLogger('get_settings')
     try:
         settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml'))
         #this happens when the path to settings file happens on the command line
@@ -231,6 +230,8 @@ def get_settings(parent_dir):
     return settings
 
 def make_VVM_UUID_hash(platform_key):
+    log = SL_Logging.getLogger('make_VVM_UUID_hash')
+
     #NOTE: There is no python library support for a persistent machine specific UUID (MUUID)
     #      AND all three platforms do this a different way, so exec'ing out is really the best we can do
     #Lastly, this is a best effort service.  If we fail, we should still carry on with the update 
@@ -262,11 +263,13 @@ def make_VVM_UUID_hash(platform_key):
         muuid = re.split('\n',muuid)[1].rstrip()
             
     if muuid is not None:
-        return hashlib.md5(muuid).hexdigest()
+        hash = hashlib.md5(muuid).hexdigest()
     else:
         #fake it
-        return hashlib.md5(str(uuid.uuid1())).hexdigest()
-    
+        log.info("Unable to get system unique id; constructing a dummy")
+        hash = hashlib.md5(str(uuid.uuid1())).hexdigest()
+    return hash
+
 def getBitness(platform_key = None):
     if platform_key in ['lnx', 'mac']:
         return 64
@@ -305,7 +308,7 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None, Updater
     result_data = None
     baseURI = None
     VMM_platform = platform_key
-    log=logging.getLogger('query_vvm')
+    log=SL_Logging.getLogger('query_vvm')
     #to disambiguate, we have two sources of platform here
     #  platform_key is the OS name of the computer VMP is running on
     #  summary_dict['platform'] is the platform and for windows, bitness, of the _viewer_ that VMP is part of
@@ -505,6 +508,9 @@ def download_and_install(downloaded = None, url = None, version = None, download
             
 
 def update_manager(cli_overrides = None):
+    log = SL_Logging.getLogger('update_manager')
+    log.debug("%r", cli_overrides)
+
     #cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments to 
     #comments that begin with '323:' are steps taken from the algorithm in the description of SL-323. 
     #  Note that in the interest of efficiency, such as determining download success once at the top
@@ -524,9 +530,6 @@ def update_manager(cli_overrides = None):
     platform_key = get_platform_key()
     parent_dir = get_parent_path(platform_key)
     settings = None
-
-    # Initialize the python logging system to SL Logging format and destination
-    log = SL_Logging.getLogger('SL_Updater')
 
     #check to see if user has install rights
     #get the owner of the install and the current user
@@ -737,4 +740,6 @@ if __name__ == '__main__':
     if 'ython' in sys.executable:
         sys.executable =  os.path.abspath(sys.argv[0])
     #there is no argument parsing or other main() work to be done
+    # Initialize the python logging system to SL Logging format and destination
+    log = SL_Logging.getLogger('SL_Updater')
     update_manager()

@@ -50,8 +50,12 @@ class SL_Logging(object):
 
             SL_Logging.logger.setLevel(SL_Logging.get_verbosity(verbosity))
             SL_Logging.logger.info("================ Running %s" % basename)
+            log = SL_Logging.logger
 
-        return logging.getLogger(basename)
+        else:
+            log = SL_Logging.logger.getChild(basename)
+
+        return log
         
     @staticmethod
     def get_verbosity(verbosity=None):

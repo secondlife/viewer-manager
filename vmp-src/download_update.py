@@ -49,7 +49,6 @@ requests.packages.urllib3.disable_warnings()
 import tempfile
 import threading
 import update_manager
-import logging
 import vmp_util
 
 #module default
@@ -63,7 +62,7 @@ def download_update(url = None, download_dir = None, size = None, progressbar = 
     #progressbar: whether to display one (not used for background downloads)
     #chunk_size is in bytes, amount to download at once
 
-    log=logging.getLogger('download_update')
+    log=vmp_util.SL_Logging.getLogger('download_update')
     log.debug(" url %s, download_dir %s, size %s, progressbar %s, chunk_size %s" % (url, download_dir, size, progressbar, chunk_size))
     queue = Queue.Queue()
     if not os.path.exists(download_dir):
@@ -97,7 +96,7 @@ class ThreadedDownload(threading.Thread):
         self.chunk_size = int(chunk_size)
         self.progressbar = progressbar
         self.in_queue = in_queue
-        self.log = logging.getLogger('SL_Updater')
+        self.log = vmp_util.SL_Logging.getLogger('SL_Updater')
         
     def run(self):
         self.log.debug("Download thread running.")
