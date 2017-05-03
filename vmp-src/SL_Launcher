@@ -29,11 +29,33 @@ $/LicenseInfo$
 @date   2016-06-23
 """
 
-import argparse
-import cgitb
 import os
 import os.path
+import platform
+import subprocess
 import sys
+#if for some reason we are running on a POSIX machine with python less than 2.7
+#just give up on VMP and execute the viewer per product.
+if os.name != 'nt':
+   if platform.python_version() < '2.7':
+      log_file_handle = update_manager.get_log_file_handle(parent_dir, 'launcher.log')
+      silent_write(log_file_handle, "Computer is below minimum specifications.  Python version is %r" % platform.python_version())
+      if sys.platform.startswith('darwin'):
+         executable_name = "Second Life"
+      elif sys.platform.startswith("linux"):
+         executable_name = "secondlife"
+      viewer_binary = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), executable_name) 
+      parser = argparse.ArgumentParser()
+      args = parser.parse_known_args(sys.argv)
+      #args[1] looks like ['./SL_Launcher', '--set', 'foo', 'bar', '-X', '-Y', 'qux'], dump the progname
+      command = args[1][1:]
+      command.insert(0,viewer_binary)
+      #note that we are now using the 2.6 version of subprocess 
+      viewer_process = subprocess.Popen(command)
+      sys.exit(0)
+
+import argparse
+import cgitb
 import collections
 #NOTA BENE: 
 #   For POSIX platforms, llsd.py will be imported from the same directory.  
@@ -44,8 +66,6 @@ except:
    #if Windows, this is expected, if not, we're dead
    if os.name == 'nt':
       pass
-import platform
-import subprocess
 import Tkinter
 import ttk
 
