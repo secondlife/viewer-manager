@@ -195,6 +195,8 @@ if __name__ == "__main__":
    elif sys.platform.startswith("win") or sys.platform.startswith("cyg"):
       #MAINT-7292: do not infer name from directory, instead read it from summary.json as produced by the build
       filename = update_manager.get_summary('win')['Executable']
+      #edu variants have edu in their summary.json entries, but the exe name is the same as for non-edu versions
+      filename = filename.replace('edu','')
       if os.path.isfile(os.path.join(cwd, filename)):
          executable_name = filename
       else:
@@ -207,12 +209,20 @@ if __name__ == "__main__":
       
    #find the viewer to be lauched
    viewer_binary = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), executable_name) 
+
+   silent_write(log_file_handle, "viewer binary name: %r" % viewer_binary)
    
+   #defaults to make sure the right thing happens if called with no args
+   args = ""
+   args_list_to_pass = []
+   vmp_args = ""
+   command = ""
    parser = argparse.ArgumentParser()
    args = parser.parse_known_args(sys.argv)
-   #args[1] looks like ['./SL_Launcher', '--set', 'foo', 'bar', '-X', '-Y', 'qux'], dump the progname
+   #args[] looks like ['./SL_Launcher', '--set', 'foo', 'bar', '-X', '-Y', 'qux'], dump the progname
    args_list_to_pass = args[1][1:]
    vmp_args = capture_vmp_args(args_list_to_pass)
+   silent_write(log_file_handle, "Captured VMP args: %r" % vmp_args)
    #make a copy by value, not by reference
    command = list(args_list_to_pass)
    
