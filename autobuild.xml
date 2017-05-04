@@ -28,7 +28,7 @@
                   <string>../build-cmd.py</string>
                 </array>
                 <key>command</key>
-                <string>$PYTHON_COMMAND_NATIVE</string>
+                <string>${PYTHON_COMMAND_NATIVE|python}</string>
               </map>
               <key>default</key>
               <boolean>true</boolean>
