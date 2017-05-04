@@ -209,5 +209,5 @@ def main():
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
     libs = os.path.dirname(os.__file__)
-    tracer = trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix, libs], ignoremods=["subprocess", "shutil"], trace=1, count=0, timing=True)
+    tracer = trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix, libs], ignoremods=["subprocess", "shutil"], trace=1, count=0, timing=False)
     tracer.run('main()')
