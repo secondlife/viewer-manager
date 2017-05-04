@@ -195,8 +195,6 @@ if __name__ == "__main__":
    elif sys.platform.startswith("win") or sys.platform.startswith("cyg"):
       #MAINT-7292: do not infer name from directory, instead read it from summary.json as produced by the build
       filename = update_manager.get_summary('win')['Executable']
-      #edu variants have edu in their summary.json entries, but the exe name is the same as for non-edu versions
-      filename = filename.replace('edu','')
       if os.path.isfile(os.path.join(cwd, filename)):
          executable_name = filename
       else:
