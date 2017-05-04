@@ -42,7 +42,6 @@
             <string>VMP/*.*</string>
             <string>VMP/SL_Launcher</string>
             <string>VMP/icons/*.*</string>
-            <string>VMP/python26</string>
           </array>
           <key>name</key>
           <string>common</string>
