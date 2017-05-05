@@ -6,10 +6,8 @@ import time
 import logging
 import errno
 
-#Because of the evolution over time of the specification of VMP, some methods were added "in place", in particular in update manager which should someday be refactored into this
+#Because of the evolution over time of the specification of VMP, some methods were added "in place", in particular various getter methods in update manager, which should someday be refactored into this
 #utility class.  
-
-# ######################
 
 class SL_Logging(object):
     """
@@ -37,7 +35,13 @@ class SL_Logging(object):
         """
         if not SL_Logging.logger:
             log_basepath=os.path.join(SL_Logging.directory(),basename)
-            log_name = SL_Logging.rotate(log_basepath, extension=extension, maxsize=maxsize)
+            #accomodate verbosity with larger files before rotation
+            verbosity = self.get_verbosity()
+            if verbosity == logging.DEBUG:
+                logsize = maxsize*4
+            else:
+                logsize = maxsize*2
+            log_name = SL_Logging.rotate(log_basepath, extension=extension, maxsize=logsize)
 
             SL_Logging.logStream = open(log_name,'a')
 

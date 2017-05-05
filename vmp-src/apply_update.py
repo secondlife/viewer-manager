@@ -105,6 +105,7 @@ def try_dismount(installable = None, tmpdir = None):
         #/dev/disk1s2    2047936 643280   1404656    32%   80408 175582   31%   /private/tmp/mnt/Second Life Installer
         command = ["df", os.path.join(tmpdir, "Second Life Installer")]
         output = subprocess.check_output(command, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(command)))
+        log.debug("result of subprocess call to find dmg mount point: %r" % output)
         #No point in trying to umount an fs that doesn't exist. 
         #This could happen, for example, if the user manually umounts it first
         try:
@@ -116,11 +117,11 @@ def try_dismount(installable = None, tmpdir = None):
         #do the dismount
         command = ["hdiutil", "detach", "-force", mnt_dev]
         output = subprocess.check_output(command, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(command)))
+        log.info("result of subprocess call to detach dmg mount point: %r" % output)
         log.info("hdiutil detach succeeded")
-        log.info(output)
         command = ["diskutil", "umount", mnt_dev]
         output = subprocess.check_output(command, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(command)))
-        log.info("diskutil umount succeeded")
+        log.info("result of subprocess call to unmount dmg mount point: %r" % output)
         log.info(output)        
     except Exception, e:
         log.error("Could not detach dmg file %s.  Error messages: %s" % (installable, e.message))    
@@ -185,8 +186,8 @@ def apply_mac_update(installable = None):
     #verify dmg file
     try:
         output = subprocess.check_output(["hdiutil", "verify", installable], **subprocess_args(False))
+        log.info("result of subprocess call to verify dmg file: %r" % output)
         log.info("dmg verification succeeded")
-        log.info(output)
     except Exception as e:
         log.error("Could not verify dmg file %s.  Error messages: %s" % (installable, e.message))
         return None
@@ -195,8 +196,8 @@ def apply_mac_update(installable = None):
     try:
         hdiutil_cmd=["hdiutil", "attach", installable, "-mountroot", tmpdir]
         output = subprocess.check_output(hdiutil_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(hdiutil_cmd)))
+        log.info("result of subprocess call to attach dmg to mount point: %r" % output)
         log.info("hdiutil attach succeeded")
-        log.info(output)
     except Exception as e:
         log.error("Could not attach dmg file %s.  Error messages: %s" % (installable, e.message))
         return None

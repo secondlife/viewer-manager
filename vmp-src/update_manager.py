@@ -244,6 +244,7 @@ def make_VVM_UUID_hash(platform_key):
                                         **subprocess_args(include_stdout=False,
                                                           log_stream=SL_Logging.stream(hostid_cmd)
                                                           )).rstrip()
+        log.debug("result of subprocess call to get linux MUUID: %r" % muuid)
     elif (platform_key == 'mac'):
         #this is absurdly baroque
         #/usr/sbin/system_profiler SPHardwareDataType | fgrep 'Serial' | awk '{print $NF}'
@@ -253,6 +254,7 @@ def make_VVM_UUID_hash(platform_key):
         #split(:)[1] gets us the XXXXXXX part
         #lstrip shaves off the leading space that was after the colon
         muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
+        log.debug("result of subprocess call to get mac MUUID: %r" % muuid)
     elif (platform_key == 'win'):
         # wmic csproduct get UUID | grep -v UUID
         wmic_cmd=['wmic','csproduct','get','UUID']
@@ -261,6 +263,7 @@ def make_VVM_UUID_hash(platform_key):
         #UUID
         #XXXXXXX-XXXX...
         muuid = re.split('\n',muuid)[1].rstrip()
+        log.debug("result of subprocess call to get win MUUID: %r" % muuid)
             
     if muuid is not None:
         hash = hashlib.md5(muuid).hexdigest()
@@ -279,6 +282,7 @@ def getBitness(platform_key = None):
         #see MAINT-6832 and IQA-4130
         wmic_cmd=['wmic','path','Win32_VideoController','get','NAME']
         wmic_graphics = subprocess.check_output(wmic_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(wmic_cmd)))
+        log.debug("result of subprocess call to get wmic graphics card info: %r" % muuid)
         wmic_list = re.split('\n', wmic_graphics)
         bad = False
         for word in wmic_list:
@@ -614,7 +618,7 @@ def update_manager(cli_overrides = None):
         #we send the override to the VVM, but retain the summary.json version for in_place computations
         channel_override_summary = deepcopy(summary_dict)        
         if cli_overrides is not None:
-            if 'channel' in cli_overrides.keys():
+            if 'channel' in cli_overrides.keys() and channel_override_summary['Channel'] is not None:
                 channel_override_summary['Channel'] = cli_overrides['channel']
     except Exception as e:
         log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
