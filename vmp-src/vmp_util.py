@@ -36,7 +36,7 @@ class SL_Logging(object):
         if not SL_Logging.logger:
             log_basepath=os.path.join(SL_Logging.directory(),basename)
             #accomodate verbosity with larger files before rotation
-            verbosity = self.get_verbosity()
+            verbosity = SL_Logging.get_verbosity()
             if verbosity == logging.DEBUG:
                 logsize = maxsize*4
             else:
