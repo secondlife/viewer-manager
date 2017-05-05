@@ -72,14 +72,14 @@ class SL_Logging(object):
         return verbosity
 
     @staticmethod
-    def stream(subcommand):
+    def stream(subcommand, streamname="stderr"):
         """
         Return the file object that was used to initialize the log stream.
         This is provided for use with the subprocess_args method below; by 
         passing this stream to the log_stream parameter of subprocess_args, 
         any stderr output from the subprocess will be directed into the log
         """
-        SL_Logging.logger.info("======== Including output from subcommand %r" % subcommand)
+        SL_Logging.logger.info("======== running subcommand %r; any %s output follows" % (subcommand, streamname))
         return SL_Logging.logStream
 
     class Formatter(logging.Formatter):

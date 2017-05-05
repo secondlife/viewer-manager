@@ -440,7 +440,10 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                                   "--size", str(size),
                                   "--chunk_size", str(chunk_size)]
                 log.debug("background downloader args: %r" % downloader_cmd)
-                download_process = subprocess.Popen(downloader_cmd, **subprocess_args(include_stdout=True, log_stream=SL_Logging.stream(downloader_cmd)))
+                log_stream = SL_Logging.stream(downloader_cmd, streamname="stdout and stderr")
+                download_process = subprocess.Popen(downloader_cmd,
+                                                    **subprocess_args(include_stdout=True, log_stream=log_stream)
+                                                    )
                 log.debug("Download of new version " + version + " spawned.")
                 download_success = True
             except  Exception, e:
