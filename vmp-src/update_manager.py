@@ -283,7 +283,7 @@ def getBitness(platform_key = None):
         #see MAINT-6832 and IQA-4130
         wmic_cmd=['wmic','path','Win32_VideoController','get','NAME']
         wmic_graphics = subprocess.check_output(wmic_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(wmic_cmd)))
-        log.debug("result of subprocess call to get wmic graphics card info: %r" % muuid)
+        log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
         wmic_list = re.split('\n', wmic_graphics)
         bad = False
         for word in wmic_list:
