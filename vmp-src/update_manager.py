@@ -274,6 +274,7 @@ def make_VVM_UUID_hash(platform_key):
     return hash
 
 def getBitness(platform_key = None):
+    log=SL_Logging.getLogger('getBitness')
     if platform_key in ['lnx', 'mac']:
         return 64
     if 'PROGRAMFILES(X86)' not in os.environ:
@@ -394,6 +395,7 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None, Updater
     return result_data
 
 def download(url = None, version = None, download_dir = None, size = 0, hash = None, background = False, chunk_size = None):
+    log=SL_Logging.getLogger('download')
     download_tries = 0
     download_success = False
     download_process = None
@@ -474,6 +476,7 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
         return True
 
 def install(platform_key = None, download_dir = None, in_place = None, downloaded = None):
+    log=SL_Logging.getLogger('install')
     #user said no to this one
     if downloaded != 'skip':
         after_frame(message = "New version downloaded.\nInstalling now, please wait.")

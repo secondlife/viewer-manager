@@ -97,6 +97,7 @@ if getattr(sys, 'frozen', False):
     __file__ = sys._MEIPASS
 
 def get_cmd_line(cmd_settings_file = None):
+    log=SL_Logging.getLogger('get_cmd_line')
     if cmd_settings_file is None:
         platform_name = platform.system()
     #find the parent of the logs and user_settings directories
