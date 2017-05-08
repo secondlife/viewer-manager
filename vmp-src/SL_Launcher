@@ -212,7 +212,6 @@ if __name__ == "__main__":
 
     #defaults to make sure the right thing happens if called with no args
     args = ""
-    args_list_to_pass = []
     vmp_args = ""
     command = ""
     vmp_args = capture_vmp_args(args_list_to_pass)
