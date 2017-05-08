@@ -621,7 +621,7 @@ def update_manager(cli_overrides = None):
         #we send the override to the VVM, but retain the summary.json version for in_place computations
         channel_override_summary = deepcopy(summary_dict)        
         if cli_overrides is not None:
-            if 'channel' in cli_overrides.keys() and channel_override_summary['Channel'] is not None:
+            if 'channel' in cli_overrides.keys() and cli_overrides['Channel'] is not None:
                 channel_override_summary['Channel'] = cli_overrides['channel']
     except Exception as e:
         log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
