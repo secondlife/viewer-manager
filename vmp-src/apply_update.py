@@ -96,7 +96,7 @@ def get_filename(download_dir = None):
     return None  
           
 def try_dismount(installable = None, tmpdir = None):
-    log = SL_Logging.getLogger(__module__)
+    log = SL_Logging.getLogger("SL_Apply_Update")
     #best effort cleanup try to dismount the dmg file if we have mounted one
     #the French judge gave it a 5.8
     try:
@@ -158,7 +158,7 @@ def apply_update(download_dir = None, platform_key = None, in_place = True):
     return installed
     
 def apply_linux_update(installable = None):
-    log = SL_Logging.getLogger(__module__)
+    log = SL_Logging.getLogger("SL_Apply_Update")
     try:
         #untar to tmpdir
         tmpdir = tempfile.mkdtemp()
@@ -177,7 +177,7 @@ def apply_linux_update(installable = None):
     return INSTALL_DIR
 
 def apply_mac_update(installable = None):
-    log = SL_Logging.getLogger(__module__)
+    log = SL_Logging.getLogger("SL_Apply_Update")
 
     #INSTALL_DIR is something like /Applications/Second Life Viewer.app/Contents/MacOS, need to jump up two levels for the install base
     install_base = os.path.dirname(INSTALL_DIR)
@@ -263,7 +263,7 @@ def apply_mac_update(installable = None):
     return install_base
     
 def apply_windows_update(installable = None):
-    log = SL_Logging.getLogger(__module__)
+    log = SL_Logging.getLogger("SL_Apply_Update")
     #the windows install is just running the NSIS installer executable
     #from VMP's perspective, it is a black box
     kill_em_all(2)
