@@ -440,7 +440,7 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                 #and subprocess that.  The business with the file descriptors is how to tell subprocess not to wait.
                 #since we are using Popen and not check_output, subprocess_args isn't needed
                 #arguments to execv() via popen() can only be strings, hence str(int)
-                downloader_cmd = ["path to downloader", path_to_downloader,
+                downloader_cmd = [path_to_downloader,
                                   "--url", url,
                                   "--dir", download_dir, 
                                   "--size", str(size),
