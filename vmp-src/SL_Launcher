@@ -223,7 +223,7 @@ if __name__ == "__main__":
     (success, state, condition) = update_manager.update_manager(vmp_args)
     log.debug("Update manager returned success %s state %s condition %s" % (success, state, condition))
     if sys.platform.startswith('darwin') and isinstance(condition, basestring):
-        condition = os.path.join(condition,'Contents/MacOS/SL_Launcher')
+        condition = os.path.join(condition,'Contents/MacOS/Second Life')
     # From update_manager:
     #  (False, 'setup', None): error occurred before we knew what the update was (e.g., in setup or parsing)
     #  (False, 'download', version): we failed to download the new version
@@ -270,7 +270,7 @@ if __name__ == "__main__":
         log.info("Launching new channel viewer: %s." % command)
         try:
             viewer_process = subprocess.Popen(command)
-            log.debug("Newly updated viewer successfully launched.")
+            log.debug("Newly updated viewer successfully launched. %r %r" % (viewer_process.pid, viewer_process.returncode))
             #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
             viewer_process.wait()
         except Exception as e:

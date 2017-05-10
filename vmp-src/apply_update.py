@@ -109,7 +109,7 @@ def try_dismount(installable = None, tmpdir = None):
         #No point in trying to umount an fs that doesn't exist. 
         #This could happen, for example, if the user manually umounts it first
         try:
-            output.index("No such file or directory")
+            output.index("Filesystem")
         except ValueError:
             return
         #first word of second line of df output is the device name
@@ -131,7 +131,7 @@ def apply_update(download_dir = None, platform_key = None, in_place = True):
     #for win, return the name of the executable
     #returns None on failure for all three
     #throws an exception if it can't find an installable at all
-    
+    global IN_PLACE
     IN_PLACE = in_place
     
     installable = get_filename(download_dir)
@@ -230,17 +230,21 @@ def apply_mac_update(installable = None):
         shutil.move(install_base, swapped_out)               
     else:
         log.info("Installing %s" % install_base)
+        #this is to remove some old version or copytree will throw an exception
+        shutil.rmtree(install_base)
         
     #   copy over the new bits    
     try:
         shutil.copytree(mounted_appdir, install_base, symlinks=True)
         retcode = 0
+        log.debug("Copied bits from dmg mount.  Return code: %r" % retcode)
     except Exception as e:
+        log.debug("shutil copytree threw exception %r" % e)
         # try to restore previous viewer
         if os.path.exists(swapped_out):
             log.error("Install of %s failed, rolling back to previous viewer." % installable)
             shutil.move(swapped_out, installed_test)
-            retcode = 1
+        retcode = 1
     finally:
         try_dismount(installable, tmpdir)
         if retcode:

@@ -676,6 +676,7 @@ def update_manager(cli_overrides = None):
     #and launcher will launch the viewer in this install location.  Otherwise, it will launch the Launcher from 
     #the new location and kill itself.
     in_place = (summary_dict['Channel'] == result_data['channel'])
+    log.debug("In place determination: in place %r summary %r result_data %r" % (in_place, summary_dict['Channel'], result_data['channel']))
     
     #determine if we've tried this download before
     downloaded = check_for_completed_download(download_dir, result_data['size'])
