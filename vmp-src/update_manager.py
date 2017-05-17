@@ -572,10 +572,13 @@ def update_manager(cli_overrides = None):
                 settings = get_settings(cli_overrides['settings'][0])
         
     if settings is None:
+        #if this fails as it sometimes does during Windows NSIS installs, 
+        #still query the VVM and assume testok for UpdaterServiceSetting
+        #by passing None to query_vvm
+        #see tests run during the testing of MAINT-7192, though this is not directly related to that issue
         log.warning("Failed to load viewer settings from " 
                      +  os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml')))
         log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
-        return (False, 'setup', None)
 
     #323: If a complete download of that update is found, check the update preference:
     #settings['UpdaterServiceSetting'] = 0 is manual install
