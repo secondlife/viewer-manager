@@ -576,7 +576,7 @@ def update_manager(cli_overrides = None):
         #still query the VVM and assume testok for UpdaterServiceSetting
         #by passing None to query_vvm
         #see tests run during the testing of MAINT-7192, though this is not directly related to that issue
-        log.warning("Failed to load viewer settings from " 
+        log.warning("Failed to load viewer settings (this may be normal) from " 
                      +  os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml')))
         log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
 
