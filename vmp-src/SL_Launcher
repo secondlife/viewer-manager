@@ -36,6 +36,9 @@ import subprocess
 import sys
 import vmp_util
 
+#coyot remove after QA run
+os.environ[SL_LAUNCH_LOGLEVEL]='DEBUG'
+
 #if for some reason we are running on a POSIX machine with python less than 2.7
 #just give up on VMP and execute the viewer per product.
 if os.name != 'nt' and platform.python_version() < '2.7':
