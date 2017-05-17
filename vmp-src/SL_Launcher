@@ -245,7 +245,7 @@ if __name__ == "__main__":
         update_manager.after_frame(msg)
         command.insert(0,viewer_binary)
         viewer_process = subprocess.Popen(command)
-        log.warning("Viewer successfully launched after failure to get a valid update response.")
+        log.warning("Viewer successfully launched after failure to get a valid update response. %r " % command)
         #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
         viewer_process.wait()
     elif (success == True and 
@@ -261,10 +261,10 @@ if __name__ == "__main__":
         elif success == True and state ==  'background':
             log.warning("Received erroneous condition %r from update manager, launching old viewer" % condition)      
         else:
-            log.info("Launching current channel viewer, no required upgrade found.")
+            log.info("Launching current channel viewer, no optional upgrade found.")
         command.insert(0,viewer_binary)
         viewer_process = subprocess.Popen(command)
-        log.info("Viewer successfully launched after launching background downloader or no update.")
+        log.info("Viewer successfully launched after launching background downloader or no update. %r" % command)
         #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
         viewer_process.wait()
     else:
