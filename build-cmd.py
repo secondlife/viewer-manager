@@ -137,8 +137,10 @@ def main():
            
     #the version file consists of one line with the version string in it
     sourceVersionFile = os.path.join(top, "VERSION.txt")
-    print("%s: %s" % (sourceVersionFile, open(sourceVersionFile, 'r').read()))
-    
+    sourceVersion = open(sourceVersionFile, 'r').read().strip()
+    packageVersionFile=open(os.path.join(stage,"VERSION.txt"), 'wb')
+    packageVersionFile.write("%s.%s" % (sourceVersion, os.getenv('AUTOBUILD_BUILD_ID','0')))
+
     #copytree doesn't want the destination directory to pre-exist
     for key in iter_paths.keys():
         if os.path.exists(iter_paths[key]['dst']):
@@ -152,7 +154,6 @@ def main():
     if os.path.exists(summary):
         os.remove(summary)
         
-    copy(sourceVersionFile, stage)
     sourceLicenseFile = os.path.join(top, "LICENSE")
     copy(sourceLicenseFile, stage)
         
