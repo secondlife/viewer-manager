@@ -192,6 +192,9 @@ if __name__ == "__main__":
     # Initialize the python logging system to SL Logging format and destination
     log = vmp_util.SL_Logging.getLogger('SL_Launcher')
 
+    version=update_manager.get_summary(update_manager.get_platform_key())['Version']
+    log.info("Viewer version %s" % version)
+
     executable_name = ""
     if sys.platform.startswith('darwin'):
         executable_name = "Second Life"
@@ -241,7 +244,7 @@ if __name__ == "__main__":
     #  No update, update skipped, succeeded in place in foreground, or background update started: silently launch the current viewer channel
     #  Updated succeed to a different channel, launch that viewer and wait
     if not success:
-        msg = 'Update failed in the %s process.  Please check logs.  Viewer will launch starting momentarily.' % state
+        msg = 'Update failed in the %s process.  Please check logs.  Viewer will launch momentarily.' % state
         update_manager.after_frame(msg)
         command.insert(0,viewer_binary)
         viewer_process = subprocess.Popen(command)
