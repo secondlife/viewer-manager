@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 """\
-$LicenseInfo:firstyear=2006&license=viewerlgpl$
+$LicenseInfo:firstyear=2017&license=viewerlgpl$
 Second Life Viewer Source Code
-Copyright (C) 2006-2014, Linden Research, Inc.
+Copyright (C) 2017, Linden Research, Inc.
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -309,9 +309,11 @@ def isViewerMachineBitMatched(viewer_platform = None, platform_key = None, bitne
         win_plat_key = 'win32'
     return (viewer_platform == win_plat_key)
 
-def query_vvm(platform_key = None, settings = None, summary_dict = None, UpdaterServiceURL = None, UpdaterWillingToTest = None):
+def query_vvm(platform_key = None, settings = None, summary_dict = None,
+              UpdaterServiceHostPort = None, UpdaterWillingToTest = None):
     result_data = None
-    baseURI = None
+    if not UpdaterServiceHostPort:
+        UpdaterServiceHostPort=os.getenv('SL_UPDATE_SERVICE','update.secondlife.com')
     VMM_platform = platform_key
     log=SL_Logging.getLogger('query_vvm')
     #to disambiguate, we have two sources of platform here
@@ -337,11 +339,7 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None, Updater
     #note that the only two valid options are:
     # # version-phx0.damballah.lindenlab.com
     # # version-qa.secondlife-staging.com
-    if UpdaterServiceURL:
-        #we can't really expect the users to put the protocol or base dir on, they will give us a host
-        base_URI = urljoin('http://' + UpdaterServiceURL[0], '/update/')
-    else:
-        base_URI = 'https://update.secondlife.com/update/'
+    base_URI = urljoin('https://' + UpdaterServiceHostPort, '/update/')
     channelname = str(summary_dict['Channel'])
     pattern = re.compile('\'|\[|\]')
     channelname = pattern.sub('', channelname)    
@@ -634,17 +632,17 @@ def update_manager(cli_overrides = None):
     #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
     if cli_overrides is not None:
         if 'update-service' in cli_overrides.keys():
-            UpdaterServiceURL = cli_overrides['update-service']
+            UpdaterServiceHostPort = cli_overrides['update-service']
         else:
             #tells query_vvm to use the default
-            UpdaterServiceURL = None
+            UpdaterServiceHostPort = None
     else:
-        UpdaterServiceURL = None
+        UpdaterServiceHostPort = None
 
     result_data = query_vvm(platform_key=platform_key,
                             settings=settings,
                             summary_dict=channel_override_summary,
-                            UpdaterServiceURL=UpdaterServiceURL,
+                            UpdaterServiceHostPort=UpdaterServiceHostPort,
                             UpdaterWillingToTest=UpdaterWillingToTest)
 
     #nothing to do or error
