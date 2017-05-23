@@ -630,6 +630,7 @@ def update_manager(cli_overrides = None):
         log.warning("Could not obtain channel and version.\n%r" % e)
         return (False, 'setup', None)        
 
+    #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
     result_data = query_vvm(platform_key=platform_key,
                             settings=settings,
                             summary_dict=channel_override_summary,
