@@ -34,7 +34,7 @@ Applies an already downloaded update.
 """
 
 from datetime import datetime
-from vmp_util import subprocess_args, SL_Logging
+from vmp_util import subprocess_args, SL_Logging, BuildData
 
 import argparse
 import errno
@@ -73,8 +73,6 @@ INSTALL_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 
 #whether the update is to the INSTALL_DIR or not.  Most of the time this is the case.
 IN_PLACE = True
-
-BUNDLE_IDENTIFIER = "com.secondlife.indra.viewer"
 
 #this is to support pyinstaller, which uses sys._MEIPASS to point to the location
 #the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
@@ -217,7 +215,7 @@ def apply_mac_update(installable = None):
     if not mounted_appdir:
         log.error("Could not find app bundle in dmg %s." % (installable,))
         return None        
-    if CFBundleIdentifier != BUNDLE_IDENTIFIER:
+    if CFBundleIdentifier != BuildData.get('Bundle Id'):
         log.error("Wrong or null bundle identifier for dmg %s.  Bundle identifier: %s" % (installable, CFBundleIdentifier))
         try_dismount(installable, tmpdir)                   
         return None
@@ -254,7 +252,7 @@ def apply_mac_update(installable = None):
         # Magic OS directory name that causes Cocoa viewer to crash on OS X 10.7.5
         # (see MAINT-3331)
         STATE_DIR = os.path.join(os.environ["HOME"], "Library", "Saved Application State",
-            BUNDLE_IDENTIFIER + ".savedState")
+            BuildData.get('Bundle Id') + ".savedState")
         shutil.rmtree(STATE_DIR)  
     except OSError as e:
         #if we fail to delete something that isn't there, that's okay

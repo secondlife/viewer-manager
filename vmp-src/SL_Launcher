@@ -34,15 +34,12 @@ import os.path
 import platform
 import subprocess
 import sys
-import vmp_util
-
-#coyot remove after QA run
-os.environ['SL_LAUNCH_LOGLEVEL']='DEBUG'
+from vmp_util import SL_Logging, Application, BuildData
 
 #if for some reason we are running on a POSIX machine with python less than 2.7
 #just give up on VMP and execute the viewer per product.
 if os.name != 'nt' and platform.python_version() < '2.7':
-    log = vmp_util.SL_Logging.getLogger('SL_Launcher')
+    log = SL_Logging.getLogger('SL_Launcher')
     log.error("Computer is below minimum specifications. Python version needs to be 2.7, but is %r" % platform.python_version())
     if sys.platform.startswith('darwin'):
         executable_name = "Second Life"
@@ -99,8 +96,11 @@ import update_manager
 if getattr(sys, 'frozen', False):
     __file__ = sys._MEIPASS
 
+def set_platform_for_viewer():
+    return platform.platform()
+
 def get_cmd_line(cmd_settings_file = None):
-    log=vmp_util.SL_Logging.getLogger('get_cmd_line')
+    log=SL_Logging.getLogger('get_cmd_line')
     if cmd_settings_file is None:
         platform_name = platform.system()
     #find the parent of the logs and user_settings directories
@@ -182,34 +182,19 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
 
 if __name__ == "__main__":
     #main entry point      
-    #this and a few other update manager methods really should be refactored into a util lib
-    parent_dir = update_manager.get_parent_path(update_manager.get_platform_key())
+    parent_dir = Application.userpath()
     cgitb.enable(logdir=os.path.join(parent_dir, "logs"), format='text')
 
     parser = argparse.ArgumentParser()
     args, args_list_to_pass = parser.parse_known_args()
 
     # Initialize the python logging system to SL Logging format and destination
-    log = vmp_util.SL_Logging.getLogger('SL_Launcher')
+    log = SL_Logging.getLogger('SL_Launcher')
 
-    version=update_manager.get_summary(update_manager.get_platform_key())['Version']
+    version=BuildData.get('Version')
     log.info("Viewer version %s" % version)
 
-    executable_name = ""
-    if sys.platform.startswith('darwin'):
-        executable_name = "Second Life"
-    elif sys.platform.startswith("win") or sys.platform.startswith("cyg"):
-        #MAINT-7292: do not infer name from directory, instead read it from summary.json as produced by the build
-        filename = update_manager.get_summary('win')['Executable']
-        if os.path.isfile(os.path.join(cwd, filename)):
-            executable_name = filename
-        else:
-            sys.exit("Can't find Windows viewer binary")
-    elif sys.platform.startswith("linux"):
-        executable_name = "secondlife"
-    else:
-        #SL doesn't run on VMS or punch cards
-        sys.exit("Unsupported platform")
+    executable_name = Application.name()
 
     #find the viewer to be lauched
     viewer_binary = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), executable_name) 
@@ -248,7 +233,7 @@ if __name__ == "__main__":
         update_manager.after_frame(msg)
         command.insert(0,viewer_binary)
         viewer_process = subprocess.Popen(command)
-        log.warning("Viewer successfully launched after failure to get a valid update response. %r " % command)
+        log.info("Viewer successfully launched after failure to get a valid update response. %r " % command)
         #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
         viewer_process.wait()
     elif (success == True and 
@@ -276,7 +261,7 @@ if __name__ == "__main__":
         log.info("Launching new channel viewer: %s." % command)
         try:
             viewer_process = subprocess.Popen(command)
-            log.debug("Newly updated viewer successfully launched. %r %r" % (viewer_process.pid, viewer_process.returncode))
+            log.info("Newly updated viewer successfully launched. %r %r" % (viewer_process.pid, viewer_process.returncode))
             #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
             viewer_process.wait()
         except Exception as e:

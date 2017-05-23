@@ -31,17 +31,15 @@ $/LicenseInfo$
 from nose.tools import *
 
 import update_manager
+from vmp_util import Application
 
 def test_make_VVM_UUID_hash():
     #because the method returns different results on different hosts
     #it is not easy to unit test it reliably.  
     #About the best we can do is check for the exception from subprocess
-    key = update_manager.get_platform_key()
-    try:
-        UUID_hash = update_manager.make_VVM_UUID_hash(key)
-    except Exception, e:
-        print "Test failed due to: %s" % str(e)
-        assert False
+    key = Application.platform_key()
+
+    UUID_hash = update_manager.make_VVM_UUID_hash(key)
 
     #make_UUID_hash returned None
     assert UUID_hash, "make_UUID_hash failed to make a hash."

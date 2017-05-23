@@ -1,14 +1,12 @@
 #!/usr/bin/env python
-
-
 """
-@file   test_update_manager_get_summary.py
-@author coyot
-@date   2016-06-02
+@file   test_build_data.py
+@author oz
+@date   2017-05-22
 
-$LicenseInfo:firstyear=2016&license=viewerlgpl$
+$LicenseInfo:firstyear=2017&license=viewerlgpl$
 Second Life Viewer Source Code
-Copyright (C) 2016, Linden Research, Inc.
+Copyright (C) 2017, Linden Research, Inc.
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -27,17 +25,23 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
+from llbase import llsd
 
 from nose.tools import *
 
-import os.path
-import tempfile
-import update_manager
+import os
+import with_setup_args
 
-def test_get_summary():
-    key = update_manager.get_platform_key()
-    summary_json = update_manager.get_summary(key)
+from vmp_util import BuildData
 
-    #we aren't testing the JSON library, one key pair is enough
-    #so we will use the one pair that is actually a constant
-    assert_equal(summary_json['Type'],'viewer')
+def test_build_data():
+    test_build_data_file = os.path.join(os.path.dirname(__file__),'build_data.json')
+    BuildData.read(test_build_data_file)
+
+    assert_equal(BuildData.get('Type'), 'viewer')
+    assert_equal(BuildData.get('Missing'), None)
+    assert_equal(BuildData.get('Missing', 'default'), 'default')
+
+    BuildData.override('Type', 'magic')
+    assert_equal(BuildData.get('Type'), 'magic')
+    

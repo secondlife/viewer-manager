@@ -35,29 +35,27 @@ import os
 import re
 import shutil
 import tempfile
-import update_manager
 import with_setup_args
 import logging
-from vmp_util import SL_Logging
+import update_manager
+from vmp_util import SL_Logging, Application, BuildData
+
+BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
 
 def test_query_vvm():
-    key = update_manager.get_platform_key()
-    parent = update_manager.get_parent_path(key)
+    key = Application.platform_key()
+    parent = Application.userpath()
     log=SL_Logging.getLogger('test_update', verbosity='DEBUG')
     settings = update_manager.get_settings(parent)
     launcher_path = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
-    summary = update_manager.get_summary(key)
+
     #for unit testing purposes, just testing a value from results.  If no update, then None and it falls through
     #for formal QA see:
     #   https://docs.google.com/document/d/1WNjOPdKlq0j_7s7gdNe_3QlyGnQDa3bFNvtyVM6Hx8M/edit
     #   https://wiki.lindenlab.com/wiki/Login_Test#Test_Viewer_Updater
     #for test plans on all cases, as it requires setting up a fake VVM service
 
-    try:
-        results = update_manager.query_vvm(platform_key=key, settings=None, summary_dict=summary)
-    except Exception, e:
-        print "query_vvm threw unexpected exception %s" % str(e)
-        assert False
+    results = update_manager.query_vvm(platform_key=key, settings=None)
 
     if results:
         pattern = re.compile('Second Life')

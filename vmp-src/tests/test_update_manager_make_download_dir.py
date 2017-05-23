@@ -29,19 +29,19 @@ $/LicenseInfo$
 
 from nose.tools import *
 import sys
+import os
+from vmp_util import Application, BuildData
 import update_manager
 
 def test_make_download_dir():
-    key = update_manager.get_platform_key()
-    path = update_manager.get_parent_path(key)
+    BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
+    key = Application.platform_key()
+    path = Application.userpath()
     version = '1.2.3.456789'
     try:
         download_dir = update_manager.make_download_dir(path, version)
     except OSError as e:
         print >>sys.stderr, "make_download_dir failed to eat OSError %s" % str(e)
-        assert False
-    except Exception as e:
-        print >>sys.stderr, "make_download_dir raised an unexpected exception %s" % str(e)
         assert False
 
     assert download_dir, "make_download_dir returned None for path %s and version %s" % (path, version)

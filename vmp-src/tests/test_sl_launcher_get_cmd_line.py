@@ -35,6 +35,7 @@ import os
 import os.path
 import platform
 import shutil
+from vmp_util import BuildData
 import with_setup_args
 
 #shenanigans around importing a file that doesn't end in .py
@@ -55,6 +56,7 @@ test_file = os.path.join(test_dir, 'cmd_line.xml')
 
 def get_cmd_line_setup():
     #makedirs errors if there are borked leftovers from a previous test, so wipe the plate clean
+    BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
     shutil.rmtree(test_dir, ignore_errors = True)
     os.makedirs(test_dir)
     shutil.copyfile(golden_cmd_xml, path_dict[plat])

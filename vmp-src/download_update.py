@@ -49,7 +49,7 @@ requests.packages.urllib3.disable_warnings()
 import tempfile
 import threading
 import update_manager
-import vmp_util
+from vmp_util import SL_Logging, Application
 
 #module default
 CHUNK_SIZE = 1024
@@ -62,7 +62,7 @@ def download_update(url = None, download_dir = None, size = None, progressbar = 
     #progressbar: whether to display one (not used for background downloads)
     #chunk_size is in bytes, amount to download at once
 
-    log=vmp_util.SL_Logging.getLogger('download_update')
+    log=SL_Logging.getLogger('download_update')
     log.debug(" url %s, download_dir %s, size %s, progressbar %s, chunk_size %s" % (url, download_dir, size, progressbar, chunk_size))
     queue = Queue.Queue()
     if not os.path.exists(download_dir):
@@ -76,7 +76,7 @@ def download_update(url = None, download_dir = None, size = None, progressbar = 
     log.debug("Started download thread.")
     
     if progressbar:
-        frame = IUM.InstallerUserMessage(title = "Second Life Downloader", icon_name="head-sl-logo.gif")
+        frame = IUM.InstallerUserMessage(title = Application.name()+" Downloader", icon_name="head-sl-logo.gif")
         frame.progress_bar(message = "Download Progress", size = size, pb_queue = queue)
         frame.mainloop()
     else:
@@ -96,7 +96,7 @@ class ThreadedDownload(threading.Thread):
         self.chunk_size = int(chunk_size)
         self.progressbar = progressbar
         self.in_queue = in_queue
-        self.log = vmp_util.SL_Logging.getLogger('SL_Updater')
+        self.log = SL_Logging.getLogger('SL_Updater')
         
     def run(self):
         self.log.debug("Download thread running.")
@@ -130,7 +130,7 @@ def main():
     parser.add_argument('--chunk_size', dest='chunk_size', default=CHUNK_SIZE, help='max portion size of download to be loaded in memory in bytes.')
     args = parser.parse_args()
     # Initialize the python logging system to SL Logging format and destination
-    log = vmp_util.SL_Logging.getLogger('SL_Downloader')
+    log = SL_Logging.getLogger('SL_Downloader')
 
     download_update(url = args.url,
                     download_dir = args.download_dir,

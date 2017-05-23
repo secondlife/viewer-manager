@@ -30,10 +30,10 @@ $/LicenseInfo$
 from nose.tools import assert_equal
 
 import platform
-import update_manager
+from vmp_util import Application
 
 def test_get_platform_key():
-    key = update_manager.get_platform_key()
+    key = Application.platform_key()
     if key == 'mac':
         assert_equal(platform.system(),'Darwin')
     elif key == 'lnx':

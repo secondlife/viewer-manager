@@ -39,21 +39,23 @@ import shutil
 import tempfile
 import update_manager
 import logging
-from vmp_util import SL_Logging
+from vmp_util import SL_Logging, Application, BuildData
 from argparse import Namespace
 import with_setup_args
 
 #Nota Bene: testing Tkinter UI elements should be done by a QA engineer as we don't have test infrastructure
 #for graphical elements
 
-parent_dir = update_manager.get_parent_path(update_manager.get_platform_key())
-#doesn't really matter which viewer, the downloader just needs a file of sufficient length to test the chunking
-#we allegedly never purge S3, so this should always be there
+# doesn't really matter which viewer, the downloader just needs a file of sufficient length to test the chunking
+# we allegedly never purge S3, so this should always be there
 URL = "http://automated-builds-secondlife-com.s3.amazonaws.com/hg/repo/viewer-lynx/rev/323027/arch/Darwin/installer/Second_Life_5_0_1_323027_i386.dmg"
 marker_regex = '*' + '.done'
-log=SL_Logging.getLogger('test_download', verbosity='DEBUG')
 
 def download_update_setup():
+    global log
+    BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
+    # must override BuildData above before initializing log
+    log=SL_Logging.getLogger('test_download', verbosity='DEBUG')
     tmpdir1 = tempfile.mkdtemp(prefix = 'test1')
     return [tmpdir1], {}
 

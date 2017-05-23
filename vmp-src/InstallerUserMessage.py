@@ -42,6 +42,7 @@ import Tkinter as tk
 import ttk
 #for hyperlinks
 import webbrowser
+from vmp_util import Application
 
 #this is to support pyinstaller, which uses sys._MEIPASS to point to the location
 #the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
@@ -127,7 +128,7 @@ class InstallerUserMessage(tk.Tk):
             self.image_label.image = icon
         else:
             #default to text if image not available
-            self.image_label = tk.Label(text = "Second Life")
+            self.image_label = tk.Label(text = Application.name())
 
     def auto_resize(self, row_count = 0, column_count = 0, heavy_row = None, heavy_column = None):
         #auto resize window to fit all rows and columns

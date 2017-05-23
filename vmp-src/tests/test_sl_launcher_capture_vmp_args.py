@@ -36,6 +36,7 @@ import os.path
 import platform
 import shutil
 import with_setup_args
+from vmp_util import BuildData
 
 #shenanigans around importing a file that doesn't end in .py
 #the scripts are in the parent directory of the tests, hence the double dirname call
@@ -58,6 +59,7 @@ def capture_vmp_args_setup():
     shutil.rmtree(test_dir, ignore_errors = True)
     os.makedirs(test_dir)
     shutil.copyfile(golden_cmd_xml, path_dict[plat])
+    BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
     return [], {}
 
 def capture_vmp_args_teardown():

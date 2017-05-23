@@ -35,6 +35,7 @@ import os
 import platform
 import shutil
 import tempfile
+from vmp_util import Application
 import update_manager
 
 license_string = """
@@ -72,7 +73,7 @@ def test_license_md5file():
     license_handle = tempfile.NamedTemporaryFile(mode = 'w', bufsize = 0, delete = False)
     license_handle.write(license_string)
     license_handle.close()
-    plat = update_manager.get_platform_key()
+    plat = Application.platform_key()
     if plat == 'mac':
         assert_equal(update_manager.md5file(license_handle.name), '3e2f43ec1b5b84c0a2370e772fbe0ea2'), "md5sum of ASCII text file did not match"
     elif plat == 'win':

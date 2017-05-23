@@ -34,7 +34,7 @@ from datetime import datetime
 from llbase import llrest
 from llbase.llrest import RESTError
 from llbase import llsd    
-from vmp_util import SL_Logging, subprocess_args
+from vmp_util import Application, BuildData, SL_Logging, subprocess_args
 
 import apply_update
 import download_update
@@ -105,54 +105,13 @@ def convert_version_file_style(version):
     except TypeError, te:
         return None
 
-def get_platform_key():
-    #this is the name that is inserted into the VVM URI
-    #and carried forward through the rest of the updater to determine
-    #platform specific actions as appropriate
-    platform_dict = {'Darwin':'mac', 'Linux':'lnx', 'Windows':'win'}
-    platform_uname = platform.system()
-    try:
-        return platform_dict[platform_uname]
-    except KeyError:
-        return None
-
-def get_summary(platform_name):
-    #get the contents of the summary.json file.
-    #for linux and windows this file is in the same directory as the script
-    #for mac, the script is in ../Contents/MacOS/ and the file is in ../Contents/Resources/
-    if (platform_name == 'mac'):
-        summary_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../Resources"))
-    else:
-        summary_dir = os.path.abspath(os.path.dirname(str(sys.executable)))
-    summary_file = os.path.join(summary_dir,"summary.json")
-    #for windows unit tests
-    if not os.path.exists(summary_file):
-        summary_file = os.path.join(os.path.dirname(apply_update.__file__), "tests", "summary.json")
-        if not os.path.exists(summary_file):
-            return None
-    with open(summary_file) as summary_handle:
-        return json.load(summary_handle)
-
-def get_parent_path(platform_name):
-    #find the parent of the logs and user_settings directories
-    if (platform_name == 'mac'):
-        settings_dir = os.path.join(os.path.expanduser('~'),'Library','Application Support','SecondLife')
-    elif (platform_name == 'lnx'): 
-        settings_dir = os.path.join(os.path.expanduser('~'),'.secondlife')
-    #using list format of join is important here because the Windows pathsep in a string escapes the next char
-    elif (platform_name == 'win'):
-        settings_dir = os.path.join(os.path.expanduser('~'),'AppData','Roaming','SecondLife')
-    else:
-        settings_dir = None
-    return settings_dir
-
-def make_download_dir(parent_dir, new_version):
+def make_download_dir(base_dir, new_version):
     #make a canonical download dir if it does not already exist
     #format: ../user_settings/downloads/1.2.3.456789
     #we do this so that multiple viewers on the same host can update separately
     #this also functions as a getter 
     try:
-        download_dir = os.path.join(parent_dir, "downloads", new_version)
+        download_dir = os.path.join(base_dir, "downloads", new_version)
         os.makedirs(download_dir)
     except (OSError, WindowsError) as hell:
         #Directory already exists, that's okay.  Other OSErrors are not okay.
@@ -291,7 +250,7 @@ def getBitness(platform_key = None):
                 log.info("Setting bitness to 32 due to HD Graphics Win 64 Bit incompatibility.")
                 return 32
         return 64
-    
+
 def isViewerMachineBitMatched(viewer_platform = None, platform_key = None, bitness = 64):
     if not viewer_platform or not platform_key:
         return False
@@ -308,21 +267,22 @@ def isViewerMachineBitMatched(viewer_platform = None, platform_key = None, bitne
         win_plat_key = 'win32'
     return (viewer_platform == win_plat_key)
 
-def query_vvm(platform_key = None, settings = None, summary_dict = None,
+def query_vvm(platform_key = None, settings = None,
               UpdaterServiceURL = None, UpdaterWillingToTest = None):
     result_data = None
+
     VMM_platform = platform_key
     log=SL_Logging.getLogger('query_vvm')
     if not UpdaterServiceURL:
-        UpdaterServiceURL=os.getenv('SL_UPDATE_SERVICE','https://update.secondlife.com/update')
+        UpdaterServiceURL=os.getenv('SL_UPDATE_SERVICE',BuildData.get('Update Service','https://update.secondlife.com/update'))
 
-    #to disambiguate, we have two sources of platform here
-    #  platform_key is the OS name of the computer VMP is running on
-    #  summary_dict['platform'] is the platform and for windows, bitness, of the _viewer_ that VMP is part of
-    #These are not always the same, in particular, for the first download of a VMP windows viewer which defaults to 64 bit
+    # To disambiguate, we have two sources of platform here
+    #   - platform_key is our platform name for the computer we are running on
+    #   - BuildData.get('Platform') is the platform for which we were packaged
+    # These are not always the same, in particular, for the first download of a VMP windows viewer which defaults to 64 bit
     bitness = getBitness(platform_key)
     try:
-        if not isViewerMachineBitMatched(summary_dict['Platform'], platform_key, bitness):
+        if not isViewerMachineBitMatched(BuildData.get('Platform'), platform_key, bitness):
             #there are two cases:
             # the expected case where we downloaded a 64 bit viewer to a 32 bit machine on spec
             # the unexpected case where someone was running a 32 bit viewer on a 32 bit Windows box and upgraded their Windows to 64 bit
@@ -330,7 +290,7 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None,
             if bitness == 32:
                 VMM_platform = 'win32'
     except Exception as e:
-        log.warning("Could not parse viewer bitness from summary.json %r" % e)
+        log.warning("Could not parse viewer bitness from build_data.json %r" % e)
         #At these point, we have no idea what is really going on.  Since 32 installs on 64 and not vice-versa, fall back to safety
         VMM_platform = 'win32'        
     
@@ -338,11 +298,11 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None,
     #https://wiki.lindenlab.com/wiki/Viewer_Version_Manager_REST_API#Viewer_Update_Query
     #note that the only two valid options are:
     # # version-phx0.damballah.lindenlab.com
-    # # version-qa.secondlife-staging.com
-    channelname = str(summary_dict['Channel'])
+    # # version-phx0.aditi.secondlife.com (aka version-qa.secondlife-staging.com)
+    channelname = BuildData.get('Channel')
     pattern = re.compile('\'|\[|\]')
-    channelname = pattern.sub('', channelname)    
-    version = summary_dict['Version']
+    channelname = pattern.sub('', channelname)
+    version = BuildData.get('Version')
     #we need to use the dotted versions of the platform versions in order to be compatible with VVM rules and arithmetic
     if platform_key == 'win':
         platform_version = platform.win32_ver()[1]
@@ -368,7 +328,7 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None,
     """
     if UpdaterWillingToTest is not None and UpdaterWillingToTest == 'testok':
         test_ok = 'testok'
-    elif re.search('^Second Life Test', channelname) is not None:
+    elif re.search('^%s Test' % Application.name(), channelname) is not None:
         test_ok = 'testno'
     else:   
         try:
@@ -379,14 +339,16 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None,
     #channelname is a list because although it is only one string, it is a kind of argument and viewer args can take multiple keywords.
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
              (str(channelname), version, VMM_platform, platform_version, test_ok, UUID))
-    query_string =  urllib.quote('v1.1/' + str(channelname) + '/' + version + '/' + VMM_platform + '/' + platform_version + '/' + test_ok + '/' + UUID)
-    log.debug("Sending query to VVM: service %s query %s" % (UpdaterServiceURL, query_string))
+    update_urlpath =  urllib.quote('v1.1/' + str(channelname) + '/' + version + '/' + VMM_platform + '/' + platform_version + '/' + test_ok + '/' + UUID)
+    log.debug("Sending query to VVM: service %s query %s" % (UpdaterServiceURL, update_urlpath))
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
     try:
-        result_data = VVMService.get(query_string)
+        result_data = VVMService.get(update_urlpath)
     except RESTError as res:
-        if res.status != 404: # 404 is how the Viewer Version Manager indicates no-update
-            log.warning("Failed to query VVM service %s query %s failed as %s" % (UpdaterServiceURL,query_string, res))
+        if res.status == 404: # 404 is how the Viewer Version Manager indicates that the channel is unmanaged
+            log.info("Update service returned 'not found'; normally this means the channel is unmanaged (and allowed)")
+        else:
+            log.warning("Update service %s query %s failed: %s" % (UpdaterServiceURL, update_urlpath, res))
         return None
     return result_data
 
@@ -399,7 +361,7 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
     if not chunk_size:
         chunk_size = 5*1024
     #for background execution
-    if get_platform_key() == 'win':
+    if Application.platform_key() == 'win':
         path_to_downloader = os.path.join(os.path.dirname(os.path.realpath(sys.executable)), "download_update.exe")
     else:
         path_to_downloader = os.path.join(os.path.dirname(os.path.realpath(__file__)), "download_update.py")
@@ -533,8 +495,8 @@ def update_manager(cli_overrides = None):
     #  (True, 'skip', True): User has chosen to skip this optional update
 
     #setup and getting initial parameters
-    platform_key = get_platform_key()
-    parent_dir = get_parent_path(platform_key)
+    platform_key = Application.platform_key()
+    parent_dir = Application.userpath()
     settings = None
 
     #check to see if user has install rights
@@ -578,30 +540,30 @@ def update_manager(cli_overrides = None):
 
     #323: If a complete download of that update is found, check the update preference:
     #settings['UpdaterServiceSetting'] = 0 is manual install
-    """
-    <key>UpdaterServiceSetting</key>
-        <map>
-        <key>Comment</key>
-            <string>Configure updater service.</string>
-        <key>Type</key>
-            <string>U32</string>
-        <key>Value</key>
-            <string>0</string>
-        </map>
-    """
+    #
+    # <key>UpdaterServiceSetting</key>
+    #     <map>
+    # <key>Comment</key> ]
+    #     <string>Configure updater service.</string> ]
+    # <key>Type</key> ]
+    #     <string>U32</string> ]
+    # <key>Value</key> ]
+    #     <string>0</string> ]
+    # </map> ]
+    #
     if cli_overrides is not None: 
         if 'set' in cli_overrides.keys():
             if 'UpdaterServiceSetting' in cli_overrides['set'].keys():
                 install_automatically = cli_overrides['set']['UpdaterServiceSetting']
             else:
-                install_automatically = 1
+                install_automatically = True
     else:
         try:
             install_automatically = settings['UpdaterServiceSetting']['Value']
         #because, for some godforsaken reason (we only write if it is not the default), 
         #we fail to write it at all, rather than setting the value
         except KeyError:
-            install_automatically = 1
+            install_automatically = True
     
     #use default chunk size if none is given, set UpdaterWillingToTest to None if not given
     #this is to prevent key errors on accessing keys that may or may not exist depending on cli options given
@@ -617,14 +579,16 @@ def update_manager(cli_overrides = None):
             if 'UpdaterServiceURL' in cli_overrides['set'].keys():    
                 UpdaterServiceURL = cli_overrides['set']['UpdaterServiceURL']
 
-    #get channel and version
+    # get channel and version
+    default_channel = BuildData.get('Channel')
+    # we send the override to the VVM, but retain the default_channel version for in_place computations
     try:
-        summary_dict = get_summary(platform_key)
-        #we send the override to the VVM, but retain the summary.json version for in_place computations
-        channel_override_summary = deepcopy(summary_dict)        
         if cli_overrides is not None:
             if 'channel' in cli_overrides.keys() and cli_overrides['channel'] is not None:
-                channel_override_summary['Channel'] = cli_overrides['channel']
+                if default_channel != cli_overrides['channel']:
+                    log.info("Overriding channel '%s' with '%s' from command line" % (default_channel, cli_overrides['channel']))
+                    BuildData.override('Channel', cli_overrides['channel'])
+
     except Exception as e:
         log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
         log.warning("Could not obtain channel and version.\n%r" % e)
@@ -633,7 +597,6 @@ def update_manager(cli_overrides = None):
     #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
     result_data = query_vvm(platform_key=platform_key,
                             settings=settings,
-                            summary_dict=channel_override_summary,
                             UpdaterServiceURL=UpdaterServiceURL,
                             UpdaterWillingToTest=UpdaterWillingToTest)
 
@@ -644,22 +607,23 @@ def update_manager(cli_overrides = None):
         #clean up any previous download dir on windows, see apply_update.apply_update()
         try:
             if platform_key == 'win':
-                past_download_dir = make_download_dir(parent_dir, channel_override_summary['Version'])
+                past_download_dir = make_download_dir(Application.userpath(), BuildData.get('Version'))
                 #call make to convert our version into a previous download dir path
                 #call check to see if the winstall file is there
                 installed = check_for_completed_download(past_download_dir)
                 log.debug("Checked for previous Windows install in %s with result %s." % (past_download_dir, installed))
                 if installed == 'winstall':
+                    log.info("Cleaning up past download dirctory '%s'" % past_download_dir)
                     shutil.rmtree(past_download_dir)
         except Exception as e:
             #cleanup is best effort
-            log.error("Caught exception cleaning up Windows download dir %r" % e)
+            log.error("Caught exception cleaning up download dir '%r'; skipping" % e)
             pass
         return (True, None, None)
 
     #get download directory, if there are perm issues or similar problems, give up
     try:
-        download_dir = make_download_dir(parent_dir, result_data['version'])
+        download_dir = make_download_dir(Application.userpath(), result_data['version'])
     except Exception as e:
         log.error("Caught exception making download dir %r" % e)
         log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
@@ -668,15 +632,15 @@ def update_manager(cli_overrides = None):
     #if the channel name of the response is the same as the channel we are launched from, the update is "in place"
     #and launcher will launch the viewer in this install location.  Otherwise, it will launch the Launcher from 
     #the new location and kill itself.
-    in_place = (summary_dict['Channel'] == result_data['channel'])
-    log.debug("In place determination: in place %r summary %r result_data %r" % (in_place, summary_dict['Channel'], result_data['channel']))
+    in_place = (default_channel == result_data['channel'])
+    log.debug("In place determination: in place %r build_data %r result_data %r" % (in_place, BuildData.get('Channel'), result_data['channel']))
     
     #determine if we've tried this download before
     downloaded = check_for_completed_download(download_dir, result_data['size'])
 
     #323: If the response indicates that there is a required update: 
     if result_data['required'] or ((not result_data['required']) and (install_automatically == 1)):
-        log.info("Found required update.")
+        log.info("Required update to version %s" % result_data['version'])
         #323: Check for a completed download of the required update; if found, display an alert, install the required update, and launch the newly installed viewer.
         #323: If [optional download and] Install Automatically: display an alert, install the update and launch updated viewer.
         return download_and_install(downloaded = downloaded, url = result_data['url'], version = result_data['version'], download_dir = download_dir, 
@@ -694,7 +658,7 @@ def update_manager(cli_overrides = None):
         log.info("Found optional update. Download directory is: " + download_dir)
         choice = -1
         if downloaded is None:        
-            #multithread a download           
+            # start a background download           
             try:
                 os.makedirs(download_dir)
             except OSError as err:
@@ -711,8 +675,8 @@ def update_manager(cli_overrides = None):
             return (True, 'background', result)                 
         elif downloaded == 'done' or downloaded == 'next':
             log.info("Found previously downloaded update in: " + download_dir)
-            skip_frame = InstallerUserMessage.InstallerUserMessage(title = "Second Life Installer", icon_name="head-sl-logo.gif")
-            skip_frame.trinary_choice_link_message(message = "Optional Update %s ready to install. Install this version?\nClick here for Release Notes" % summary_dict['Version'], 
+            skip_frame = InstallerUserMessage.InstallerUserMessage(title = BuildData.get('Channel Base')+" Installer", icon_name="head-sl-logo.gif")
+            skip_frame.trinary_choice_link_message(message = "Optional Update %s ready to install. Install this version?\nSee Release Notes" % BuildData.get('Version'), 
                 url = str(result_data['more_info']), one = "Yes", two = "No", three = "Not Now")
             skip_me = skip_frame.choice3.get()
             if skip_me == 1:

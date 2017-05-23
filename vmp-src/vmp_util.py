@@ -5,6 +5,8 @@ import sys
 import time
 import logging
 import errno
+import platform
+import json
 
 #Because of the evolution over time of the specification of VMP, some methods were added "in place", in particular various getter methods in update manager, which should someday be refactored into this
 #utility class.  
@@ -108,17 +110,8 @@ class SL_Logging(object):
         Implement the standard Second Life log directory convention,
         with the addition of an environment override for use by tests
         """
-        logdir=os.getenv('SECONDLIFE_LOGDIR')
-        if not logdir:
-            if sys.platform.startswith('darwin'):
-                logdir = os.path.join(os.environ['HOME'],'Library','Application Support','SecondLife','logs')
-            elif sys.platform.startswith("win") or sys.platform.startswith("cyg"):
-                logdir = os.path.join(os.environ['APPDATA'],'SecondLife','logs')
-            elif sys.platform.startswith("linux"):
-                logdir = os.path.join(os.environ['HOME'],'.secondlife','logs')
-            else:
-                #SL doesn't run on VMS or punch cards
-                sys.exit("Unsupported platform")
+        variable_app_name = (''.join(Application.name().split())).upper()
+        logdir=os.getenv('%s_LOGDIR' % variable_app_name, os.path.join(Application.userpath(), 'logs'))
 
         try:
             os.makedirs(logdir)
@@ -150,6 +143,85 @@ class SL_Logging(object):
                 pass # nothing to be done about this either
         return new_name
 
+
+class Application(object):
+
+    @staticmethod
+    def name():
+        """Return the conventional application name"""
+        channel_base = BuildData.get('Channel Base')
+        running_on = platform.system()
+        if running_on == 'Darwin':
+            executable_name = channel_base
+        elif running_on == 'Windows':
+            # MAINT-7292: do not infer name from directory; read it from build_data.json as produced by the build
+            executable_name = BuildData.get('Executable')
+        elif running_on == 'Linux':
+            executable_name = ''.join(channel_base.split()) # remove all whitespace
+        else:
+            #SL doesn't run on VMS or punch cards
+            raise Exception("Unsupported platform '%s'" % running_on)
+        return executable_name
+
+    @staticmethod
+    def userpath():
+        """Return the conventional location for application specific user files on this platform"""
+        application_name = BuildData.get("Channel Base")
+        if not application_name:
+            # see http://wiki.secondlife.com/wiki/Channel_and_Version_Requirements
+            raise KeyError("No 'Channel Base' set in the application metadata; invalid build")
+        app_element_nowhite=''.join(application_name.split()) # remove all spaces
+
+        running_on = platform.system()
+        if (running_on == 'Darwin'):
+            base_dir = os.path.join(os.path.expanduser('~'),'Library','Application Support',app_element_nowhite)
+        elif (running_on == 'Linux'): 
+            base_dir = os.path.join(os.path.expanduser('~'))
+        elif (running_on == 'Windows'):
+            base_dir = os.path.join(os.path.expanduser('~'),'AppData','Roaming',app_element_nowhite)
+        else:
+            sys.exit("Unsupported platform '%s'" % running_on)
+        return base_dir
+
+    PlatformKey = {'Darwin':'mac', 'Linux':'lnx', 'Windows':'win'}
+    @staticmethod
+    def platform_key():
+        #this is the name that is inserted into the VVM URI
+        #and carried forward through the rest of the updater to determine
+        #platform specific actions as appropriate
+        return Application.PlatformKey.get(platform.system())
+
+class BuildData(object):
+    """Get information about the application from the metadata in the install"""
+
+    package_data=dict()
+
+    @staticmethod
+    def read(build_data_file=None):
+        #get the contents of the build_data.json file.
+        #for linux and windows this file is in the same directory as the script
+        #for mac, the script is in ../Contents/MacOS/ and the file is in ../Contents/Resources/
+        if not build_data_file:
+            if (platform.system() == 'Darwin'):
+                build_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../Resources"))
+            else:
+                build_data_dir = os.path.abspath(os.path.dirname(str(sys.executable)))
+            build_data_file = os.path.join(build_data_dir,"build_data.json")
+
+        with open(build_data_file) as build_data_handle:
+            BuildData.package_data=json.load(build_data_handle)
+
+    @staticmethod
+    def get(property,default=None):
+        if not BuildData.package_data:
+            BuildData.read()
+        return BuildData.package_data.get(property, default)
+
+    @staticmethod
+    def override(property, value):
+        if not BuildData.package_data:
+            BuildData.read()
+        BuildData.package_data[property] = value
 
 # This utility method is lifted from https://github.com/pyinstaller/pyinstaller/wiki/Recipe-subprocess
 # and gets us around the issue of pythonw breaking subprocess when default values for I/O handles are used.
