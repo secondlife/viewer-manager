@@ -34,7 +34,6 @@ from datetime import datetime
 from llbase import llrest
 from llbase.llrest import RESTError
 from llbase import llsd    
-from urlparse import urljoin
 from vmp_util import SL_Logging, subprocess_args
 
 import apply_update
@@ -310,12 +309,13 @@ def isViewerMachineBitMatched(viewer_platform = None, platform_key = None, bitne
     return (viewer_platform == win_plat_key)
 
 def query_vvm(platform_key = None, settings = None, summary_dict = None,
-              UpdaterServiceHostPort = None, UpdaterWillingToTest = None):
+              UpdaterServiceURL = None, UpdaterWillingToTest = None):
     result_data = None
-    if not UpdaterServiceHostPort:
-        UpdaterServiceHostPort=os.getenv('SL_UPDATE_SERVICE','update.secondlife.com')
     VMM_platform = platform_key
     log=SL_Logging.getLogger('query_vvm')
+    if not UpdaterServiceURL:
+        UpdaterServiceURL=os.getenv('SL_UPDATE_SERVICE','https://update.secondlife.com/update')
+
     #to disambiguate, we have two sources of platform here
     #  platform_key is the OS name of the computer VMP is running on
     #  summary_dict['platform'] is the platform and for windows, bitness, of the _viewer_ that VMP is part of
@@ -339,7 +339,6 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None,
     #note that the only two valid options are:
     # # version-phx0.damballah.lindenlab.com
     # # version-qa.secondlife-staging.com
-    base_URI = urljoin('https://' + UpdaterServiceHostPort, '/update/')
     channelname = str(summary_dict['Channel'])
     pattern = re.compile('\'|\[|\]')
     channelname = pattern.sub('', channelname)    
@@ -377,18 +376,17 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None,
         except Exception:
             #normal case, no testing key
             test_ok = 'testok'
-    #because urljoin can't be arsed to take multiple elements
     #channelname is a list because although it is only one string, it is a kind of argument and viewer args can take multiple keywords.
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
              (str(channelname), version, VMM_platform, platform_version, test_ok, UUID))
     query_string =  urllib.quote('v1.1/' + str(channelname) + '/' + version + '/' + VMM_platform + '/' + platform_version + '/' + test_ok + '/' + UUID)
-    log.debug("Sending query to VVM: %s" % base_URI + query_string)
-    VVMService = llrest.SimpleRESTService(name='VVM', baseurl=base_URI)
+    log.debug("Sending query to VVM: service %s query %s" % (UpdaterServiceURL, query_string))
+    VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
     try:
         result_data = VVMService.get(query_string)
     except RESTError as res:
         if res.status != 404: # 404 is how the Viewer Version Manager indicates no-update
-            log.warning("Failed to query VVM using %s failed as %s" % (urljoin(base_URI,query_string), res))
+            log.warning("Failed to query VVM service %s query %s failed as %s" % (UpdaterServiceURL,query_string, res))
         return None
     return result_data
 
@@ -609,12 +607,15 @@ def update_manager(cli_overrides = None):
     #this is to prevent key errors on accessing keys that may or may not exist depending on cli options given
     chunk_size = 1024
     UpdaterWillingToTest = None
+    UpdaterServiceURL = None
     if cli_overrides is not None: 
         if 'set' in cli_overrides.keys():
             if 'UpdaterMaximumBandwidth' in cli_overrides['set'].keys():    
                 chunk_size = cli_overrides['set']['UpdaterMaximumBandwidth']
             if 'UpdaterWillingToTest' in cli_overrides['set'].keys():
                 UpdaterWillingToTest = cli_overrides['set']['UpdaterWillingToTest']
+            if 'UpdaterServiceURL' in cli_overrides['set'].keys():    
+                UpdaterServiceURL = cli_overrides['set']['UpdaterServiceURL']
 
     #get channel and version
     try:
@@ -629,20 +630,10 @@ def update_manager(cli_overrides = None):
         log.warning("Could not obtain channel and version.\n%r" % e)
         return (False, 'setup', None)        
 
-    #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
-    if cli_overrides is not None:
-        if 'update-service' in cli_overrides.keys():
-            UpdaterServiceHostPort = cli_overrides['update-service']
-        else:
-            #tells query_vvm to use the default
-            UpdaterServiceHostPort = None
-    else:
-        UpdaterServiceHostPort = None
-
     result_data = query_vvm(platform_key=platform_key,
                             settings=settings,
                             summary_dict=channel_override_summary,
-                            UpdaterServiceHostPort=UpdaterServiceHostPort,
+                            UpdaterServiceURL=UpdaterServiceURL,
                             UpdaterWillingToTest=UpdaterWillingToTest)
 
     #nothing to do or error

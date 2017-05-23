@@ -70,4 +70,4 @@ def get_cmd_line_teardown():
 def test_get_cmd_line(): 
     result = SLL.get_cmd_line(test_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
-    assert_equal(result['update-service']['map-to'], 'CmdLineUpdateService')
+    assert_equal(result['set']['count'], 2)
