@@ -323,7 +323,7 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None,
     #These are not always the same, in particular, for the first download of a VMP windows viewer which defaults to 64 bit
     bitness = getBitness(platform_key)
     try:
-        if not isViewerMachineBitMatched(summary_dict['Platform'], platform_key, bitness):
+        if not isViewerMachineBitMatched(summary_dict['platform'], platform_key, bitness):
             #there are two cases:
             # the expected case where we downloaded a 64 bit viewer to a 32 bit machine on spec
             # the unexpected case where someone was running a 32 bit viewer on a 32 bit Windows box and upgraded their Windows to 64 bit
@@ -335,7 +335,7 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None,
         #At these point, we have no idea what is really going on.  Since 32 installs on 64 and not vice-versa, fall back to safety
         VMM_platform = 'win32'        
     
-    #URI template /update/v1.1/channelname/version/platformkey/platformversion/willing-to-test/uniqueid
+    #URI template /update/v1.2/channelname/version/platformkey/platformversion/willing-to-test/uniqueid
     #https://wiki.lindenlab.com/wiki/Viewer_Version_Manager_REST_API#Viewer_Update_Query
     #note that the only two valid options are:
     # # version-phx0.damballah.lindenlab.com
@@ -380,11 +380,12 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None,
     #channelname is a list because although it is only one string, it is a kind of argument and viewer args can take multiple keywords.
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
              (str(channelname), version, VMM_platform, platform_version, test_ok, UUID))
-    query_string =  urllib.quote('v1.1/' + str(channelname) + '/' + version + '/' + VMM_platform + '/' + platform_version + '/' + test_ok + '/' + UUID)
+    query_string =  urllib.quote('v1.2/' + str(channelname) + '/' + version + '/' + VMM_platform + '/' + platform_version + '/' + test_ok + '/' + UUID)
     log.debug("Sending query to VVM: service %s query %s" % (UpdaterServiceURL, query_string))
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
     try:
         result_data = VVMService.get(query_string)
+        log.info("received result from VVM: %r" % result_data)
     except RESTError as res:
         if res.status != 404: # 404 is how the Viewer Version Manager indicates no-update
             result_data = None
