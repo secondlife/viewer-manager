@@ -34,6 +34,7 @@ from datetime import datetime
 from llbase import llrest
 from llbase.llrest import RESTError
 from llbase import llsd    
+from sets import Set
 from vmp_util import SL_Logging, subprocess_args
 
 import apply_update
@@ -386,8 +387,29 @@ def query_vvm(platform_key = None, settings = None, summary_dict = None,
         result_data = VVMService.get(query_string)
     except RESTError as res:
         if res.status != 404: # 404 is how the Viewer Version Manager indicates no-update
+            result_data = None
             log.warning("Failed to query VVM service %s query %s failed as %s" % (UpdaterServiceURL,query_string, res))
-        return None
+    
+    #result_data is a nested XML structure, we pull out the right element of the nesting and promote to top level
+    #None is an acceptable result, meaning VVM doesn't know about this version
+    if result_data is not None:
+        if VMM_platform in result_data['platforms']:
+            all_version_keys = set(['url', 'hash', 'size'])
+            received_version_keys = set(result_data['platforms'][VMM_platform].iterkeys())
+            #order independent test to make sure all keys were received
+            if all_version_keys == received_version_keys: 
+                result_data.update(result_data['platforms'][VMM_platform])
+    #failed in the above or the VVM doesn't know about this version
+    if result_data is None or 'url' not in result_data:
+        if VMM_platform == 'win32' and summary_dict['platform'] == 'win':
+            log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % result_data)
+            after_frame("Failed to obtain a 32 bit viewer for your system.  Please download a viewer from get.secondlife.com")
+            #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
+            #better to die gracefully than horribly
+            sys.exit(1)
+        else:
+            #either it is no update or pretend like it is
+            result_data = None
     return result_data
 
 def download(url = None, version = None, download_dir = None, size = 0, hash = None, background = False, chunk_size = None):
