@@ -34,6 +34,7 @@ from datetime import datetime
 from llbase import llrest
 from llbase.llrest import RESTError
 from llbase import llsd    
+from sets import Set
 from vmp_util import Application, BuildData, SL_Logging, subprocess_args
 
 import apply_update
@@ -282,7 +283,7 @@ def query_vvm(platform_key = None, settings = None,
     # These are not always the same, in particular, for the first download of a VMP windows viewer which defaults to 64 bit
     bitness = getBitness(platform_key)
     try:
-        if not isViewerMachineBitMatched(BuildData.get('Platform'), platform_key, bitness):
+        if not isViewerMachineBitMatched(BuildData.get('platform'), platform_key, bitness):
             #there are two cases:
             # the expected case where we downloaded a 64 bit viewer to a 32 bit machine on spec
             # the unexpected case where someone was running a 32 bit viewer on a 32 bit Windows box and upgraded their Windows to 64 bit
@@ -294,7 +295,7 @@ def query_vvm(platform_key = None, settings = None,
         #At these point, we have no idea what is really going on.  Since 32 installs on 64 and not vice-versa, fall back to safety
         VMM_platform = 'win32'        
     
-    # URI template /update/v1.1/channelname/version/platformkey/platformversion/willing-to-test/uniqueid
+    # URI template /update/v1.2/channelname/version/platformkey/platformversion/willing-to-test/uniqueid
     # https://wiki.lindenlab.com/wiki/Viewer_Version_Manager_REST_API#Viewer_Update_Query
     # For valid hosts, see https://wiki.lindenlab.com/wiki/Update_Service#Clusters
     channelname = BuildData.get('Channel')
@@ -337,17 +338,37 @@ def query_vvm(platform_key = None, settings = None,
     #channelname is a list because although it is only one string, it is a kind of argument and viewer args can take multiple keywords.
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
              (str(channelname), version, VMM_platform, platform_version, test_ok, UUID))
-    update_urlpath =  urllib.quote('/'.join(['v1.1', str(channelname), version, VMM_platform, platform_version, test_ok, UUID]))
+    update_urlpath =  urllib.quote('/'.join(['v1.2', str(channelname), version, VMM_platform, platform_version, test_ok, UUID]))
     log.debug("Sending query to VVM: service %s query %s" % (UpdaterServiceURL, update_urlpath))
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
     try:
         result_data = VVMService.get(update_urlpath)
+        log.info("received result from VVM: %r" % result_data)
     except RESTError as res:
         if res.status == 404: # 404 is how the Viewer Version Manager indicates that the channel is unmanaged
             log.info("Update service returned 'not found'; normally this means the channel is unmanaged (and allowed)")
         else:
             log.warning("Update service %s query %s failed: %s" % (UpdaterServiceURL, update_urlpath, res))
-        return None
+    #result_data is a nested XML structure, we pull out the right element of the nesting and promote to top level
+    #None is an acceptable result, meaning VVM doesn't know about this version
+    if result_data is not None:
+        if VMM_platform in result_data['platforms']:
+            all_version_keys = set(['url', 'hash', 'size'])
+            received_version_keys = set(result_data['platforms'][VMM_platform].iterkeys())
+            #order independent test to make sure all keys were received
+            if all_version_keys == received_version_keys: 
+                result_data.update(result_data['platforms'][VMM_platform])
+    #failed in the above or the VVM doesn't know about this version
+    if result_data is None or 'url' not in result_data:
+        if VMM_platform == 'win32' and summary_dict['platform'] == 'win':
+            log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % result_data)
+            after_frame("Failed to obtain a 32 bit viewer for your system.  Please download a viewer from get.secondlife.com")
+            #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
+            #better to die gracefully than horribly
+            sys.exit(1)
+        else:
+            #either it is no update or pretend like it is
+            result_data = None
     return result_data
 
 def download(url = None, version = None, download_dir = None, size = 0, hash = None, background = False, chunk_size = None):
