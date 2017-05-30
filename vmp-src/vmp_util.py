@@ -78,14 +78,15 @@ class SL_Logging(object):
         return verbosity
 
     @staticmethod
-    def stream(subcommand, streamname="stderr"):
+    def stream(prefix_msg=""):
         """
         Return the file object that was used to initialize the log stream.
         This is provided for use with the subprocess_args method below; by 
         passing this stream to the log_stream parameter of subprocess_args, 
         any stderr output from the subprocess will be directed into the log
         """
-        SL_Logging.logger.info("======== running subcommand %r; any %s output follows" % (subcommand, streamname))
+        if prefix_msg:
+            SL_Logging.logger.info(prefix_msg)
         return SL_Logging.logStream
 
     class Formatter(logging.Formatter):
@@ -110,7 +111,7 @@ class SL_Logging(object):
         Implement the standard Second Life log directory convention,
         with the addition of an environment override for use by tests
         """
-        variable_app_name = (''.join(Application.name().split())).upper()
+        variable_app_name = (''.join(Application.name().split())).upper() # remove all whitespace, upcase
         logdir=os.getenv('%s_LOGDIR' % variable_app_name, os.path.join(Application.userpath(), 'logs'))
 
         try:
@@ -170,7 +171,7 @@ class Application(object):
         if not application_name:
             # see http://wiki.secondlife.com/wiki/Channel_and_Version_Requirements
             raise KeyError("No 'Channel Base' set in the application metadata; invalid build")
-        app_element_nowhite=''.join(application_name.split()) # remove all spaces
+        app_element_nowhite=''.join(application_name.split()) # remove all whitespace
 
         running_on = platform.system()
         if (running_on == 'Darwin'):
@@ -208,8 +209,13 @@ class BuildData(object):
                 build_data_dir = os.path.abspath(os.path.dirname(str(sys.executable)))
             build_data_file = os.path.join(build_data_dir,"build_data.json")
 
-        with open(build_data_file) as build_data_handle:
-            BuildData.package_data=json.load(build_data_handle)
+        try:
+            with open(build_data_file) as build_data_handle:
+                BuildData.package_data=json.load(build_data_handle)
+        except Exception as err:
+            # without this file, nothing is going to work,
+            # so abort immediately with a simple message about the problem
+            sys.exit("Failed to read application build_data:\n%s" % err)
 
     @staticmethod
     def get(property,default=None):
@@ -235,7 +241,8 @@ class BuildData(object):
 # not, on Windows and Linux. Typical use::
 #
 #   command = ['program_to_run', 'arg_1']
-#   subprocess.call(command, **subprocess_args(log_stream=SL_Logging.stream(command)))
+#   message = "message about the included stream for command %r" % command
+#   subprocess.call(command, **subprocess_args(log_stream=SL_Logging.stream(prefix_msg=message)))
 #
 # When calling ``check_output``::
 #

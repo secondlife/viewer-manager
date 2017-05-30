@@ -35,6 +35,7 @@ call it with subprocess.
 """
 import os
 import argparse
+import cgitb
 from datetime import datetime
 import fnmatch
 import InstallerUserMessage as IUM
@@ -74,7 +75,7 @@ def download_update(url = None, download_dir = None, size = None, progressbar = 
     down_thread = ThreadedDownload(req, filename, chunk_size, progressbar, queue)
     down_thread.start()
     log.debug("Started download thread.")
-    
+
     if progressbar:
         frame = IUM.InstallerUserMessage(title = Application.name()+" Downloader", icon_name="head-sl-logo.gif")
         frame.progress_bar(message = "Download Progress", size = size, pb_queue = queue)
@@ -129,8 +130,6 @@ def main():
     parser.add_argument('--size', dest='size', help='size of download for progressbar')
     parser.add_argument('--chunk_size', dest='chunk_size', default=CHUNK_SIZE, help='max portion size of download to be loaded in memory in bytes.')
     args = parser.parse_args()
-    # Initialize the python logging system to SL Logging format and destination
-    log = SL_Logging.getLogger('SL_Downloader')
 
     download_update(url = args.url,
                     download_dir = args.download_dir,
@@ -139,7 +138,16 @@ def main():
                     chunk_size = args.chunk_size)
 
 if __name__ == "__main__":
+    cgitb.enable(format='text')
+    # Initialize the python logging system to SL Logging format and destination
+    log = SL_Logging.getLogger('SL_Downloader')
+
     #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
     if 'ython' in sys.executable:
         sys.executable =  os.path.abspath(sys.argv[0])    
-    main()
+    try:
+        main()
+    except Exception:
+        log_traceback = cgitb.Hook(file=SL_Logging.stream(prefix_msg="Unhandled exception:"), format='text')
+        log_traceback.handle()
+

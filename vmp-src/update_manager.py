@@ -200,14 +200,14 @@ def make_VVM_UUID_hash(platform_key):
         hostid_cmd=['/usr/bin/hostid']
         muuid = subprocess.check_output(hostid_cmd,
                                         **subprocess_args(include_stdout=False,
-                                                          log_stream=SL_Logging.stream(hostid_cmd)
+                                                          log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % hostid_cmd)
                                                           )).rstrip()
         log.debug("result of subprocess call to get linux MUUID: %r" % muuid)
     elif (platform_key == 'mac'):
         #this is absurdly baroque
         #/usr/sbin/system_profiler SPHardwareDataType | fgrep 'Serial' | awk '{print $NF}'
         profiler_cmd=["/usr/sbin/system_profiler", "SPHardwareDataType"]
-        muuid = subprocess.check_output(profiler_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(profiler_cmd)))
+        muuid = subprocess.check_output(profiler_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % profiler_cmd)))
         #findall[0] does the grep for the value we are looking for: "Serial Number (system): XXXXXXXX"
         #split(:)[1] gets us the XXXXXXX part
         #lstrip shaves off the leading space that was after the colon
@@ -216,7 +216,7 @@ def make_VVM_UUID_hash(platform_key):
     elif (platform_key == 'win'):
         # wmic csproduct get UUID | grep -v UUID
         wmic_cmd=['wmic','csproduct','get','UUID']
-        muuid = subprocess.check_output(wmic_cmd, **subprocess_args(include_stdout=False,log_stream=SL_Logging.stream(wmic_cmd)))
+        muuid = subprocess.check_output(wmic_cmd, **subprocess_args(include_stdout=False,log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % wmic_cmd)))
         #outputs in two rows:
         #UUID
         #XXXXXXX-XXXX...
@@ -240,7 +240,7 @@ def getBitness(platform_key = None):
     else:
         #see MAINT-6832 and IQA-4130
         wmic_cmd=['wmic','path','Win32_VideoController','get','NAME']
-        wmic_graphics = subprocess.check_output(wmic_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(wmic_cmd)))
+        wmic_graphics = subprocess.check_output(wmic_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % wmic_cmd)))
         log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
         wmic_list = re.split('\n', wmic_graphics)
         bad = False
@@ -294,11 +294,9 @@ def query_vvm(platform_key = None, settings = None,
         #At these point, we have no idea what is really going on.  Since 32 installs on 64 and not vice-versa, fall back to safety
         VMM_platform = 'win32'        
     
-    #URI template /update/v1.1/channelname/version/platformkey/platformversion/willing-to-test/uniqueid
-    #https://wiki.lindenlab.com/wiki/Viewer_Version_Manager_REST_API#Viewer_Update_Query
-    #note that the only two valid options are:
-    # # version-phx0.damballah.lindenlab.com
-    # # version-phx0.aditi.secondlife.com (aka version-qa.secondlife-staging.com)
+    # URI template /update/v1.1/channelname/version/platformkey/platformversion/willing-to-test/uniqueid
+    # https://wiki.lindenlab.com/wiki/Viewer_Version_Manager_REST_API#Viewer_Update_Query
+    # For valid hosts, see https://wiki.lindenlab.com/wiki/Update_Service#Clusters
     channelname = BuildData.get('Channel')
     pattern = re.compile('\'|\[|\]')
     channelname = pattern.sub('', channelname)
@@ -339,7 +337,7 @@ def query_vvm(platform_key = None, settings = None,
     #channelname is a list because although it is only one string, it is a kind of argument and viewer args can take multiple keywords.
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
              (str(channelname), version, VMM_platform, platform_version, test_ok, UUID))
-    update_urlpath =  urllib.quote('v1.1/' + str(channelname) + '/' + version + '/' + VMM_platform + '/' + platform_version + '/' + test_ok + '/' + UUID)
+    update_urlpath =  urllib.quote('/'.join(['v1.1', str(channelname), version, VMM_platform, platform_version, test_ok, UUID]))
     log.debug("Sending query to VVM: service %s query %s" % (UpdaterServiceURL, update_urlpath))
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
     try:
@@ -403,10 +401,9 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                                   "--dir", download_dir, 
                                   "--size", str(size),
                                   "--chunk_size", str(chunk_size)]
-                log.debug("background downloader args: %r" % downloader_cmd)
-                log_stream = SL_Logging.stream(downloader_cmd, streamname="stdout and stderr")
                 download_process = subprocess.Popen(downloader_cmd,
-                                                    **subprocess_args(include_stdout=True, log_stream=log_stream)
+                                                    **subprocess_args(include_stdout=True,
+                                                                      log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stdout and stderr follows" % downloader_cmd))
                                                     )
                 log.debug("Download of new version " + version + " spawned.")
                 download_success = True
@@ -543,14 +540,14 @@ def update_manager(cli_overrides = None):
     #
     # <key>UpdaterServiceSetting</key>
     #     <map>
-    # <key>Comment</key> ]
-    #     <string>Configure updater service.</string> ]
-    # <key>Type</key> ]
-    #     <string>U32</string> ]
-    # <key>Value</key> ]
-    #     <string>0</string> ]
-    # </map> ]
-    #
+    # <key>Comment</key>
+    #     <string>Configure updater service.</string>
+    # <key>Type</key>
+    #     <string>U32</string>
+    # <key>Value</key>
+    #     <string>0</string>
+    # </map>
+
     if cli_overrides is not None: 
         if 'set' in cli_overrides.keys():
             if 'UpdaterServiceSetting' in cli_overrides['set'].keys():
@@ -584,7 +581,7 @@ def update_manager(cli_overrides = None):
     # we send the override to the VVM, but retain the default_channel version for in_place computations
     try:
         if cli_overrides is not None:
-            if 'channel' in cli_overrides.keys() and cli_overrides['channel'] is not None:
+            if cli_overrides.get('channel') is not None:
                 if default_channel != cli_overrides['channel']:
                     log.info("Overriding channel '%s' with '%s' from command line" % (default_channel, cli_overrides['channel']))
                     BuildData.override('Channel', cli_overrides['channel'])
@@ -710,4 +707,7 @@ if __name__ == '__main__':
     #there is no argument parsing or other main() work to be done
     # Initialize the python logging system to SL Logging format and destination
     log = SL_Logging.getLogger('SL_Updater')
-    update_manager()
+    try:
+        update_manager()
+    except Exception:
+        log.exception("Unhandled exception")
