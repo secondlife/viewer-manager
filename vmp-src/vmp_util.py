@@ -81,13 +81,22 @@ class SL_Logging(object):
     def stream(prefix_msg=""):
         """
         Return the file object that was used to initialize the log stream.
-        This is provided for use with the subprocess_args method below; by 
-        passing this stream to the log_stream parameter of subprocess_args, 
-        any stderr output from the subprocess will be directed into the log
         """
         if prefix_msg:
             SL_Logging.logger.info(prefix_msg)
         return SL_Logging.logStream
+
+    @staticmethod
+    def stream_from_process(process, streams="stderr"):
+        """
+        Specialized wrapper for the stream method that adds a log message
+        about the process whose stream may follow in the log.
+        Return the file object that was used to initialize the log stream.
+        This is provided for use with the subprocess_args method below; by 
+        passing this stream to the log_stream parameter of subprocess_args, 
+        any stderr output from the subprocess will be directed into the log
+        """
+        return SL_Logging.stream(prefix_msg="======== running subcommand %r; any %s follows" % (process, streams))
 
     class Formatter(logging.Formatter):
         """
@@ -181,7 +190,7 @@ class Application(object):
         elif (running_on == 'Windows'):
             base_dir = os.path.join(os.path.expanduser('~'),'AppData','Roaming',app_element_nowhite)
         else:
-            sys.exit("Unsupported platform '%s'" % running_on)
+            raise ValueError("Unsupported platform '%s'" % running_on)
         return base_dir
 
     PlatformKey = {'Darwin':'mac', 'Linux':'lnx', 'Windows':'win'}
@@ -215,7 +224,8 @@ class BuildData(object):
         except Exception as err:
             # without this file, nothing is going to work,
             # so abort immediately with a simple message about the problem
-            sys.exit("Failed to read application build_data:\n%s" % err)
+            log.error("Failed to read application build_data")
+            raise
 
     @staticmethod
     def get(property,default=None):

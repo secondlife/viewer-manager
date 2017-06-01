@@ -103,7 +103,9 @@ def try_dismount(installable = None, tmpdir = None):
         #Filesystem   512-blocks   Used Available Capacity iused  ifree %iused  Mounted on
         #/dev/disk1s2    2047936 643280   1404656    32%   80408 175582   31%   /private/tmp/mnt/Second Life Installer
         command = ["df", os.path.join(tmpdir, "Second Life Installer")]
-        output = subprocess.check_output(command, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % command)))
+        output = subprocess.check_output(command,
+                                         **subprocess_args(include_stdout=False,
+                                                           log_stream=SL_Logging.stream_from_process(command)))
         log.debug("result of subprocess call to find dmg mount point: %r" % output)
         #No point in trying to umount an fs that doesn't exist. 
         #This could happen, for example, if the user manually umounts it first
@@ -115,11 +117,15 @@ def try_dismount(installable = None, tmpdir = None):
         mnt_dev = output.split('\n')[1].split()[0]
         #do the dismount
         command = ["hdiutil", "detach", "-force", mnt_dev]
-        output = subprocess.check_output(command, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % command)))
+        output = subprocess.check_output(command,
+                                         **subprocess_args(include_stdout=False,
+                                                           log_stream=SL_Logging.stream_from_process(command)))
         log.info("result of subprocess call to detach dmg mount point: %r" % output)
         log.info("hdiutil detach succeeded")
         command = ["diskutil", "umount", mnt_dev]
-        output = subprocess.check_output(command, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % command)))
+        output = subprocess.check_output(command,
+                                         **subprocess_args(include_stdout=False,
+                                                           log_stream=SL_Logging.stream_from_process(command)))
         log.info("result of subprocess call to unmount dmg mount point: %r" % output)
         log.info(output)        
     except Exception, e:
@@ -194,7 +200,9 @@ def apply_mac_update(installable = None):
     tmpdir = tempfile.mkdtemp()
     try:
         hdiutil_cmd=["hdiutil", "attach", installable, "-mountroot", tmpdir]
-        output = subprocess.check_output(hdiutil_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % hdiutil_cmd)))
+        output = subprocess.check_output(hdiutil_cmd,
+                                         **subprocess_args(include_stdout=False,
+                                                           log_stream=SL_Logging.stream_from_process(hdiutil_cmd)))
         log.info("result of subprocess call to attach dmg to mount point: %r" % output)
         log.info("hdiutil attach succeeded")
     except Exception as e:
@@ -309,9 +317,7 @@ def main():
     IN_PLACE = args.in_place
     result = apply_update(download_dir = args.download_dir, platform_key = args.platform_key)
     if not result:
-        sys.exit("Update failed")
-    else:
-        sys.exit(0)
+        SL_Logging.getLogger('apply_update').error("Update failed")
     
 if __name__ == "__main__":
     cgitb.enable(format='text')

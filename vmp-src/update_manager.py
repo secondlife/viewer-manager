@@ -201,14 +201,16 @@ def make_VVM_UUID_hash(platform_key):
         hostid_cmd=['/usr/bin/hostid']
         muuid = subprocess.check_output(hostid_cmd,
                                         **subprocess_args(include_stdout=False,
-                                                          log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % hostid_cmd)
+                                                          log_stream=SL_Logging.stream_from_process(hostid_cmd)
                                                           )).rstrip()
         log.debug("result of subprocess call to get linux MUUID: %r" % muuid)
     elif (platform_key == 'mac'):
         #this is absurdly baroque
         #/usr/sbin/system_profiler SPHardwareDataType | fgrep 'Serial' | awk '{print $NF}'
         profiler_cmd=["/usr/sbin/system_profiler", "SPHardwareDataType"]
-        muuid = subprocess.check_output(profiler_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % profiler_cmd)))
+        muuid = subprocess.check_output(profiler_cmd,
+                                        **subprocess_args(include_stdout=False,
+                                                          log_stream=SL_Logging.stream_from_process(profiler_cmd)))
         #findall[0] does the grep for the value we are looking for: "Serial Number (system): XXXXXXXX"
         #split(:)[1] gets us the XXXXXXX part
         #lstrip shaves off the leading space that was after the colon
@@ -217,7 +219,9 @@ def make_VVM_UUID_hash(platform_key):
     elif (platform_key == 'win'):
         # wmic csproduct get UUID | grep -v UUID
         wmic_cmd=['wmic','csproduct','get','UUID']
-        muuid = subprocess.check_output(wmic_cmd, **subprocess_args(include_stdout=False,log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % wmic_cmd)))
+        muuid = subprocess.check_output(wmic_cmd,
+                                        **subprocess_args(include_stdout=False,
+                                                          log_stream=SL_Logging.stream_from_process(wmic_cmd)))
         #outputs in two rows:
         #UUID
         #XXXXXXX-XXXX...
@@ -241,7 +245,9 @@ def getBitness(platform_key = None):
     else:
         #see MAINT-6832 and IQA-4130
         wmic_cmd=['wmic','path','Win32_VideoController','get','NAME']
-        wmic_graphics = subprocess.check_output(wmic_cmd, **subprocess_args(include_stdout=False, log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stderr output follows" % wmic_cmd)))
+        wmic_graphics = subprocess.check_output(wmic_cmd,
+                                                **subprocess_args(include_stdout=False,
+                                                                  log_stream=SL_Logging.stream_from_process(wmic_cmd)))
         log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
         wmic_list = re.split('\n', wmic_graphics)
         bad = False
@@ -424,8 +430,7 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                                   "--chunk_size", str(chunk_size)]
                 download_process = subprocess.Popen(downloader_cmd,
                                                     **subprocess_args(include_stdout=True,
-                                                                      log_stream=SL_Logging.stream(prefix_msg="======== running subcommand %r; any stdout and stderr follows" % downloader_cmd))
-                                                    )
+                                                                      log_stream=SL_Logging.stream_from_process(downloader_cmd, streams="stdout and stderr")))
                 log.debug("Download of new version " + version + " spawned.")
                 download_success = True
             except  Exception, e:
