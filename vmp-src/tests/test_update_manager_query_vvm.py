@@ -31,34 +31,106 @@ from llbase import llsd
 
 from nose.tools import *
 
-import os
-import re
-import shutil
-import tempfile
-import with_setup_args
 import logging
+import os
+import random
+import re
+import sys
+import threading
 import update_manager
+import with_setup_args
+
+from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from vmp_util import SL_Logging, Application, BuildData
 
 BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
 
-def test_query_vvm():
-    key = Application.platform_key()
-    parent = Application.userpath()
-    log=SL_Logging.getLogger('test_update', verbosity='DEBUG')
-    settings = update_manager.get_settings(parent)
-    launcher_path = os.path.dirname(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
+golden_string = """
+<?xml version="1.0" ?><llsd><map><key>platforms</key><map><key>win</key>
+<map><key>url</key><string>http://download.cloud.secondlife.com/Viewer_4/Second_Life_4_0_1_310054_i686_Setup.exe</string>
+<key>hash</key><string>08f65e80c15aa5dd9cacc1465840fd38</string><key>size</key><integer>52191576</integer></map><key>mac</key>
+<map><key>url</key><string>http://download.cloud.secondlife.com/Viewer_4/Second_Life_4_0_1_310054_i386.dmg</string>
+<key>hash</key><string>7f4fa9ff0ea20b0f6b4c907247d866b2</string><key>size</key><integer>78364790</integer></map><key>lnx</key>
+<map><key>url</key><string>http://download.cloud.secondlife.com/Viewer_4/Second_Life_4_0_1_310054_i686.tar.bz2</string>
+<key>hash</key><string>5c4108145f344b0cbe922182241005ed</string><key>size</key><integer>41938388</integer></map></map>
+<key>required</key><boolean>false</boolean><key>version</key><string>4.0.1.310054</string>
+<key>channel</key><string>SecondLifeRelease</string><key>more_info</key><string>https://wiki.secondlife.com/wiki/Release_Notes/Second_Life_Release/4.0.1.310054</string></map></llsd>
+"""
 
-    #for unit testing purposes, just testing a value from results.  If no update, then None and it falls through
+def test_query_vvm():
+    log=SL_Logging.getLogger('test_update_query_vvm', verbosity='DEBUG')
+    pattern = re.compile("SecondLife")
+    log.info("Starting Query VVM Test")
+    
+    #for unit testing purposes, just testing a value from results.  
     #for formal QA see:
     #   https://docs.google.com/document/d/1WNjOPdKlq0j_7s7gdNe_3QlyGnQDa3bFNvtyVM6Hx8M/edit
     #   https://wiki.lindenlab.com/wiki/Login_Test#Test_Viewer_Updater
-    #for test plans on all cases, as it requires setting up a fake VVM service
+    #for test plans on all cases, as it requires setting up a truly functional fake VVM service
+    #pick a random, unused port to serve on
+    found_port = False
+    httpd = None
+    results = None
+    
+    while not found_port:
+        port = random.randint(1025,65535) 
+        log.info("trying a port for server: " + str(port))
+        try:
+            httpd = Server(('', port), TestHTTPRequestHandler)    
+        except:
+            pass
+        finally:
+            if httpd is not None:
+                found_port = True
+                log.info("httpd: %r" % httpd)
+                log.info("found a port for server: " + str(port))
+            else:
+                log.info("httpd is None")
+    
+    matt = threading.Thread(name='vvm_daemon', args=(httpd,), target=vvm_daemon)
+    matt.setDaemon(True)    
+    matt.start()
 
-    results = update_manager.query_vvm(platform_key=key, settings=None)
+    results = update_manager.query_vvm(platform_key=Application.platform_key(), settings=None, UpdaterServiceURL='http://localhost:'+str(port)+'/update')
 
-    if results:
-        pattern = re.compile('Second Life')
-        assert pattern.search(results['channel']), "Bad results returned %s" % str(results)
-        
-    assert True
+    assert results
+    assert pattern.search(results['channel']), "Bad results returned %s" % str(results)
+    
+def vvm_daemon(webserver):
+    log=SL_Logging.getLogger('vvm_daemon', verbosity='DEBUG')
+    log.info("Daemon webserver starting")
+    webserver.serve_forever()
+    log.info("Daemon webserver exiting")
+
+class TestHTTPRequestHandler(BaseHTTPRequestHandler):
+    log=SL_Logging.getLogger('TestHTTPRequestHandler', verbosity='DEBUG')
+    def do_GET(self, withdata=True):
+        self.log.info("Answering URI request %r "% self.path)
+        try:
+            response = golden_string
+            self.send_response(200)
+            self.send_header("Content-type", "application/llsd+xml")
+            self.send_header("Content-Length", str(len(response)))
+            self.send_header("X-LL-Special", "Mememememe");
+            self.end_headers()
+            if withdata:
+                self.wfile.write(response)            
+        except Exception, e:
+            print >> sys.stderr, "Exception during GET (ignoring): %s" % str(e)    
+
+#ripped from llcorehttp tests
+class Server(HTTPServer):
+    # This pernicious flag is on by default in HTTPServer. But proper
+    # operation of freeport() absolutely depends on it being off.
+    allow_reuse_address = False
+
+    # Override of BaseServer.handle_error().  Not too interested
+    # in errors and the default handler emits a scary traceback
+    # to stderr which annoys some.  Disable this override to get
+    # default behavior which *shouldn't* cause the program to return
+    # a failure status.
+    def handle_error(self, request, client_address):
+        print '-'*40
+        print 'Ignoring exception during processing of request from',
+        print client_address
+        print '-'*40

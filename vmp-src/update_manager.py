@@ -354,27 +354,38 @@ def query_vvm(platform_key = None, settings = None,
         if res.status == 404: # 404 is how the Viewer Version Manager indicates that the channel is unmanaged
             log.info("Update service returned 'not found'; normally this means the channel is unmanaged (and allowed)")
         else:
-            log.warning("Update service %s query %s failed: %s" % (UpdaterServiceURL, update_urlpath, res))
-    #result_data is a nested XML structure, we pull out the right element of the nesting and promote to top level
-    #None is an acceptable result, meaning VVM doesn't know about this version
+            log.warning("Update service %s/%s failed: %s" % (UpdaterServiceURL, update_urlpath, res))
+    #keep a copy for logging later
+    raw_result_data = result_data
+            
+    #As of VVM v1.2, the result_data object is now a bit more complicated.  The general information
+    #such as required, channel and so on are still at the top level, but url, hash and size are now returned 
+    #for all platforms at once, keyed by platform key.  So, the mac download url is result_data['platforms']['mac']['url']
+    #and similarly for the other values and platforms.  Platform key is still one of {lnx,mac.win,win32}
+    #Before this, the result_data had these three at the top level, which is what the caller expects.  We
+    #continue this contract by selecting the right values here where we know the correct bitness and this means
+    #the rest of the code does not need to be changed.
     if result_data is not None:
-        if VMM_platform in result_data['platforms']:
-            all_version_keys = set(['url', 'hash', 'size'])
-            received_version_keys = set(result_data['platforms'][VMM_platform].iterkeys())
-            #order independent test to make sure all keys were received
-            if all_version_keys == received_version_keys: 
-                result_data.update(result_data['platforms'][VMM_platform])
-    #failed in the above or the VVM doesn't know about this version
-    if result_data is None or 'url' not in result_data:
-        if VMM_platform == 'win32' and summary_dict['platform'] == 'win':
-            log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % result_data)
-            after_frame("Failed to obtain a 32 bit viewer for your system.  Please download a viewer from get.secondlife.com")
-            #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
-            #better to die gracefully than horribly
-            sys.exit(1)
-        else:
-            #either it is no update or pretend like it is
+        try:
+            result_data.update(result_data['platforms'][VMM_platform]) 
+        except KeyError as ke:
+            #this means we got a malformed response, for example, that result_data[<some key>] isn't in the results.
+            log.error("Received malformed results from vvm: %r" % result_data)
             result_data = None
+        else:
+            #get() sets missing key results to None.  If we are missing any data, set the whole thing to None
+            if not result_data.get('hash') or not result_data.get('size') or not result_data.get('url'):
+                result_data = None
+                
+        #failed in the above or the VVM doesn't know about this version
+        if result_data is None:
+            if VMM_platform == 'win32' and summary_dict['platform'] == 'win':
+                log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % raw_result_data)
+                after_frame("Failed to obtain a 32 bit viewer for your system.  Please download a viewer from get.secondlife.com")
+                #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
+                #better to die gracefully than horribly
+                sys.exit(1) 
+                
     return result_data
 
 def download(url = None, version = None, download_dir = None, size = 0, hash = None, background = False, chunk_size = None):
