@@ -59,7 +59,8 @@ golden_string = """
 
 def test_query_vvm():
     log=SL_Logging.getLogger('test_update_query_vvm', verbosity='DEBUG')
-    pattern = re.compile("SecondLife")
+    channel_pattern = re.compile("SecondLife")
+    url_pattern = re.compile("Second_Life_4_0_1_310054")
     log.info("Starting Query VVM Test")
     
     #for unit testing purposes, just testing a value from results.  
@@ -94,7 +95,8 @@ def test_query_vvm():
     results = update_manager.query_vvm(platform_key=Application.platform_key(), settings=None, UpdaterServiceURL='http://localhost:'+str(port)+'/update')
 
     assert results
-    assert pattern.search(results['channel']), "Bad results returned %s" % str(results)
+    assert channel_pattern.search(results['channel']), "Bad results returned %s" % str(results)
+    assert url_pattern.search(results['url']), "Bad results returned %s" % str(results)
     
 def vvm_daemon(webserver):
     log=SL_Logging.getLogger('vvm_daemon', verbosity='DEBUG')
