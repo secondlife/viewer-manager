@@ -341,12 +341,22 @@ def query_vvm(platform_key = None, settings = None,
         except Exception:
             #normal case, no testing key
             test_ok = 'testok'
+            
+    #get cert file for VVM communications
+    cert_path = os.getcwd()
+    #And then there's mac...
+    if platform_key == 'mac':
+        cert_path = os.path.join(os.path.dirname(os.path.dirname(cert_path)), "Resources")
+    cert_path = os.path.join(cert_path, 'ca-bundle.crt')
+    
     #channelname is a list because although it is only one string, it is a kind of argument and viewer args can take multiple keywords.
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
              (str(channelname), version, VMM_platform, platform_version, test_ok, UUID))
     update_urlpath =  urllib.quote('/'.join(['v1.2', str(channelname), version, VMM_platform, platform_version, test_ok, UUID]))
     log.debug("Sending query to VVM: service %s query %s" % (UpdaterServiceURL, update_urlpath))
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
+    VVMService.set_cert_authorities(cert_path)
+    
     try:
         result_data = VVMService.get(update_urlpath)
         log.info("received result from VVM: %r" % result_data)
