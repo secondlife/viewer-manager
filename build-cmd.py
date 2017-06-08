@@ -43,6 +43,8 @@ except Exception as e:
     print "Python at %s could not find llbase" % sys.executable
     repr(e)
     sys.exit(1)
+    
+print "Found llbase at: %r" % llbase.__file__
 
 cgitb.enable(format='text')
 darwin = re.compile('darwin')
