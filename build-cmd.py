@@ -39,6 +39,12 @@ import trace
 script_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
 print "script dir: %r" % script_dir
 
+#temporary exploration, to be removed
+files = [os.path.join(dirpath, filename)
+    for (dirpath, dirs, files) in os.walk(os.path.dirname(script_dir))
+    for filename in (dirs + files)]
+print files
+
 sys.path.insert(0,os.path.join(script_dir, "packages/lib/python"))
 print "sys.path: %r" % sys.path
 #autobuild itself needs llbase, so if python cannot find llbase,
