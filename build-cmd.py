@@ -122,6 +122,7 @@ def main():
         nose_env['LIB'] = ""
         nose_env['WINDOWSSDK_EXECUTABLEPATH_X64'] = ''
         nose_env['PATH'] = os.path.dirname(sys.executable)
+        nose_env['PYTHONPATH'] = llbasedir
 
     os.chdir(iter_paths['vmp']['src'])
     try:
