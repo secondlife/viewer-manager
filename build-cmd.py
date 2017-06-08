@@ -38,7 +38,7 @@ import trace
 #so we find the version of llbase that we autobuild depend on, not the system one
 sys.path.insert(0, "packages/lib/python")
 print "sys.path: %r" % sys.path
-print "script dir: %r" % os.path.dirname(sys.argv[0])
+print "script dir: %r" % os.path.abspath(os.path.dirname(sys.argv[0]))
 
 #autobuild itself needs llbase, so if python cannot find llbase,
 #we are in a very weird state.
