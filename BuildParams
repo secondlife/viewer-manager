@@ -4,9 +4,5 @@
 #  https://wiki.secondlife.com/wiki/Automated_Build_System
 public_build = true
  
-#make autobuild verbose
-autobuild_install_parameters="--verbose"
-
-
 #nothing to configure, either
 build_autobuild_configure = false

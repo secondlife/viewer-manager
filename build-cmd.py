@@ -109,11 +109,15 @@ def main():
         nosetest_cmd = '/usr/bin/nosetests'
     else:
         nosetest_cmd = r"C:\Python27\Scripts\nosetests"
+        
+    nose_env = os.environ.copy()
+    nose_env['PYTHONPATH'] = ':'.join(sys.path)
+    print "env ppath: %r" % nose_env['PYTHONPATH']
 
     os.chdir(iter_paths['vmp']['src'])
     try:
         print "About to call %s on %s from %s" % (nosetest_cmd, tests, iter_paths['vmp']['src'])
-        output = repr(subprocess.check_output([nosetest_cmd, tests], stderr=subprocess.STDOUT))
+        output = repr(subprocess.check_output([nosetest_cmd, tests], stderr=subprocess.STDOUT, env=nose_env))
     except Exception as e:
         print repr(e)
         try:
