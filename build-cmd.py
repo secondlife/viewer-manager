@@ -83,6 +83,7 @@ def main():
     platform = getPlatform()
 
     # various places things go and come from.  
+    print "sys.argv: %r" % sys.argv
     top = os.path.dirname(os.path.realpath(sys.argv[0]))
     stage = os.path.join(top, 'stage')
     build = os.path.join(top, 'build')
@@ -90,6 +91,7 @@ def main():
     iter_paths = {'vmp': {'src': os.path.join(top, 'vmp-src'), 'dst': os.path.join(stage, "VMP")}, 
                   'llb': {'src': os.path.dirname(llbase.__file__), 'dst': os.path.join(os.path.join(stage, "VMP"), 'llbase')}
     }
+    print "iterpaths: %r" % iter_paths
     tests = os.path.join(iter_paths['vmp']['src'],'tests')
     
     #We will ship a 32 bit VMP with 64 bit viewers
@@ -112,7 +114,7 @@ def main():
         
     nose_env = os.environ.copy()
     nose_env['PYTHONPATH'] = ':'.join(sys.path)
-    print "env ppath: %r" % nose_env['PYTHONPATH']
+    
 
     os.chdir(iter_paths['vmp']['src'])
     try:
