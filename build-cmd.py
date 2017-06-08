@@ -35,6 +35,9 @@ import subprocess
 import sys
 import trace
 
+#so we find the version of llbase that we autobuild depend on, not the system one
+sys.path.insert(0, "packages/lib/python")
+
 #autobuild itself needs llbase, so if python cannot find llbase,
 #we are in a very weird state.
 try:
