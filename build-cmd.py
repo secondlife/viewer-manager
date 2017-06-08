@@ -121,7 +121,7 @@ def main():
     if platform == 'win32':
         nose_env['LIB'] = ""
         nose_env['WINDOWSSDK_EXECUTABLEPATH_X64'] = ''
-        
+        nose_env['PATH'] = os.path.dirname(sys.executable)
 
     os.chdir(iter_paths['vmp']['src'])
     try:
