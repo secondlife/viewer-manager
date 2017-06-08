@@ -44,7 +44,8 @@ except Exception as e:
     repr(e)
     sys.exit(1)
     
-print "Found llbase at: %r" % llbase.__file__
+llbasedir = os.path.dirname(os.path.abspath(llbase.__file__))
+print "Found llbase at: %r" % llbasedir
 
 cgitb.enable(format='text')
 darwin = re.compile('darwin')
@@ -89,7 +90,7 @@ def main():
     build = os.path.join(top, 'build')
     #if we decide we need to copy yet another directory tree, just add the source and dest to this dict
     iter_paths = {'vmp': {'src': os.path.join(top, 'vmp-src'), 'dst': os.path.join(stage, "VMP")}, 
-                  'llb': {'src': os.path.dirname(llbase.__file__), 'dst': os.path.join(os.path.join(stage, "VMP"), 'llbase')}
+                  'llb': {'src': llbasedir, 'dst': os.path.join(os.path.join(stage, "VMP"), 'llbase')}
     }
     print "iterpaths: %r" % iter_paths
     tests = os.path.join(iter_paths['vmp']['src'],'tests')
@@ -114,7 +115,6 @@ def main():
         
     nose_env = os.environ.copy()
     nose_env['PYTHONPATH'] = ':'.join(sys.path)
-    
 
     os.chdir(iter_paths['vmp']['src'])
     try:
