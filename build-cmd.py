@@ -119,6 +119,7 @@ def main():
     os.chdir(iter_paths['vmp']['src'])
     try:
         print "About to call %s on %s from %s" % (nosetest_cmd, tests, iter_paths['vmp']['src'])
+        print "nose environment: %r" % nose_env
         output = repr(subprocess.check_output([nosetest_cmd, tests], stderr=subprocess.STDOUT, env=nose_env))
     except Exception as e:
         print repr(e)
