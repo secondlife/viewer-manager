@@ -115,6 +115,13 @@ def main():
         
     nose_env = os.environ.copy()
     nose_env['PYTHONPATH'] = ':'.join(sys.path)
+    #stupid windows limit:
+    # TypeError: encoded string too long (547, maximum length 519)
+    #so nuke a few env vars we aren't using for this
+    if platform == 'win32':
+        nose_env['LIB'] = ""
+        nose_env['WINDOWSSDK_EXECUTABLEPATH_X64'] = ''
+        
 
     os.chdir(iter_paths['vmp']['src'])
     try:
