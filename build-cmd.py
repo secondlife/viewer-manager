@@ -36,16 +36,17 @@ import sys
 import trace
 
 #so we find the version of llbase that we autobuild depend on, not the system one
-script_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
-print "script dir: %r" % script_dir
+shared_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(sys.argv[0])), "shared"))
+print "script dir: %r" % shared_dir
 
+"""
 #temporary exploration, to be removed
 files = [os.path.join(dirpath, filename)
-    for (dirpath, dirs, files) in os.walk(os.path.dirname(script_dir))
+    for (dirpath, dirs, files) in os.walk(os.path.dirname(shared_dir))
     for filename in (dirs + files)]
-print files
+print files"""
 
-sys.path.insert(0,os.path.join(script_dir, "packages/lib/python"))
+sys.path.insert(0,os.path.join(shared_dir, "packages/lib/python2.7/site-packages"))
 print "sys.path: %r" % sys.path
 #autobuild itself needs llbase, so if python cannot find llbase,
 #we are in a very weird state.

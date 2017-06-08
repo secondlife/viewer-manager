@@ -4,8 +4,5 @@
 #  https://wiki.secondlife.com/wiki/Automated_Build_System
 public_build = true
  
-#nothing to install for VMP
-build_autobuild_install = false
-
 #nothing to configure, either
 build_autobuild_configure = false
