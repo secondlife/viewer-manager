@@ -280,6 +280,7 @@ def query_vvm(platform_key = None, settings = None,
 
     VMM_platform = platform_key
     log=SL_Logging.getLogger('query_vvm')
+    log.error("llrest location: %r" % llrest.__file__)
     if not UpdaterServiceURL:
         UpdaterServiceURL=os.getenv('SL_UPDATE_SERVICE',BuildData.get('Update Service','https://update.secondlife.com/update'))
 
@@ -754,7 +755,6 @@ if __name__ == '__main__':
     #there is no argument parsing or other main() work to be done
     # Initialize the python logging system to SL Logging format and destination
     log = SL_Logging.getLogger('SL_Updater')
-    log.error("llrest location: %r" % llrest.__file__)
     try:
         update_manager()
     except Exception:
