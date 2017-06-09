@@ -32,7 +32,6 @@ $/LicenseInfo$
 from copy import deepcopy
 from datetime import datetime
 from llbase import llrest
-print "llrest location: %r" % llrest.__file__
 from llbase.llrest import RESTError
 from llbase import llsd    
 from sets import Set
@@ -755,6 +754,7 @@ if __name__ == '__main__':
     #there is no argument parsing or other main() work to be done
     # Initialize the python logging system to SL Logging format and destination
     log = SL_Logging.getLogger('SL_Updater')
+    log.error("llrest location: %r" % llrest.__file__)
     try:
         update_manager()
     except Exception:
