@@ -32,6 +32,7 @@ $/LicenseInfo$
 from copy import deepcopy
 from datetime import datetime
 from llbase import llrest
+print "llrest location: %r" % llrest.__file__
 from llbase.llrest import RESTError
 from llbase import llsd    
 from sets import Set
