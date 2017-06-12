@@ -71,7 +71,8 @@ def test_query_vvm():
             'stage', 'packages', 'lib', 'python')
         os.environ['PYTHONPATH'] = local_llbase
         sys.path.insert(0, local_llbase)
-        
+        log.info("sys path: " + repr(sys.path) + " llbase: " + repr(os.listdir(
+            local_llbase)))
     from llbase import llsd
     from llbase import llrest    
     import update_manager    

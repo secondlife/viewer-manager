@@ -100,10 +100,8 @@ def main():
         print >>sys.stderr, 'No valid platform found'
         sys.exit(1)         
     if platform == 'win64':
-        platform == 'win32'
-
-        #print >>sys.stderr, 'The Windows VMP must be built on a 32-bit python Windows host'
-        #sys.exit(1)    
+        print >>sys.stderr, 'The Windows VMP must be built on a 32-bit python Windows host'
+        sys.exit(1)    
     
     #run nosetests
     if 'nosetests' in os.environ:
