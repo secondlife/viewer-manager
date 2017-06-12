@@ -36,14 +36,14 @@ import tempfile
 import update_manager
 import with_setup_args
 import logging
-from vmp_util import SL_Logging
+from vmp_util import SL_Logging, Application, BuildData
 
 data_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data')
+BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
 log=SL_Logging.getLogger('test_settings', verbosity='DEBUG')
 
 def get_settings_setup():
     tmpdir1 = tempfile.mkdtemp()
-    
     return [tmpdir1], {}
 
 def get_settings_teardown(tmpdir1):

@@ -30,18 +30,31 @@ $/LicenseInfo$
 
 from nose.tools import *
 
-import download_update
 import fnmatch
 import os
 import os.path
 import platform
+import re
 import shutil
+import sys
 import tempfile
-import update_manager
 import logging
 from vmp_util import SL_Logging, Application, BuildData
 from argparse import Namespace
 import with_setup_args
+
+#cygwin artifact: the installed llbase is in a cygwin directory but we
+#use system python and it doesn't know from cygpaths, so the import misses
+#and we get the system llbase instead.
+windows = re.compile('win')
+if windows.search(sys.platform.lower()):                     
+    local_llbase = os.path.join(os.path.dirname(os.path.abspath(os.getcwd())), 
+        'stage', 'packages', 'lib', 'python')
+    os.environ['PYTHONPATH'] = local_llbase
+    sys.path.insert(0, local_llbase)
+from llbase import llsd
+from llbase import llrest    
+import download_update
 
 #Nota Bene: testing Tkinter UI elements should be done by a QA engineer as we don't have test infrastructure
 #for graphical elements
@@ -56,14 +69,14 @@ def download_update_setup():
     BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
     # must override BuildData above before initializing log
     log=SL_Logging.getLogger('test_download', verbosity='DEBUG')
-    tmpdir1 = tempfile.mkdtemp(prefix = 'test1')
+    tmpdir1 = tempfile.mkdtemp(prefix = 'test1')   
     return [tmpdir1], {}
 
 def download_update_teardown(tmpdir1):
     shutil.rmtree(tmpdir1, ignore_errors = True)
 
 @with_setup_args.with_setup_args(download_update_setup, download_update_teardown)
-def test_download_update_null_url(tmpdir1): 
+def test_download_update_null_url(tmpdir1):     
     try:
         download_update.download_update(url=None, download_dir=tmpdir1, size=None, progressbar=False, chunk_size=1024)
     #this is the expected error when d_u tries to apply split() to None
