@@ -20,9 +20,9 @@
             <key>archive</key>
             <map>
               <key>hash</key>
-              <string>a6ddfdfbe352f975287efeb635207598</string>
+              <string>e18eeb0691af053b83bd46b76c6ee86a</string>
               <key>url</key>
-              <string>http://automated-builds-secondlife-com.s3.amazonaws.com/ct2/6216/21713/llbase-0.9.3.506203-darwin64-506203.tar.bz2</string>
+              <string>http://automated-builds-secondlife-com.s3.amazonaws.com/ct2/6299/21982/llbase-0.9.3.506286-darwin64-506286.tar.bz2</string>
             </map>
             <key>name</key>
             <string>darwin64</string>
@@ -32,9 +32,9 @@
             <key>archive</key>
             <map>
               <key>hash</key>
-              <string>03c969742847512cbeb53744fbb44b4e</string>
+              <string>84f5808ed9772da32c3866cee84e8ceb</string>
               <key>url</key>
-              <string>http://automated-builds-secondlife-com.s3.amazonaws.com/ct2/6215/21711/llbase-0.9.3.506203-linux64-506203.tar.bz2</string>
+              <string>http://automated-builds-secondlife-com.s3.amazonaws.com/ct2/6297/21970/llbase-0.9.3.506286-linux64-506286.tar.bz2</string>
             </map>
             <key>name</key>
             <string>linux64</string>
@@ -44,16 +44,16 @@
             <key>archive</key>
             <map>
               <key>hash</key>
-              <string>8f56ceb47a84e4b3cd1014936e0cd639</string>
+              <string>e6865670f9bca1c82fb8b91db3ea515c</string>
               <key>url</key>
-              <string>http://automated-builds-secondlife-com.s3.amazonaws.com/ct2/6218/21727/llbase-0.9.3.506203-windows-506203.tar.bz2</string>
+              <string>http://automated-builds-secondlife-com.s3.amazonaws.com/ct2/6301/21994/llbase-0.9.3.506286-windows-506286.tar.bz2</string>
             </map>
             <key>name</key>
             <string>windows</string>
           </map>
         </map>
         <key>version</key>
-        <string>0.9.3.506203</string>
+        <string>0.9.3.506286</string>
       </map>
     </map>
     <key>package_description</key>
