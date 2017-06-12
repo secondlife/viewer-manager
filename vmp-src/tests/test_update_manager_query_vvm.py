@@ -71,10 +71,11 @@ def test_query_vvm():
             'stage', 'packages', 'lib', 'python')
         os.environ['PYTHONPATH'] = local_llbase
         sys.path.insert(0, local_llbase)
-        log.info("sys path: " + repr(sys.path) + " llbase: " + repr(os.listdir(
+        log.info("sys path: " + repr(sys.path) + "\nllbase: " + repr(os.listdir(
             local_llbase)))
     from llbase import llsd
     from llbase import llrest    
+    log.error("llrest location in unit test: %r" % llrest.__file__)
     import update_manager    
     
     #for unit testing purposes, just testing a value from results.  

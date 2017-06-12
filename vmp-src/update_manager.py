@@ -290,7 +290,7 @@ def query_vvm(platform_key = None, settings = None,
 
     VMM_platform = platform_key
     log=SL_Logging.getLogger('query_vvm')
-    log.error("llrest location: %r" % llrest.__file__)
+    log.error("llrest location in update manager: %r" % llrest.__file__)
     if not UpdaterServiceURL:
         UpdaterServiceURL=os.getenv('SL_UPDATE_SERVICE',BuildData.get('Update Service','https://update.secondlife.com/update'))
 
