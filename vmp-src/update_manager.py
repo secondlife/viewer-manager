@@ -30,19 +30,7 @@ $/LicenseInfo$
 """
 
 from copy import deepcopy
-from datetime import datetime
-#cygwin artifact: the installed llbase is in a cygwin directory but we
-#use system python and it doesn't know from cygpaths, so the import misses
-#and we get the system llbase instead. This is only needed for unit tests,
-#not the compiled executable.
-windows = re.compile('win')
-if windows.search(sys.platform.lower()):                     
-    local_llbase = os.path.join(os.getcwd(), 'llbase')
-    os.environ['PYTHONPATH'] = local_llbase
-    sys.path.insert(0, local_llbase)
-    from llbase import llrest
-from llbase.llrest import RESTError
-from llbase import llsd    
+from datetime import datetime   
 from sets import Set
 from vmp_util import Application, BuildData, SL_Logging, subprocess_args
 
@@ -56,7 +44,6 @@ import json
 import os
 import os.path
 import platform
-import re
 import shutil
 import subprocess
 import sys
@@ -64,6 +51,19 @@ import tempfile
 import thread
 import time
 import urllib
+
+#cygwin artifact: the installed llbase is in a cygwin directory but we
+#use system python and it doesn't know from cygpaths, so the import misses
+#and we get the system llbase instead. This is only needed for unit tests,
+#not the compiled executable.
+windows = re.compile('win')
+if windows.search(sys.platform.lower()):                     
+    local_llbase = os.path.join(os.getcwd(), 'llbase')
+    os.environ['PYTHONPATH'] = local_llbase
+    sys.path.insert(0, local_llbase)
+    from llbase import llrest
+from llbase.llrest import RESTError
+from llbase import llsd
 
 #module global
 download_process = None
