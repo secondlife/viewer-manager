@@ -27,17 +27,16 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
-from llbase import llsd
-
 from nose.tools import *
 
 import logging
 import os
+import os.path
+import platform
 import random
 import re
 import sys
 import threading
-import update_manager
 import with_setup_args
 
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
@@ -62,6 +61,20 @@ def test_query_vvm():
     channel_pattern = re.compile("SecondLife")
     url_pattern = re.compile("Second_Life_4_0_1_310054")
     log.info("Starting Query VVM Test")
+    
+    #cygwin artifact: the installed llbase is in a cygwin directory but we
+    #use system python and it doesn't know from cygpaths, so the import misses
+    #and we get the system llbase instead.
+    windows = re.compile('win')
+    if windows.search(sys.platform.lower()):                     
+        local_llbase = os.path.join(os.path.dirname(os.path.abspath(os.getcwd())), 
+            'stage', 'packages', 'lib', 'python')
+        os.environ['PYTHONPATH'] = local_llbase
+        sys.path.insert(0, local_llbase)
+        
+    from llbase import llsd
+    from llbase import llrest    
+    import update_manager    
     
     #for unit testing purposes, just testing a value from results.  
     #for formal QA see:

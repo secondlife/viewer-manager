@@ -100,8 +100,10 @@ def main():
         print >>sys.stderr, 'No valid platform found'
         sys.exit(1)         
     if platform == 'win64':
-        print >>sys.stderr, 'The Windows VMP must be built on a 32-bit python Windows host'
-        sys.exit(1)    
+        platform == 'win32'
+
+        #print >>sys.stderr, 'The Windows VMP must be built on a 32-bit python Windows host'
+        #sys.exit(1)    
     
     #run nosetests
     if 'nosetests' in os.environ:
@@ -127,7 +129,7 @@ def main():
     os.chdir(iter_paths['vmp']['src'])
     try:
         print "About to call %s on %s from %s" % (nosetest_cmd, tests, iter_paths['vmp']['src'])
-        print "nose environment: %r" % nose_env
+        #print "nose environment: %r" % nose_env
         output = repr(subprocess.check_output([nosetest_cmd, tests], stderr=subprocess.STDOUT, env=nose_env))
     except Exception as e:
         print repr(e)
