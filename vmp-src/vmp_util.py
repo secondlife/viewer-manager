@@ -207,7 +207,7 @@ class BuildData(object):
     package_data=dict()
 
     @staticmethod
-    def read(build_data_file=None):
+    def read(build_data_file=None):      
         #get the contents of the build_data.json file.
         #for linux and windows this file is in the same directory as the script
         #for mac, the script is in ../Contents/MacOS/ and the file is in ../Contents/Resources/
@@ -217,6 +217,7 @@ class BuildData(object):
             else:
                 build_data_dir = os.path.abspath(os.path.dirname(str(sys.executable)))
             build_data_file = os.path.join(build_data_dir,"build_data.json")
+            raise 
 
         try:
             with open(build_data_file) as build_data_handle:
@@ -224,7 +225,7 @@ class BuildData(object):
         except Exception as err:
             # without this file, nothing is going to work,
             # so abort immediately with a simple message about the problem
-            log.error("Failed to read application build_data")
+            log.error("Failed to read application build_data: %r" % build_data_file)
             raise
 
     @staticmethod
