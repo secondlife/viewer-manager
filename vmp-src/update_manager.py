@@ -43,6 +43,7 @@ import InstallerUserMessage
 import json
 import os
 import os.path
+import re
 import platform
 import shutil
 import subprocess
