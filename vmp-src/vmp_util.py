@@ -260,8 +260,8 @@ class BuildData(object):
 #   subprocess.check_output(['program_to_run', 'arg_1'],
 #                           **subprocess_args(False))
 def subprocess_args(include_stdout=True, log_stream=None):
-    # The following is true only on Windows.
-    if hasattr(subprocess, 'STARTUPINFO'):
+
+    try:
         # On Windows, subprocess calls will pop up a command window by default
         # when run from Pyinstaller with the ``--noconsole`` option. Avoid this
         # distraction.
@@ -270,7 +270,7 @@ def subprocess_args(include_stdout=True, log_stream=None):
         # Windows doesn't search the path by default. Pass it an environment so
         # it will.
         env = os.environ
-    else:
+    except AttributeError: # normal when not on Windows
         si = None
         env = None
 
