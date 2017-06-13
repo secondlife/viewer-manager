@@ -51,6 +51,18 @@
             <key>name</key>
             <string>windows</string>
           </map>
+          <key>windows64</key>
+          <map>
+            <key>archive</key>
+            <map>
+              <key>hash</key>
+              <string>15be196632bf4b96955106c9a2dfd7a2</string>
+              <key>url</key>
+              <string>http://automated-builds-secondlife-com.s3.amazonaws.com/ct2/6300/21988/llbase-0.9.3.506286-windows64-506286.tar.bz2</string>
+            </map>
+            <key>name</key>
+            <string>windows64</string>
+          </map>
         </map>
         <key>version</key>
         <string>0.9.3.506286</string>
