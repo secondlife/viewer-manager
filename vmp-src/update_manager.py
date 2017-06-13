@@ -34,7 +34,7 @@ from datetime import datetime
 from sets import Set
 from vmp_util import Application, BuildData, SL_Logging, subprocess_args
 from llbase import llsd
-from llbase import llrest 
+from llbase import llrest
 
 import apply_update
 import download_update
@@ -353,14 +353,14 @@ def query_vvm(platform_key = None, settings = None,
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
              (str(channelname), version, VMM_platform, platform_version, test_ok, UUID))
     update_urlpath =  urllib.quote('/'.join(['v1.2', str(channelname), version, VMM_platform, platform_version, test_ok, UUID]))
-    log.debug("Sending query to VVM: service %s query %s" % (UpdaterServiceURL, update_urlpath))
+    log.debug("Sending query to VVM: query %s/%s" % (UpdaterServiceURL, update_urlpath))
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
     VVMService.set_cert_authorities(cert_path)
     
     try:
         result_data = VVMService.get(update_urlpath)
         log.info("received result from VVM: %r" % result_data)
-    except RESTError as res:
+    except llrest.RESTError as res:
         if res.status == 404: # 404 is how the Viewer Version Manager indicates that the channel is unmanaged
             log.info("Update service returned 'not found'; normally this means the channel is unmanaged (and allowed)")
         else:

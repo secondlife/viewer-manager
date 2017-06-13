@@ -217,7 +217,6 @@ class BuildData(object):
             else:
                 build_data_dir = os.path.abspath(os.path.dirname(str(sys.executable)))
             build_data_file = os.path.join(build_data_dir,"build_data.json")
-            raise 
 
         try:
             with open(build_data_file) as build_data_handle:
