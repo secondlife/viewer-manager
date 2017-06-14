@@ -53,7 +53,12 @@ import sys
 import tempfile
 import thread
 import time
+#for the quote method
 import urllib
+#for the disable_warnings method 
+import urllib3
+import warnings
+
 
 #module global
 download_process = None
@@ -346,8 +351,12 @@ def query_vvm(platform_key = None, settings = None,
     cert_path = os.getcwd()
     #And then there's mac...
     if platform_key == 'mac':
-        cert_path = os.path.join(os.path.dirname(os.path.dirname(cert_path)), "Resources")
-    cert_path = os.path.join(cert_path, 'ca-bundle.crt')
+        cert_path = os.path.join(os.path.dirname(os.path.dirname(cert_path)), "Contents/Resources")
+    cert_path = os.path.abspath(os.path.join(cert_path, 'ca-bundle.crt'))
+    log.debug("cert_path: %r exists? %r" % (cert_path, os.path.exists(cert_path)))
+    #suppress warning we get in dev env for altname cert 
+    if UpdaterServiceURL != 'https://update.secondlife.com/update':
+        warnings.simplefilter('ignore', urllib3.exceptions.SecurityWarning)
     
     #channelname is a list because although it is only one string, it is a kind of argument and viewer args can take multiple keywords.
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
