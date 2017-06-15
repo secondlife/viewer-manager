@@ -385,6 +385,9 @@ def query_vvm(platform_key = None, settings = None,
     #continue this contract by selecting the right values here where we know the correct bitness and this means
     #the rest of the code does not need to be changed.
     if result_data is not None:
+        #no update or VVM doesn't know about this version.
+        if result_data['version'] == platform_version:
+            return None
         try:
             result_data.update(result_data['platforms'][VMM_platform]) 
         except KeyError as ke:
@@ -395,15 +398,14 @@ def query_vvm(platform_key = None, settings = None,
             #get() sets missing key results to None.  If we are missing any data, set the whole thing to None
             if not result_data.get('hash') or not result_data.get('size') or not result_data.get('url'):
                 result_data = None
-                
-        #failed in the above or the VVM doesn't know about this version
-        if result_data is None:
-            if VMM_platform == 'win32' and summary_dict['platform'] == 'win':
-                log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % raw_result_data)
-                after_frame("Failed to obtain a 32 bit viewer for your system.  Please download a viewer from get.secondlife.com")
-                #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
-                #better to die gracefully than horribly
-                sys.exit(1) 
+    #failed in the above
+    else:
+        if VMM_platform == 'win32' and summary_dict['platform'] == 'win':
+            log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % raw_result_data)
+            after_frame("Failed to obtain a 32 bit viewer for your system.  Please download a viewer from get.secondlife.com")
+            #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
+            #better to die gracefully than horribly
+            sys.exit(1) 
                 
     return result_data
 
