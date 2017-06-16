@@ -45,8 +45,6 @@ import requests
 import sys
 #silences InsecurePlatformWarning
 # http://stackoverflow.com/questions/29099404/ssl-insecureplatform-error-when-using-requests-package 
-import requests.packages.urllib3
-requests.packages.urllib3.disable_warnings()
 import tempfile
 import threading
 import update_manager
