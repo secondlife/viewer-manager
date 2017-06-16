@@ -348,12 +348,11 @@ def query_vvm(platform_key = None, settings = None,
             test_ok = 'testok'
             
     #get cert file for VVM communications
-    cert_path = os.getcwd()
-    #And then there's mac...
-    if platform_key == 'mac':
-        cert_path = os.path.join(os.path.dirname(os.path.dirname(cert_path)), "Contents/Resources")
-    cert_path = os.path.abspath(os.path.join(cert_path, 'ca-bundle.crt'))
-    log.debug("cert_path: %r exists? %r" % (cert_path, os.path.exists(cert_path)))
+    app_data_path = Application.app_data_path()
+    cert_path = os.path.join(app_data_path, 'ca-bundle.crt')
+    if not os.path.exists(cert_path):
+        log.error("No certificate bundle found at '%s'", cert_path)
+
     #suppress warning we get in dev env for altname cert 
     if UpdaterServiceURL != 'https://update.secondlife.com/update':
         warnings.simplefilter('ignore', urllib3.exceptions.SecurityWarning)

@@ -174,6 +174,14 @@ class Application(object):
         return executable_name
 
     @staticmethod
+    def app_data_path():
+        if (platform.system() == 'Darwin'):
+            app_data_dir = os.path.join(os.path.dirname(__file__), "../Resources")
+        else:
+            app_data_dir = os.path.dirname(str(sys.executable))
+        return os.path.abspath(app_data_dir)
+
+    @staticmethod
     def userpath():
         """Return the conventional location for application specific user files on this platform"""
         application_name = BuildData.get("Channel Base")
@@ -212,10 +220,7 @@ class BuildData(object):
         #for linux and windows this file is in the same directory as the script
         #for mac, the script is in ../Contents/MacOS/ and the file is in ../Contents/Resources/
         if not build_data_file:
-            if (platform.system() == 'Darwin'):
-                build_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../Resources"))
-            else:
-                build_data_dir = os.path.abspath(os.path.dirname(str(sys.executable)))
+            build_data_dir = Application.app_data_path()
             build_data_file = os.path.join(build_data_dir,"build_data.json")
 
         try:
