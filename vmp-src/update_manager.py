@@ -347,12 +347,6 @@ def query_vvm(platform_key = None, settings = None,
             #normal case, no testing key
             test_ok = 'testok'
             
-    #get cert file for VVM communications
-    app_data_path = Application.app_data_path()
-    cert_path = os.path.join(app_data_path, 'ca-bundle.crt')
-    if not os.path.exists(cert_path):
-        log.error("No certificate bundle found at '%s'", cert_path)
-
     #suppress warning we get in dev env for altname cert 
     if UpdaterServiceURL != 'https://update.secondlife.com/update':
         warnings.simplefilter('ignore', urllib3.exceptions.SecurityWarning)
@@ -363,7 +357,6 @@ def query_vvm(platform_key = None, settings = None,
     update_urlpath =  urllib.quote('/'.join(['v1.2', str(channelname), version, VMM_platform, platform_version, test_ok, UUID]))
     log.debug("Sending query to VVM: query %s/%s" % (UpdaterServiceURL, update_urlpath))
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
-    VVMService.set_cert_authorities(cert_path)
     
     try:
         result_data = VVMService.get(update_urlpath)

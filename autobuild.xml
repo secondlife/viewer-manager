@@ -95,6 +95,7 @@
           <array>
             <string>VERSION.txt</string>
             <string>VMP/*.*</string>
+            <string>VMP/certifi/*.py</string>
             <string>VMP/SL_Launcher</string>
             <string>VMP/icons/*.*</string>
           </array>

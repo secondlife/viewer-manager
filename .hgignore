@@ -5,3 +5,4 @@ syntax: glob
 *.pyc
 stage/
 vmp-src/SL_Launcherc
+*.tar.bz2
