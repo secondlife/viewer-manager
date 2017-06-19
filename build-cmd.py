@@ -165,12 +165,6 @@ def main():
         copytree(iter_paths[key]['src'], iter_paths[key]['dst'], ignore=ignore_patterns('*.pyc', '*tests*'))
         print "copied %s to %s with contents %s" % (iter_paths[key]['src'], iter_paths[key]['dst'], repr(os.listdir(iter_paths[key]['dst'])))
 
-    #remove dummy JSON file used during unit tests
-    #do this after copy because deleting from source makes the unit tests non-reusable
-    summary = os.path.join(iter_paths['vmp']['dst'],'summary.json')
-    if os.path.exists(summary):
-        os.remove(summary)
-        
     sourceLicenseFile = os.path.join(top, "LICENSE")
     copy(sourceLicenseFile, stage)
         
@@ -197,6 +191,12 @@ def main():
         print "pyinstaller exists: %s" % os.path.exists(pyinstaller_exe[0])
         if not os.path.exists(pyinstaller_exe[0]):
             sys.exit(1)
+        # The requests module invokes the certifi.where function we provide
+        # at _load_ time; since that module looks in the application data
+        # directory to find build_data.json, it needs to find one, so point
+        # to it with this override variable. This has no effect at run time
+        # because the variable won't be defined.
+        os.environ['APP_DATA_DIR'] = os.path.join(top,'vmp-src','tests')
         for f in vmp_files:
             try:
                 target = []
