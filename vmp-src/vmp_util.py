@@ -175,6 +175,12 @@ class Application(object):
 
     @staticmethod
     def app_data_path():
+        try:
+            # allow tests to override where to look for application data
+            return os.environ['APP_DATA_DIR']
+        except KeyError:
+            pass
+        # this is the normal case in the installed app
         if (platform.system() == 'Darwin'):
             app_data_dir = os.path.join(os.path.dirname(__file__), "../Resources")
         else:
@@ -229,8 +235,7 @@ class BuildData(object):
         except Exception as err:
             # without this file, nothing is going to work,
             # so abort immediately with a simple message about the problem
-            log.error("Failed to read application build_data: %r" % build_data_file)
-            raise
+            sys.exit("Failed to read application build_data: %r %r" % (build_data_file, err))
 
     @staticmethod
     def get(property,default=None):

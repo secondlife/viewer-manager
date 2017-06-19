@@ -52,6 +52,7 @@ if windows.search(sys.platform.lower()):
         'stage', 'packages', 'lib', 'python')
     os.environ['PYTHONPATH'] = local_llbase
     sys.path.insert(0, local_llbase)
+os.environ['APP_DATA_DIR'] = os.path.dirname(__file__)
 from llbase import llsd
 from llbase import llrest    
 import download_update

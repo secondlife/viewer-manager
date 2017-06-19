@@ -42,6 +42,7 @@ import with_setup_args
 from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 from vmp_util import SL_Logging, Application, BuildData
 
+os.environ['APP_DATA_DIR'] = os.path.dirname(__file__)
 BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
 
 golden_string = """
