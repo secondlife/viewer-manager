@@ -238,16 +238,16 @@ class BuildData(object):
             sys.exit("Failed to read application build_data: %r %r" % (build_data_file, err))
 
     @staticmethod
-    def get(property,default=None):
+    def get(name ,default=None):
         if not BuildData.package_data:
             BuildData.read()
-        return BuildData.package_data.get(property, default)
+        return BuildData.package_data.get(name, default)
 
     @staticmethod
-    def override(property, value):
+    def override(name, value):
         if not BuildData.package_data:
             BuildData.read()
-        BuildData.package_data[property] = value
+        BuildData.package_data[name] = value
 
 # This utility method is lifted from https://github.com/pyinstaller/pyinstaller/wiki/Recipe-subprocess
 # and gets us around the issue of pythonw breaking subprocess when default values for I/O handles are used.
