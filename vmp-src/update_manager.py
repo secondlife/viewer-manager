@@ -391,6 +391,7 @@ def query_vvm(platform_key = None, settings = None,
                 log.warning("Unexpected response - no data for platform '%s': %r" % (VMM_platform, raw_result_data))
             else:
                 log.error("Received malformed results from vvm: %r" % result_data)
+            log.error("Error from reading VVM response: %r" % ke)
             result_data = None
         else:
             #get() sets missing key results to None.  If we are missing any data, set the whole thing to None
