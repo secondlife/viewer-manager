@@ -310,8 +310,6 @@ def query_vvm(platform_key = None, settings = None,
     # https://wiki.lindenlab.com/wiki/Viewer_Version_Manager_REST_API#Viewer_Update_Query
     # For valid hosts, see https://wiki.lindenlab.com/wiki/Update_Service#Clusters
     channelname = BuildData.get('Channel')
-    pattern = re.compile('\'|\[|\]')
-    channelname = pattern.sub('', channelname)
     version = BuildData.get('Version')
     #we need to use the dotted versions of the platform versions in order to be compatible with VVM rules and arithmetic
     if platform_key == 'win':
@@ -378,17 +376,22 @@ def query_vvm(platform_key = None, settings = None,
     #the rest of the code does not need to be changed.
     if result_data is not None:
         #no update or VVM doesn't know about this version.
-        if result_data['version'] == platform_version:
+        if result_data['version'] == platform_version: # <<<< FIX
+            log.debug("returned target version equals current version; no update")
             return None
         try:
-            result_data.update(result_data['platforms'][VMM_platform]) 
+            result_data.update(result_data['platforms'][VMM_platform]) # promote the target platform results 
         except KeyError as ke:
-            #this means we got a malformed response, for example, that result_data[<some key>] isn't in the results.
-            log.error("Received malformed results from vvm: %r" % result_data)
+            #this means we got a malformed response; either 'platforms' isn't in the results, or our platform is missing
+            if 'platforms' in result_data:
+                log.warning("Unexpected response - no data for platform '%s': %r" % (VMM_platform, result_data))
+            else:
+                log.error("Received malformed results from vvm: %r" % result_data)
             result_data = None
         else:
             #get() sets missing key results to None.  If we are missing any data, set the whole thing to None
             if not result_data.get('hash') or not result_data.get('size') or not result_data.get('url'):
+                log.error("No update because response is missing url, size, or hash: %r" % result_data)
                 result_data = None
     #failed in the above
     else:
@@ -574,7 +577,7 @@ def update_manager(cli_overrides = None):
     if cli_overrides is not None: 
         if 'settings' in cli_overrides.keys():
             if cli_overrides['settings'] is not None:
-                settings = get_settings(cli_overrides['settings'][0])
+                settings = get_settings(cli_overrides['settings'])
         
     if settings is None:
         #if this fails as it sometimes does during Windows NSIS installs, 

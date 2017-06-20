@@ -152,9 +152,11 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
                     no_dashes = vmp_params[param]
                     count = cmd_line[no_dashes]['count']
                     param_args = []
-                    if count > 0:
+                    if count > 1:
                         for argh in range(0,count):
                             param_args.append(vmp_queue.popleft())
+                    elif count == 1:
+                        param_args = vmp_queue.popleft()
                     #the parameter name is the key, the (possibly empty) list of args is the value
                     cli_overrides[vmp_params[param]] = param_args
 
