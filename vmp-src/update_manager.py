@@ -376,22 +376,26 @@ def query_vvm(platform_key = None, settings = None,
     #the rest of the code does not need to be changed.
     if result_data is not None:
         #no update or VVM doesn't know about this version.
-        if result_data['version'] == platform_version: # <<<< FIX
-            log.debug("returned target version equals current version; no update")
-            return None
+        if result_data['version'] == version:
+            #we only do an "cross=platform" update in the case where we have downloaded a win64 viewer on initial install
+            #to a win32 bit machine.  In this case, we return a result that effectively says "required upgrade to win32".
+            #otherwise result == current means no update (and likely, a test viewer)
+            if not VMM_platform == 'win32':           
+                log.debug("returned target version equals current version; no update")
+                return None
         try:
             result_data.update(result_data['platforms'][VMM_platform]) # promote the target platform results 
         except KeyError as ke:
             #this means we got a malformed response; either 'platforms' isn't in the results, or our platform is missing
             if 'platforms' in result_data:
-                log.warning("Unexpected response - no data for platform '%s': %r" % (VMM_platform, result_data))
+                log.warning("Unexpected response - no data for platform '%s': %r" % (VMM_platform, raw_result_data))
             else:
                 log.error("Received malformed results from vvm: %r" % result_data)
             result_data = None
         else:
             #get() sets missing key results to None.  If we are missing any data, set the whole thing to None
             if not result_data.get('hash') or not result_data.get('size') or not result_data.get('url'):
-                log.error("No update because response is missing url, size, or hash: %r" % result_data)
+                log.error("No update because response is missing url, size, or hash: %r" % raw_result_data)
                 result_data = None
     #failed in the above
     else:
