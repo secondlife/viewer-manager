@@ -64,6 +64,7 @@ def download_update(url = None, download_dir = None, size = None, progressbar = 
     #chunk_size is in bytes, amount to download at once
 
     log=SL_Logging.getLogger('download_update')
+    log.info("Downloading new viewer from %r to %r" % (url, download_dir))
     log.debug(" url %s, download_dir %s, size %s, progressbar %s, chunk_size %s" % (url, download_dir, size, progressbar, chunk_size))
     queue = Queue.Queue()
     if not os.path.exists(download_dir):
