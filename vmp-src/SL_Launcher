@@ -225,7 +225,11 @@ def main():
         msg = 'Update failed in the %s process.  Please check logs.  Viewer will launch momentarily.' % state
         update_manager.after_frame(msg)
         command.insert(0,viewer_binary)
-        viewer_process = subprocess.Popen(command)
+        try:
+            viewer_process = subprocess.Popen(command)
+        except Exception, e:
+            log.warning("Failed to launch viewer.  Error messages as follows: \n %r" % e)
+            sys.exit("Failed to launch viewer, see log for details")
         log.info("Viewer successfully launched after failure to get a valid update response. %r " % command)
         #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
         viewer_process.wait()
@@ -244,7 +248,11 @@ def main():
         else:
             log.info("Launching current channel viewer, no optional upgrade found.")
         command.insert(0,viewer_binary)
-        viewer_process = subprocess.Popen(command)
+        try:
+            viewer_process = subprocess.Popen(command)
+        except Exception, e:
+            log.warning("Failed to launch viewer.  Error messages as follows: \n %r" % e)
+            sys.exit("Failed to launch viewer, see log for details")
         log.info("Viewer successfully launched after launching background downloader or no update. %r" % command)
         #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
         viewer_process.wait()

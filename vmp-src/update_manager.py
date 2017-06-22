@@ -370,7 +370,7 @@ def query_vvm(platform_key = None, settings = None,
     #As of VVM v1.2, the result_data object is now a bit more complicated.  The general information
     #such as required, channel and so on are still at the top level, but url, hash and size are now returned 
     #for all platforms at once, keyed by platform key.  So, the mac download url is result_data['platforms']['mac']['url']
-    #and similarly for the other values and platforms.  Platform key is still one of {lnx,mac.win,win32}
+    #and similarly for the other values and platforms.  Platform key is still one of {lnx,mac,win,win32}
     #Before this, the result_data had these three at the top level, which is what the caller expects.  We
     #continue this contract by selecting the right values here where we know the correct bitness and this means
     #the rest of the code does not need to be changed.
@@ -676,6 +676,14 @@ def update_manager(cli_overrides = None):
             pass
         return (True, None, None)
 
+    #Don't do sideways upgrades more than once.  See MAINT-7513
+    #Get version and platform from build_data (source of truth for local install) and VVM query result
+    #and if they pairwise equal return no update, e.g., we are running a 32 bit viewer on a 32 bit host.
+    #The in keys() comparision is because one of {lnx,mac,win,win32} is at the top level of the result_data dict returned by query_VVM
+    if BuildData.get('Platform', None) in result_data.keys() and BuildData.get('Version', None) == result_data['version']:
+        #no sideways upgrade required
+        return (True, None, None)
+    
     #get download directory, if there are perm issues or similar problems, give up
     try:
         download_dir = make_download_dir(Application.userpath(), result_data['version'])
