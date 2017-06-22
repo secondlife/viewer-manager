@@ -385,6 +385,7 @@ def query_vvm(platform_key = None, settings = None,
                 return None
         try:
             result_data.update(result_data['platforms'][VMM_platform]) # promote the target platform results 
+            result_data['VMM_platform'] = VMM_platform
         except KeyError as ke:
             #this means we got a malformed response; either 'platforms' isn't in the results, or our platform is missing
             if 'platforms' in result_data:
@@ -680,8 +681,7 @@ def update_manager(cli_overrides = None):
     #Don't do sideways upgrades more than once.  See MAINT-7513
     #Get version and platform from build_data (source of truth for local install) and VVM query result
     #and if they pairwise equal return no update, e.g., we are running a 32 bit viewer on a 32 bit host.
-    #The in keys() comparision is because one of {lnx,mac,win,win32} is in the platforms nested dict of the result_data dict returned by query_VVM
-    if BuildData.get('Platform', None) in result_data['platforms'].keys() and BuildData.get('Version', None) == result_data['version']:
+    if BuildData.get('Platform', None) == result_data['VMM_platform'] and BuildData.get('Version', None) == result_data['version']:
         #no sideways upgrade required
         return (True, None, None)
     
