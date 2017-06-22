@@ -680,6 +680,8 @@ def update_manager(cli_overrides = None):
     #Get version and platform from build_data (source of truth for local install) and VVM query result
     #and if they pairwise equal return no update, e.g., we are running a 32 bit viewer on a 32 bit host.
     #The in keys() comparision is because one of {lnx,mac,win,win32} is at the top level of the result_data dict returned by query_VVM
+    log.debug("result_data received from query_VVM: %r" % result_data)
+    log.debug("BuildData platform %r BuildData version %r " % (BuildData.get('Platform', None), BuildData.get('Version', None)))
     if BuildData.get('Platform', None) in result_data.keys() and BuildData.get('Version', None) == result_data['version']:
         #no sideways upgrade required
         return (True, None, None)
