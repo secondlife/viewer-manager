@@ -93,7 +93,7 @@ def main():
                   'llb': {'src': llbasedir, 'dst': os.path.join(os.path.join(stage, "VMP"), 'llbase')}
     }
     print "iterpaths: %r" % iter_paths
-    icon = os.path.join(iter_paths['src']['dst'], 'icons', 'secondlife.ico')
+    icon = os.path.join(iter_paths['vmp']['src'], 'icons', 'secondlife.ico')
     tests = os.path.join(iter_paths['vmp']['src'],'tests')
     
     #We will ship a 32 bit VMP with 64 bit viewers
