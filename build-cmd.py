@@ -93,6 +93,7 @@ def main():
                   'llb': {'src': llbasedir, 'dst': os.path.join(os.path.join(stage, "VMP"), 'llbase')}
     }
     print "iterpaths: %r" % iter_paths
+    icon = os.path.join(iter_paths['src']['dst'], 'icons', 'secondlife.ico')
     tests = os.path.join(iter_paths['vmp']['src'],'tests')
     
     #We will ship a 32 bit VMP with 64 bit viewers
@@ -187,7 +188,7 @@ def main():
         #In a typical Windows install, pinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         #BUT that's not true of the virtualenv that autobuild runs in, so hard code the canonical location
         pyinstaller_exe = [r'C:\Python27\Scripts\pyinstaller-script.py']
-        args = [ "-y", "-w", "--clean", "--onefile", "--log-level", "DEBUG", "-p", iter_paths[key]['dst'], "--distpath", iter_paths[key]['dst']]
+        args = [ "-y", "-w", "-i", icon, "--clean", "--onefile", "--log-level", "DEBUG", "-p", iter_paths[key]['dst'], "--distpath", iter_paths[key]['dst']]
         print "pyinstaller exists: %s" % os.path.exists(pyinstaller_exe[0])
         if not os.path.exists(pyinstaller_exe[0]):
             sys.exit(1)
