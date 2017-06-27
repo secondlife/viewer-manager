@@ -401,7 +401,7 @@ def query_vvm(platform_key = None, settings = None,
                 result_data = None
     #failed in the above
     else:
-        if VMM_platform == 'win32':
+        if VMM_platform == 'win32' and BuildData.get('Platform') != 'win32':
             log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % raw_result_data)
             after_frame("Failed to obtain a 32 bit viewer for your system.  Please download a viewer from get.secondlife.com")
             #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
