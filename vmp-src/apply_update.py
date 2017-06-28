@@ -38,6 +38,7 @@ from vmp_util import subprocess_args, SL_Logging, BuildData
 
 import argparse
 import cgitb
+import ctypes
 import errno
 import fnmatch
 import imp
@@ -275,36 +276,19 @@ def apply_mac_update(installable = None):
     
 def apply_windows_update(installable = None):
     log = SL_Logging.getLogger("SL_Apply_Update")
-    #the windows install is just running the NSIS installer executable
-    #from VMP's perspective, it is a black box
-    kill_em_all(2)
 
     #This is the point of no return for VMP.  The executable is launched and we exit immediately
     #relying on the NSIS messaging subsystem to warn the resident on error.
     log.info("Launching installer %s." % installable)
     #this is the P_NOWAIT version, returns immediately
-    subprocess.Popen(installable, stdin=None, stderr=None) # was log_file_handle)
+    if ctypes.windll.shell32.IsUserAnAdmin():
+        log.debug("Launching installer as admin")
+        subprocess.Popen(installable, stdin=None, stderr=None)
+    else:
+        log.debug("Launching installer as user")
+        ctypes.windll.shell32.ShellExecuteW(None, u'runas', unicode(installable), "", None, 1)
+        
     return os.path.dirname(installable)
-
-def kill_em_all(level):
-    #go up the process subtree level number of parent levels and then kill all processes under that root except the current process
-    my_pid = os.getpid()
-    curr = my_pid
-    root = psutil.Process(curr)
-
-    #walk up the tree, range stops at level - l, and parent(level - 1) is what we want
-    #for a tree of depth n, this is an O(n) search
-    for n in range(1, level):
-        curr = root.ppid()
-        root = psutil.Process(curr)
-    
-    children = root.children(recursive=True)
-    #this search is O(m) for m nodes (m >= n) in the flattened tree we get back from children()
-    for process in children:
-        #only the caller survives the horror
-        if psutil.pid_exists(process.pid):
-            if process.pid != my_pid:
-                process.send_signal(signal.SIGTERM)
 
 def main():
     parser = argparse.ArgumentParser("Apply Downloaded Update")

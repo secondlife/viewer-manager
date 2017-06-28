@@ -376,13 +376,19 @@ def query_vvm(platform_key = None, settings = None,
     #the rest of the code does not need to be changed.
     if result_data is not None:
         #no update or VVM doesn't know about this version.
+        #we only do an "cross-platform" update in the case where we have downloaded a win64 viewer on initial install
+        #to a win32 bit machine or when a 64 bit host has a win32 viewer.
+        #
+        #In these cases, we return a result that effectively says "required upgrade to win/win32".
+        #otherwise result == current means no update (and likely, a test viewer)
         if result_data['version'] == version:
-            #we only do an "cross=platform" update in the case where we have downloaded a win64 viewer on initial install
-            #to a win32 bit machine.  In this case, we return a result that effectively says "required upgrade to win32".
-            #otherwise result == current means no update (and likely, a test viewer)
-            if not VMM_platform == 'win32':           
-                log.debug("returned target version equals current version; no update")
-                return None
+            if VMM_platform == BuildData.get('platform'):
+                log.info("We have version %s for %s, which is correct" % (version, VMM_platform))
+                return None # we have what we should have
+            else:
+                #Don't care what the VVM says, sideways upgrades are ALWAYS mandatory
+                result_data['required'] = True        
+
         try:
             result_data.update(result_data['platforms'][VMM_platform]) # promote the target platform results 
             result_data['VMM_platform'] = VMM_platform
@@ -399,14 +405,14 @@ def query_vvm(platform_key = None, settings = None,
             if not result_data.get('hash') or not result_data.get('size') or not result_data.get('url'):
                 log.error("No update because response is missing url, size, or hash: %r" % raw_result_data)
                 result_data = None
-    #failed in the above
-    else:
-        if VMM_platform == 'win32' and BuildData.get('Platform') != 'win32':
-            log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % raw_result_data)
-            after_frame("Failed to obtain a 32 bit viewer for your system.  Please download a viewer from get.secondlife.com")
-            #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
-            #better to die gracefully than horribly
-            sys.exit(1) 
+                
+    #failsafe to prevent 64 bit viewer crashing on startup on a 32 bit host.
+    if VMM_platform == 'win32' and result_data is None and BuildData.get('Platform') != 'win32':
+        log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % raw_result_data)
+        after_frame("Failed to obtain a 32 bit viewer for your system.  Please download a viewer from http://secondlife.com/support/downloads/")
+        #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
+        #better to die gracefully than horribly
+        sys.exit(1) 
                 
     return result_data
 
@@ -522,10 +528,7 @@ def download_and_install(downloaded = None, url = None, version = None, download
                                    in_place = in_place, downloaded = downloaded)
     if path_to_new_launcher:
         #if we succeed, propagate the success type upwards
-        if in_place:
-            return (True, 'in place', True)
-        else:
-            return (True, 'in place', path_to_new_launcher)
+            return (True, 'in place', None)
     else:
         #propagate failure
         return (False, 'apply', version)    
