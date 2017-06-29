@@ -242,9 +242,7 @@ def main():
         if success == True and state ==  'background' and type(condition) == 'dict':
             log.info("Launching background downloader with %r" % condition)
             download_update.download_update(**condition)
-            log.info("Background download complete")
-        elif success == True and state ==  'background':
-            log.warning("Received erroneous condition %r from update manager, launching old viewer" % condition)      
+            log.info("Background download complete")    
         else:
             log.info("Launching current channel viewer, no optional upgrade found.")
         command.insert(0,viewer_binary)

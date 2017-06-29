@@ -743,7 +743,7 @@ def update_manager(cli_overrides = None):
         elif downloaded == 'done' or downloaded == 'next':
             log.info("Found previously downloaded update in: " + download_dir)
             skip_frame = InstallerUserMessage.InstallerUserMessage(title = BuildData.get('Channel Base')+" Installer", icon_name="head-sl-logo.gif")
-            skip_frame.trinary_choice_link_message(message = "Optional Update %s ready to install. Install this version?\nSee Release Notes" % BuildData.get('Version'), 
+            skip_frame.trinary_choice_link_message(message = "Optional Update %s ready to install. Install this version?\nSee Release Notes" % result_data['version'], 
                 url = str(result_data['more_info']), one = "Yes", two = "No", three = "Not Now")
             skip_me = skip_frame.choice3.get()
             if skip_me == 1:
