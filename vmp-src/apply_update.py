@@ -39,6 +39,7 @@ from vmp_util import subprocess_args, SL_Logging, BuildData
 import argparse
 import cgitb
 import ctypes
+import distutils
 import errno
 import fnmatch
 import imp
@@ -184,11 +185,7 @@ def apply_linux_update(installable = None):
 
 def apply_mac_update(installable = None):
     log = SL_Logging.getLogger("SL_Apply_Update")
-
-    #INSTALL_DIR is something like /Applications/Second Life Viewer.app/Contents/MacOS, need to jump up two levels for the install base
-    install_base = os.path.dirname(INSTALL_DIR)
-    install_base = os.path.dirname(install_base)
-    
+   
     #verify dmg file
     try:
         output = subprocess.check_output(["hdiutil", "verify", installable], **subprocess_args(False))
@@ -229,29 +226,16 @@ def apply_mac_update(installable = None):
         log.error("Wrong or null bundle identifier for dmg %s.  Bundle identifier: %s" % (installable, CFBundleIdentifier))
         try_dismount(installable, tmpdir)                   
         return None
-    #do the install, finally
-    if IN_PLACE:
-        #  swap out old install directory
-        bundlename = os.path.basename(mounted_appdir)
-        log.info("Updating %s" % bundlename)
-        swapped_out = os.path.join(tmpdir, INSTALL_DIR.lstrip('/'))
-        shutil.move(install_base, swapped_out)               
-    else:
-        log.info("Installing %s" % install_base)
-        #this is to remove some old version or copytree will throw an exception
-        shutil.rmtree(install_base)
-        
-    #   copy over the new bits    
+       
+    #do the install, finally       
+    #copy over the new bits    
     try:
-        shutil.copytree(mounted_appdir, install_base, symlinks=True)
+        #update only copies over the file if it doesn't exist or if the dst file 
+        distutils.dir_util.copy_tree(mounted_appdir, "/Applications", symlinks=True, update=True)
         retcode = 0
         log.debug("Copied bits from dmg mount.  Return code: %r" % retcode)
     except Exception as e:
-        log.debug("shutil copytree threw exception %r" % e)
-        # try to restore previous viewer
-        if os.path.exists(swapped_out):
-            log.error("Install of %s failed, rolling back to previous viewer." % installable)
-            shutil.move(swapped_out, installed_test)
+        log.debug("distutils copy_tree threw exception %r" % e)
         retcode = 1
     finally:
         try_dismount(installable, tmpdir)
