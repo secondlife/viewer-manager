@@ -36,10 +36,12 @@ Applies an already downloaded update.
 from datetime import datetime
 from vmp_util import subprocess_args, SL_Logging, BuildData
 
+import distutils
+from distutils import dir_util
+
 import argparse
 import cgitb
 import ctypes
-import distutils
 import errno
 import fnmatch
 import imp
@@ -185,6 +187,7 @@ def apply_linux_update(installable = None):
 
 def apply_mac_update(installable = None):
     log = SL_Logging.getLogger("SL_Apply_Update")
+    success = False
    
     #verify dmg file
     try:
@@ -193,7 +196,7 @@ def apply_mac_update(installable = None):
         log.info("dmg verification succeeded")
     except Exception as e:
         log.error("Could not verify dmg file %s.  Error messages: %s" % (installable, e.message))
-        return None
+        return success
     #make temp dir and mount & attach dmg
     tmpdir = tempfile.mkdtemp()
     try:
@@ -205,7 +208,7 @@ def apply_mac_update(installable = None):
         log.info("hdiutil attach succeeded")
     except Exception as e:
         log.error("Could not attach dmg file %s.  Error messages: %s" % (installable, e.message))
-        return None
+        return success
     #verify plist
     mounted_appdir = None
     for top_dir in os.listdir(tmpdir):
@@ -225,13 +228,22 @@ def apply_mac_update(installable = None):
     if CFBundleIdentifier != BuildData.get('Bundle Id'):
         log.error("Wrong or null bundle identifier for dmg %s.  Bundle identifier: %s" % (installable, CFBundleIdentifier))
         try_dismount(installable, tmpdir)                   
-        return None
+        return success
+    log.debug("Found application directory at %r" % mounted_appdir)
        
     #do the install, finally       
     #copy over the new bits    
     try:
-        #update only copies over the file if it doesn't exist or if the dst file 
-        distutils.dir_util.copy_tree(mounted_appdir, "/Applications", symlinks=True, update=True)
+        #update only copies over the file if it doesn't exist or if the dst file is older
+        deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
+        log.debug("deploy target path: %r" % deploy_path)
+        try:
+            os.makedirs(deploy_path)
+        except OSError as e:
+            #don't care if it is already there, but makedirs does
+            if e.errno != errno.EEXIST:
+                raise        
+        distutils.dir_util.copy_tree(deploy_path, deploy_path, update=True)
         retcode = 0
         log.debug("Copied bits from dmg mount.  Return code: %r" % retcode)
     except Exception as e:
@@ -240,7 +252,7 @@ def apply_mac_update(installable = None):
     finally:
         try_dismount(installable, tmpdir)
         if retcode:
-            return None
+            return success
             
     try:
         # Magic OS directory name that causes Cocoa viewer to crash on OS X 10.7.5
@@ -256,7 +268,9 @@ def apply_mac_update(installable = None):
             raise
     
     os.remove(installable)
-    return install_base
+    #a little more explicit than return True
+    success = True
+    return success
     
 def apply_windows_update(installable = None):
     log = SL_Logging.getLogger("SL_Apply_Update")
@@ -293,6 +307,8 @@ if __name__ == "__main__":
     if 'ython' in sys.executable:
         sys.executable =  os.path.abspath(sys.argv[0])
     # Initialize the python logging system to SL Logging format and destination
+    # if you are running this manually, not via SL_Launcher, it is assumed you want all logging
+    os.environ['SL_LAUNCH_LOGLEVEL'] = 'DEBUG'
     log = SL_Logging.getLogger('SL_Installer')
     try:
         main()
