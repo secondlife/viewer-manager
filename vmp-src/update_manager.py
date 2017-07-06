@@ -254,9 +254,7 @@ def getBitness(platform_key = None):
                                                                   log_stream=SL_Logging.stream_from_process(wmic_cmd)))
         log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
         wmic_list = re.split('\n', wmic_graphics)
-        bad = True
-        # the first line of the response is always the string literal 'Name'.  Discard that.
-        wmic_list.pop(0)
+        bad = False
         for word in wmic_list:
             if word.find("Intel(R) HD Graphics") > -1:
                 bad = True
