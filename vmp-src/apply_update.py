@@ -125,15 +125,18 @@ def try_dismount(installable = None, tmpdir = None):
                                          **subprocess_args(include_stdout=False,
                                                            log_stream=SL_Logging.stream_from_process(command)))
         log.info("result of subprocess call to detach dmg mount point: %r" % output)
-        log.info("hdiutil detach succeeded")
-        command = ["diskutil", "umount", mnt_dev]
-        output = subprocess.check_output(command,
-                                         **subprocess_args(include_stdout=False,
-                                                           log_stream=SL_Logging.stream_from_process(command)))
-        log.info("result of subprocess call to unmount dmg mount point: %r" % output)
-        log.info(output)        
+        log.info("hdiutil detach succeeded")  
     except Exception, e:
-        log.error("Could not detach dmg file %s.  Error messages: %s" % (installable, e.message))    
+        log.error("Could not detach dmg file %s.  Error messages: %s" % (installable, e.message))  
+        #try harder, more forcibly
+        try:
+            command = ["diskutil", "umount", mnt_dev]
+            output = subprocess.check_output(command,
+                                                 **subprocess_args(include_stdout=False,
+                                                                   log_stream=SL_Logging.stream_from_process(command)))
+            log.info("result of subprocess call to unmount dmg mount point: %r" % output)
+        except Exception, e:
+            log.error("Could not umount dmg file %s.  Error messages: %s" % (installable, e.message))    
 
 def apply_update(download_dir = None, platform_key = None, in_place = True):
     #for lnx and mac, returns path to newly installed viewer
@@ -230,6 +233,7 @@ def apply_mac_update(installable = None):
         try_dismount(installable, tmpdir)                   
         return success
     log.debug("Found application directory at %r" % mounted_appdir)
+    log.debug("Contents of appdir: %r" % os.listdir(mounted_appdir))
        
     #do the install, finally       
     #copy over the new bits    
@@ -243,8 +247,9 @@ def apply_mac_update(installable = None):
             #don't care if it is already there, but makedirs does
             if e.errno != errno.EEXIST:
                 raise        
-        distutils.dir_util.copy_tree(deploy_path, deploy_path, update=True)
+        output = distutils.dir_util.copy_tree(mounted_appdir, deploy_path, update=True)
         retcode = 0
+        log.debug("Distutils output: %r" % output)
         log.debug("Copied bits from dmg mount.  Return code: %r" % retcode)
     except Exception as e:
         log.debug("distutils copy_tree threw exception %r" % e)
