@@ -127,7 +127,7 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
     if not cmd_line:
         cmd_line = get_cmd_line()
 
-    vmp_params = {'--channel':'channel', '--settings':'settings', '--set':'set'}
+    vmp_params = {'--channel':'channel', '--settings':'settings', '--set':'set', '--ForceAddrSize':'forceaddresssize'}
     #the settings set with --set.  All such settings have only one argument.
     vmp_setters = ('UpdaterMaximumBandwidth', 'UpdaterServiceCheckPeriod', 'UpdaterServiceSetting', 'UpdaterServiceURL', 'UpdaterWillingToTest')   
 

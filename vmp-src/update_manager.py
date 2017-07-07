@@ -32,7 +32,7 @@ $/LicenseInfo$
 from copy import deepcopy
 from datetime import datetime   
 from sets import Set
-from vmp_util import Application, BuildData, SL_Logging, subprocess_args
+from vmp_util import Application, BuildData, SL_Logging, subprocess_args, skip_settings, skip_cmd, write_settings
 from llbase import llsd
 from llbase import llrest
 
@@ -175,12 +175,16 @@ def check_for_completed_download(download_dir, expected_size = 0):
             return None
     return completed  
 
-def get_settings(parent_dir):
+def get_settings(parent_dir, other_file=None):
     #return the settings file parsed into a dict
+    #defaults to settings.xml, use other_file for some other xml file in user_settings
     settings=None
     log=SL_Logging.getLogger('get_settings')
     try:
-        settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml'))
+        if not other_file:
+            settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml'))
+        else:
+            settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings', other_file))
         #this happens when the path to settings file happens on the command line
         #we get a full path and don't need to munge it
         if not os.path.exists(settings_file):
@@ -240,7 +244,7 @@ def make_VVM_UUID_hash(platform_key):
         hash = hashlib.md5(str(uuid.uuid1())).hexdigest()
     return hash
 
-def getBitness(platform_key = None):
+def getBitness(platform_key = None, settings=None):
     log=SL_Logging.getLogger('getBitness')
     if platform_key in ['lnx', 'mac']:
         return 64
@@ -254,11 +258,43 @@ def getBitness(platform_key = None):
                                                                   log_stream=SL_Logging.stream_from_process(wmic_cmd)))
         log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
         wmic_list = re.split('\n', wmic_graphics)
-        bad = False
-        for word in wmic_list:
-            if word.find("Intel(R) HD Graphics") > -1:
-                bad = True
-                log.info("Setting bitness to 32 due to HD Graphics Win 64 Bit incompatibility.")
+        bad = True
+        # the first line of the response is always the string literal 'Name'.  Discard that.
+        wmic_list.pop(0)
+        
+        for line in wmic_list:
+            #Any card other than the bad ones will work
+            if line.find("Intel(R) HD Graphics") > -1:
+                #only some HDs are bad, unfortunately, some of the bad ones have no model number
+                #so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
+                #hence the strange equality test for 'Graphics'
+                word = line.split().pop()
+                if word not in ['Graphics', '2000', '2500', '3000', '4000']:
+                    bad = False
+            else:
+                #some other card, anything is good.
+                bad = False
+        if bad:
+            addr = 32
+            if 'ForceAddressSize' in settings.keys():
+                addr = settings['ForceAddressSize']
+            if addr == 64:
+                log.info("Turning off benchmarking in viewer startup.")
+                #write to settings file, see MAINT-7571
+                settings_path = os.path.join(Application.userpath(),'user_settings', 'settings.xml')
+                settings = get_settings(settings_path)
+                
+                #overwrite settings files          
+                if settings is not None:
+                    if 'SkipBenchmark' in settings.keys():
+                        #don't care what it was, kill it and then write what we want
+                        settings.pop('SkipBenchmark')
+                    settings.append(skip_settings)
+                else:
+                    #no settings file, just make one.  llsd printer invoked via write_settings handles the enclosing llsd/xml
+                    settings = skip_dict
+                write_settings(settings_object=settings, settings_path=settings_path)
+            else:
                 return 32
         return 64
 
@@ -292,7 +328,7 @@ def query_vvm(platform_key = None, settings = None,
     #   - platform_key is our platform name for the computer we are running on
     #   - BuildData.get('Platform') is the platform for which we were packaged
     # These are not always the same, in particular, for the first download of a VMP windows viewer which defaults to 64 bit
-    bitness = getBitness(platform_key)
+    bitness = getBitness(platform_key, settings)
     try:
         if not isViewerMachineBitMatched(BuildData.get('platform'), platform_key, bitness):
             #there are two cases:
@@ -651,7 +687,13 @@ def update_manager(cli_overrides = None):
     except Exception as e:
         log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
         log.warning("Could not obtain channel and version.\n%r" % e)
-        return (False, 'setup', None)        
+        return (False, 'setup', None)   
+    
+    ForceAddressSize = None
+    if cli_overrides is not None:
+        if cli_overrides.get('ForceAddressSize') is not None:
+            ForceAddressSize = cli_overrides['forceaddresssize']
+    settings['ForceAddressSize'] = ForceAddressSize
 
     #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
     result_data = query_vvm(platform_key=platform_key,
