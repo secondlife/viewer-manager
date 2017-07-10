@@ -218,7 +218,7 @@ def main():
             #remove in reverse order, so that pop doesn't reindex elements we are interested in
             try:   
                 arg_index_to_remove = param_index_to_remove + 1
-                if arg_index_to_remove in ['32', '64']:
+                if command[arg_index_to_remove] in ['32', '64']:
                     command.pop(arg_index_to_remove)
             except IndexError:
                 #didn't find it
@@ -279,7 +279,7 @@ def main():
         log.info("Viewer successfully launched after launching background downloader or no update. %r" % command)
         #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
         viewer_process.wait()
-    elif command is not None:
+    elif command is not [None]:
         #'condition' is the path to the new launcher.
         command.insert(0,condition)
         log.info("Launching new channel viewer: %s." % command)

@@ -693,7 +693,10 @@ def update_manager(cli_overrides = None):
     if cli_overrides is not None:
         if cli_overrides.get('ForceAddressSize') is not None:
             ForceAddressSize = cli_overrides['forceaddresssize']
-    settings['ForceAddressSize'] = ForceAddressSize
+    if settings is not None:
+        settings['ForceAddressSize'] = ForceAddressSize
+    else:
+        settings = {'ForceAddressSize': ForceAddressSize}
 
     #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
     result_data = query_vvm(platform_key=platform_key,
