@@ -123,6 +123,7 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
     #expected input format: arg_list = ['--set', 'foo', 'bar', '-X', '-Y', 'qux']
     #take a copy of the viewer parameters that are of interest to VMP.
     #the regex for a parameter is --<param> {opt1} {opt2}
+    log=SL_Logging.getLogger('capture_vmp_args')
     cli_overrides = {}   
     if not cmd_line:
         cmd_line = get_cmd_line()
