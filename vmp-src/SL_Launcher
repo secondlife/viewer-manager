@@ -127,7 +127,7 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
     if not cmd_line:
         cmd_line = get_cmd_line()
 
-    vmp_params = {'--channel':'channel', '--settings':'settings', '--set':'set', '--ForceAddrSize':'forceaddresssize'}
+    vmp_params = {'--channel':'channel', '--settings':'settings', '--set':'set', '--ForceAddressSize':'forceaddresssize'}
     #the settings set with --set.  All such settings have only one argument.
     vmp_setters = ('UpdaterMaximumBandwidth', 'UpdaterServiceCheckPeriod', 'UpdaterServiceSetting', 'UpdaterServiceURL', 'UpdaterWillingToTest')   
 
@@ -136,6 +136,7 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
     #pythonic (x,y) = <some generator> since we will sometimes have (x), sometimes (x,y) and sometimes (x,y,z)
     #also, because the pop is destructive, we prevent ourselves from iterating back over list elements that iterator methods would peek ahead at
     if arg_list is not None:
+        log.info("Parsing passed arguments: %r" % arg_list)
         vmp_queue = collections.deque(arg_list)
         cli_overrides[vmp_params['--set']] = {}
         while (len(vmp_queue)):
@@ -150,13 +151,19 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
                 else:
                     #find out how many args this parameter has
                     no_dashes = vmp_params[param]
-                    count = cmd_line[no_dashes]['count']
-                    param_args = []
-                    if count > 1:
-                        for argh in range(0,count):
-                            param_args.append(vmp_queue.popleft())
-                    elif count == 1:
-                        param_args = vmp_queue.popleft()
+                    #special case for ForceAddressSize, since it is not in cmd_line.xml
+                    if param != "--ForceAddressSize":
+                        count = cmd_line[no_dashes]['count']
+                        param_args = []
+                        if count > 1:
+                            for argh in range(0,count):
+                                param_args.append(vmp_queue.popleft())
+                        elif count == 1:
+                            param_args = vmp_queue.popleft()
+                    else:  
+                        if no_dashes == 'forceaddresssize':
+                            param_args = vmp_queue.popleft()
+                    
                     #the parameter name is the key, the (possibly empty) list of args is the value
                     cli_overrides[vmp_params[param]] = param_args
 
@@ -202,6 +209,23 @@ def main():
     log.debug("Captured VMP args: %r" % vmp_args)
     #make a copy by value, not by reference
     command = list(args_list_to_pass)
+       
+    #consume ForceAddressSize since the viewer doesn't know about it.  Guard against no argument provided.
+    if 'forceaddresssize' in vmp_args.keys() and vmp_args['forceaddresssize'] is not None:
+        try:
+            param_index_to_remove = command.index('--ForceAddressSize')
+            #remove in reverse order, so that pop doesn't reindex elements we are interested in
+            try:   
+                arg_index_to_remove = param_index_to_remove + 1
+                if arg_index_to_remove in ['32', '64']:
+                    command.pop(arg_index_to_remove)
+            except IndexError:
+                #didn't find it
+                pass
+            command.pop(param_index_to_remove)            
+        except ValueError:
+            #failed to remove something that wasn't there, shrug and keep going
+            pass   
 
     log.debug("Calling update manager with %r" % vmp_args)
     (success, state, condition) = update_manager.update_manager(vmp_args)
@@ -254,7 +278,7 @@ def main():
         log.info("Viewer successfully launched after launching background downloader or no update. %r" % command)
         #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
         viewer_process.wait()
-    else:
+    elif command is not None:
         #'condition' is the path to the new launcher.
         command.insert(0,condition)
         log.info("Launching new channel viewer: %s." % command)

@@ -249,7 +249,10 @@ def apply_mac_update(installable = None):
                 raise        
         output = distutils.dir_util.copy_tree(mounted_appdir, deploy_path, update=True)
         retcode = 0
-        log.debug("Distutils output: %r" % output)
+        #This creates a huge amount of output.  Left as comment for future dev debug, but 
+        #should not be in normal use.
+        #log.debug("Distutils output: %r" % output)
+        log.info("Copied %r files from installer." % len(output))
         log.debug("Copied bits from dmg mount.  Return code: %r" % retcode)
     except Exception as e:
         log.debug("distutils copy_tree threw exception %r" % e)

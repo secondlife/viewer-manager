@@ -32,7 +32,7 @@ $/LicenseInfo$
 from copy import deepcopy
 from datetime import datetime   
 from sets import Set
-from vmp_util import Application, BuildData, SL_Logging, subprocess_args, skip_settings, skip_cmd, write_settings
+from vmp_util import Application, BuildData, SL_Logging, subprocess_args, skip_settings, write_settings
 from llbase import llsd
 from llbase import llrest
 
