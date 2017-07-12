@@ -257,7 +257,7 @@ def getBitness(platform_key = None, settings=None):
                                                 **subprocess_args(include_stdout=False,
                                                                   log_stream=SL_Logging.stream_from_process(wmic_cmd)))
         log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
-        wmic_list = re.split('\n', wmic_graphics)
+        wmic_list = re.split('\r', wmic_graphics)
         bad = True
         # the first line of the response is always the string literal 'Name'.  Discard that.
         wmic_list.pop(0)
