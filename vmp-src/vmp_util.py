@@ -1,12 +1,11 @@
-import subprocess
+import errno
+import json
 import os
 import os.path
+import platform
+import subprocess
 import sys
 import time
-import logging
-import errno
-import platform
-import json
 
 from llbase import llsd
 
@@ -331,6 +330,14 @@ skip_cmd = {'ForceAddrSize':
 #note that format_pretty_xml does the right thing with an empty dict
 #caller responsible for catching exceptions and deciding what to do
 def write_settings(settings_object=None, settings_path=None):
+    #make sure the directory exists to write to
+    try:
+        os.makedirs(os.path.dirname(settings_path))
+    except OSError, ose:
+        if ose.errno == errno.EEXIST:
+            pass
+        else:
+            raise
     f = open(settings_path, 'wb')
     with open(settings_path, 'wb') as f:
-        f.write(llsd.format_pretty_xml(settings_path))
+        f.write(llsd.format_pretty_xml(settings_object))

@@ -293,7 +293,11 @@ def getBitness(platform_key = None, settings=None):
                 else:
                     #no settings file, just make one.  llsd printer invoked via write_settings handles the enclosing llsd/xml
                     settings = skip_dict
-                write_settings(settings_object=settings, settings_path=settings_path)
+                try:
+                    write_settings(settings_object=settings, settings_path=settings_path)
+                except Exception, e:
+                    log.error("Failed to write to settings file: %r" % e)
+                    return 32
             else:
                 return 32
         return 64
