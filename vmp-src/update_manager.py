@@ -266,7 +266,8 @@ def getBitness(platform_key = None, settings=None):
         log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
         wmic_list = re.split('\r', wmic_graphics)
         good = True
-        # the first line of the response is always the string literal 'Name'.  Discard that.
+        # the first line of the response is always the string literal 'Name' and then a ''  Discard them.
+        wmic_list.pop(0)
         wmic_list.pop(0)
         
         for line in wmic_list:
@@ -278,7 +279,7 @@ def getBitness(platform_key = None, settings=None):
                 if word in mHD_GRAPHICS_LIST:
                     good = False
             # '' and '\n' occurs as a split artifact, ignore them
-            elif not (line != '' or line != '\n'):
+            elif (line != '' or line != '\n'):
                 #some other card, anything is good.
                 good = True
                 #there's no order guarantee from wmic, this is to prevent an
