@@ -278,6 +278,7 @@ def getBitness(platform_key = None, settings=None):
                 log.debug("Current word: %r"% word)
                 if word in mHD_GRAPHICS_LIST:
                     good = False
+                    continue
             # '' and '\n' occurs as a split artifact, ignore them
             elif (line != '' or line != '\n'):
                 #some other card, anything is good.
