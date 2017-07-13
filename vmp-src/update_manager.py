@@ -278,7 +278,7 @@ def getBitness(platform_key = None, settings=None):
                 if word in mHD_GRAPHICS_LIST:
                     good = False
             # '' and '\n' occurs as a split artifact, ignore them
-            elif (line != '' and line != '\n'):
+            elif not (line != '' or line != '\n'):
                 #some other card, anything is good.
                 good = True
                 #there's no order guarantee from wmic, this is to prevent an
