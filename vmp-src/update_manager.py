@@ -263,26 +263,31 @@ def getBitness(platform_key = None, settings=None):
         wmic_list.pop(0)
         
         for line in wmic_list:
+            log.debug("Current WMIC list entry: %r"% line)
             #Any card other than the bad ones will work
             if line.find("Intel(R) HD Graphics") > -1:
                 #only some HDs are bad, unfortunately, some of the bad ones have no model number
                 #so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
                 #hence the strange equality test for 'Graphics'
                 word = line.split().pop()
+                log.debug("Current word: %r"% word)
                 if word not in ['Graphics', '2000', '2500', '3000', '4000']:
                     bad = False
             else:
                 #some other card, anything is good.
                 bad = False
         if bad:
+            log.debug("Graphics card determined to be bad.")
             addr = 32
             if 'ForceAddressSize' in settings.keys():
                 addr = settings['ForceAddressSize']
+                log.debug("ForceAddressSize parameter found with argument: %r" % addr)
             if addr == 64:
                 log.info("Turning off benchmarking in viewer startup.")
                 #write to settings file, see MAINT-7571
                 settings_path = os.path.join(Application.userpath(),'user_settings', 'settings.xml')
                 settings = get_settings(settings_path)
+                log.debug("Settings before skip benchmark modification: %r" % settings)
                 
                 #overwrite settings files          
                 if settings is not None:
@@ -294,6 +299,7 @@ def getBitness(platform_key = None, settings=None):
                     #no settings file, just make one.  llsd printer invoked via write_settings handles the enclosing llsd/xml
                     settings = skip_dict
                 try:
+                    log.debug("Settings just before skip benchmark writing: %r" % settings)
                     write_settings(settings_object=settings, settings_path=settings_path)
                 except Exception, e:
                     log.error("Failed to write to settings file: %r" % e)
@@ -333,6 +339,8 @@ def query_vvm(platform_key = None, settings = None,
     #   - BuildData.get('Platform') is the platform for which we were packaged
     # These are not always the same, in particular, for the first download of a VMP windows viewer which defaults to 64 bit
     bitness = getBitness(platform_key, settings)
+    log.debug("Bitness determined to be %r" % bitness)
+    
     try:
         if not isViewerMachineBitMatched(BuildData.get('platform'), platform_key, bitness):
             #there are two cases:
