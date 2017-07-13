@@ -60,8 +60,15 @@ import urllib3
 import warnings
 
 
-#module global
+#module globals
 download_process = None
+#See getBitness().  This is an exclusion list created by experimental techniques
+#and research that is extrinsic to VMP.  64bit viewer does not run on these.
+#
+#Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
+#so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
+#hence the strange equality test for 'Graphics' when we pop the last word off the string.
+mHD_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
 
 #this is a trick stolen from shutil.py.  WindowsError is not defined on POSIX implementations 
 #of python and will throw a NameError when make_download_dir() tries to catch it for the times
@@ -258,7 +265,7 @@ def getBitness(platform_key = None, settings=None):
                                                                   log_stream=SL_Logging.stream_from_process(wmic_cmd)))
         log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
         wmic_list = re.split('\r', wmic_graphics)
-        bad = True
+        good = True
         # the first line of the response is always the string literal 'Name'.  Discard that.
         wmic_list.pop(0)
         
@@ -266,17 +273,19 @@ def getBitness(platform_key = None, settings=None):
             log.debug("Current WMIC list entry: %r"% line)
             #Any card other than the bad ones will work
             if line.find("Intel(R) HD Graphics") > -1:
-                #only some HDs are bad, unfortunately, some of the bad ones have no model number
-                #so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
-                #hence the strange equality test for 'Graphics'
                 word = line.split().pop()
                 log.debug("Current word: %r"% word)
-                if word not in ['Graphics', '2000', '2500', '3000', '4000']:
-                    bad = False
+                if word in mHD_GRAPHICS_LIST:
+                    good = False
             else:
                 #some other card, anything is good.
-                bad = False
-        if bad:
+                good = True
+                #there's no order guarantee from wmic, this is to prevent an
+                #HD card discovered after a good card from overwriting the state variable
+                #by specification, a machine is bad iff ALL of the cards on the machine are bad ones
+                break
+            
+        if not good:
             log.debug("Graphics card determined to be bad.")
             addr = 32
             if 'ForceAddressSize' in settings.keys():
