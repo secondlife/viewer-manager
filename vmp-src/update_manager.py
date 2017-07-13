@@ -264,12 +264,13 @@ def getBitness(platform_key = None, settings=None):
                                                 **subprocess_args(include_stdout=False,
                                                                   log_stream=SL_Logging.stream_from_process(wmic_cmd)))
         log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
+        wmic_graphics = wmic_graphics.rstrip()
         wmic_list = re.split('\r', wmic_graphics)
         good = True
         # the first line of the response is always the string literal 'Name' and then a ''  Discard them.
         wmic_list.pop(0)
         wmic_list.pop(0)
-        
+
         for line in wmic_list:
             log.debug("Current WMIC list entry: %r"% line)
             #Any card other than the bad ones will work
@@ -277,12 +278,13 @@ def getBitness(platform_key = None, settings=None):
                 word = line.split().pop()
                 log.debug("Current word: %r"% word)
                 if word in mHD_GRAPHICS_LIST:
+                    log.debug("Found a bad card")
                     good = False
-                    continue
             # '' and '\n' occurs as a split artifact, ignore them
-            elif (line != '' or line != '\n'):
+            elif (line != '' and line != '\n'):
                 #some other card, anything is good.
                 good = True
+                log.debug("Found a good card")
                 #there's no order guarantee from wmic, this is to prevent an
                 #HD card discovered after a good card from overwriting the state variable
                 #by specification, a machine is bad iff ALL of the cards on the machine are bad ones
