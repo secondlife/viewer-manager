@@ -297,7 +297,7 @@ def getBitness(platform_key = None, settings=None):
             if 'ForceAddressSize' in settings.keys():
                 addr = settings['ForceAddressSize']
                 log.debug("ForceAddressSize parameter found with argument: %r" % addr)
-            if addr == 64:
+            if addr == '64':
                 log.info("Turning off benchmarking in viewer startup.")
                 #write to settings file, see MAINT-7571
                 settings_path = os.path.join(Application.userpath(),'user_settings', 'settings.xml')
