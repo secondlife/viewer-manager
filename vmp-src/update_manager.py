@@ -312,7 +312,7 @@ def getBitness(platform_key = None, settings=None):
                     settings.append(skip_settings)
                 else:
                     #no settings file, just make one.  llsd printer invoked via write_settings handles the enclosing llsd/xml
-                    settings = skip_dict
+                    settings = skip_settings
                 try:
                     log.debug("Settings just before skip benchmark writing: %r" % settings)
                     write_settings(settings_object=settings, settings_path=settings_path)
