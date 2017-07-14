@@ -253,6 +253,7 @@ def make_VVM_UUID_hash(platform_key):
 
 def getBitness(platform_key = None, settings=None):
     log=SL_Logging.getLogger('getBitness')
+    log.debug("getBitness called with: %r and %r" % (platform_key, settings))
     if platform_key in ['lnx', 'mac']:
         return 64
     if 'PROGRAMFILES(X86)' not in os.environ:
@@ -598,7 +599,7 @@ def download_and_install(downloaded = None, url = None, version = None, download
 
 def update_manager(cli_overrides = None):
     log = SL_Logging.getLogger('update_manager')
-    log.debug("%r", cli_overrides)
+    log.debug("Update manager called with %r", cli_overrides)
 
     #cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments to 
     #comments that begin with '323:' are steps taken from the algorithm in the description of SL-323. 
@@ -717,12 +718,13 @@ def update_manager(cli_overrides = None):
     
     ForceAddressSize = None
     if cli_overrides is not None:
-        if cli_overrides.get('ForceAddressSize') is not None:
-            ForceAddressSize = cli_overrides['forceaddresssize']
+        ForceAddressSize = cli_overrides.get('forceaddresssize')
     if settings is not None:
         settings['ForceAddressSize'] = ForceAddressSize
     else:
         settings = {'ForceAddressSize': ForceAddressSize}
+        
+    log.debug("Pre query settings: %r" % settings)
 
     #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
     result_data = query_vvm(platform_key=platform_key,
