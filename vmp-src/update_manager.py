@@ -222,6 +222,8 @@ def make_VVM_UUID_hash(platform_key):
     elif (platform_key == 'mac'):
         #this is absurdly baroque
         #/usr/sbin/system_profiler SPHardwareDataType | fgrep 'Serial' | awk '{print $NF}'
+        #also note that this causes spurious messages about X86PlatformPlugin in the log from stderr
+        # ignoring per https://tickets.puppetlabs.com/browse/FACT-724, stdout is correct, stderr is noise
         profiler_cmd=["/usr/sbin/system_profiler", "SPHardwareDataType"]
         muuid = subprocess.check_output(profiler_cmd,
                                         **subprocess_args(include_stdout=False,
@@ -259,7 +261,7 @@ def getBitness(platform_key = None, settings=None):
     if 'PROGRAMFILES(X86)' not in os.environ:
         return 32
     else:
-        #see MAINT-6832 and IQA-4130
+        #see MAINT-6832, MAINT-7571 and IQA-4130
         wmic_cmd=['wmic','path','Win32_VideoController','get','NAME']
         wmic_graphics = subprocess.check_output(wmic_cmd,
                                                 **subprocess_args(include_stdout=False,

@@ -253,7 +253,7 @@ class BuildData(object):
 
 # This utility method is lifted from https://github.com/pyinstaller/pyinstaller/wiki/Recipe-subprocess
 # and gets us around the issue of pythonw breaking subprocess when default values for I/O handles are used.
-# it is slightly modified to provide for writing to the log file rather than provide pipes
+# it is slightly modified to provide for writing to the log file rather than providing pipes
 
 # example usage is now 
 #   subprocess.check_output(['python', '--help'], **subprocess_args(False, log_file_handle)

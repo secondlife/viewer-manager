@@ -238,7 +238,6 @@ def apply_mac_update(installable = None):
     #do the install, finally       
     #copy over the new bits    
     try:
-        #update only copies over the file if it doesn't exist or if the dst file is older
         deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
         log.debug("deploy target path: %r" % deploy_path)
         try:
@@ -246,7 +245,8 @@ def apply_mac_update(installable = None):
         except OSError as e:
             #don't care if it is already there, but makedirs does
             if e.errno != errno.EEXIST:
-                raise        
+                raise 
+        #update only copies over the file if it doesn't exist or if the dst file is older
         output = distutils.dir_util.copy_tree(mounted_appdir, deploy_path, update=True)
         retcode = 0
         #This creates a huge amount of output.  Left as comment for future dev debug, but 
@@ -276,9 +276,13 @@ def apply_mac_update(installable = None):
             raise
     
     os.remove(installable)
-    #a little more explicit than return True
-    success = True
-    return success
+    #If this is a cross channel deploy, compute new location for viewer launch
+    #app_dir is, for example, Second Life Viewer.app as computed relative to this script
+    app_dir =  os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    if app_dir != os.path.basename(deploy_path):
+        return os.path.join(deploy_path.'Second Life')
+    else:
+        return True
     
 def apply_windows_update(installable = None):
     log = SL_Logging.getLogger("SL_Apply_Update")
