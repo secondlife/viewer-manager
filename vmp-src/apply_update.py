@@ -280,7 +280,7 @@ def apply_mac_update(installable = None):
     #app_dir is, for example, Second Life Viewer.app as computed relative to this script
     app_dir =  os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     if app_dir != os.path.basename(deploy_path):
-        return os.path.join(deploy_path.'Second Life')
+        return os.path.join(deploy_path, 'Second Life')
     else:
         return True
     
