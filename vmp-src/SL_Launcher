@@ -300,8 +300,11 @@ def launch(viewer_binary, command, viewer_desc="viewer", info=True):
     if info:
         log.info("Launching new %s: %s." % (viewer_desc, command))
 
+    env = os.environ.copy()
+    env["PARENT"] = "SL_Launcher"
+
     try:
-        viewer_process = subprocess.Popen(command)
+        viewer_process = subprocess.Popen(command, env=env)
     except Exception as e:
         log.warning("Failed to launch %s. Error messages as follows:\n%r" % (viewer_desc, e))
         message = ["Failed to launch %s" % viewer_desc, "see log for details"]
