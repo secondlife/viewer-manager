@@ -256,17 +256,10 @@ def main():
     #  No update, update skipped, succeeded in place in foreground, or background update started: silently launch the current viewer channel
     #  Updated succeed to a different channel, launch that viewer and wait
     if not success:
-        msg = 'Update failed in the %s process.  Please check logs.  Viewer will launch momentarily.' % state
+        msg = 'Update failed in the %s process.  Please check logs.  ' \
+              'Viewer will launch momentarily.' % state
         update_manager.after_frame(msg)
-        command.insert(0,viewer_binary)
-        try:
-            viewer_process = subprocess.Popen(command)
-        except Exception, e:
-            log.warning("Failed to launch viewer.  Error messages as follows: \n %r" % e)
-            sys.exit("Failed to launch viewer, see log for details")
-        log.info("Viewer successfully launched after failure to get a valid update response. %r " % command)
-        #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
-        viewer_process.wait()
+        launch(viewer_binary, command, "viewer after failure to get a valid update response")
     elif (success == True and 
          (state == None 
           or (state == 'skip')
@@ -279,40 +272,51 @@ def main():
             log.info("Background download complete")    
         else:
             log.info("Launching current channel viewer, no optional upgrade found.")
-        command.insert(0,viewer_binary)
-        try:
-            viewer_process = subprocess.Popen(command)
-        except Exception, e:
-            log.warning("Failed to launch viewer.  Error messages as follows: \n %r" % e)
-            sys.exit("Failed to launch viewer, see log for details")
-        log.info("Viewer successfully launched after launching background downloader or no update. %r" % command)
-        #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
-        viewer_process.wait()
+        launch(viewer_binary, command, "viewer after launching background downloader or no update",
+               info=False)
     elif (condition is not [None]) and (condition is not None):
         #'condition' is the path to the new launcher.
-        command.insert(0,condition)
-        log.info("Launching new channel viewer: %s." % command)
-        try:
-            viewer_process = subprocess.Popen(command)
-            log.info("Newly cross channel updated viewer successfully launched. %r %r" % (viewer_process.pid, viewer_process.returncode))
-            #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
-            viewer_process.wait()
-        except Exception as e:
-            #if another viewer is running or windows install is in progress, subprocess will throw an unhandlable exception
-            log.error("Exception spawning new cross channel viewer: %r" % e)
+        launch(condition, command, "new cross-channel viewer")
     else:
-        try:
-            command.insert(0,viewer_binary)
-            log.info("Launching in place viewer: %s." % command)
-            viewer_process = subprocess.Popen(command)
-            log.info("Newly updated in place viewer successfully launched. %r %r" % (viewer_process.pid, viewer_process.returncode))
-            #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
-            viewer_process.wait()
-        except Exception as e:
-            #if another viewer is running or windows install is in progress, subprocess will throw an unhandlable exception
-            log.error("Exception spawning new in place viewer: %r" % e)                
+        launch(viewer_binary, command, "viewer updated in place")
 
     log.info("Launcher exiting after viewer exit.")
+
+def launch(viewer_binary, command, viewer_desc="viewer", info=True):
+    """
+    Launch the passed 'viewer_binary' with arguments as specified by
+    'command'. Use 'viewer_desc' to describe the viewer for log messages.
+    Unless you pass info=False, also produce an info log message that we are
+    about to try to launch the viewer.
+
+    If the launch attempt fails, squawk in various ways (log, stderr, popup)
+    and terminate.
+
+    If it succeeds, wait for the viewer to terminate and then return the
+    subprocess.Popen object.
+    """
+    # don't alter caller's 'command' list
+    command = [viewer_binary] + command
+    if info:
+        log.info("Launching new %s: %s." % (viewer_desc, command))
+
+    try:
+        viewer_process = subprocess.Popen(command)
+    except Exception as e:
+        log.warning("Failed to launch %s. Error messages as follows:\n%r" % (viewer_desc, e))
+        message = ["Failed to launch %s" % viewer_desc, "see log for details"]
+        frame = InstallerUserMessage.InstallerUserMessage(
+            title="SL_Launcher",
+            text=message[0],
+            icon_name="head-sl-logo.gif",
+            )
+        frame.basic_message(message=message[1])
+        sys.exit(', '.join(message))
+
+    log.info("Successfully launched%s. %r " % (viewer_desc, command))
+    #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
+    viewer_process.wait()
+    return viewer_process
 
 if __name__ == "__main__":
     # Initialize the python logging system to SL Logging format and destination
