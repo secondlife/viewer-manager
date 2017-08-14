@@ -51,7 +51,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import thread
 import time
 #for the quote method
 import urllib
@@ -602,6 +601,8 @@ def download_and_install(downloaded = None, url = None, version = None, download
 def update_manager(cli_overrides = None):
     log = SL_Logging.getLogger('update_manager')
     log.debug("Update manager called with %r", cli_overrides)
+
+    after_frame(message = "Checking for updates\nThis may take a few moments...", timeout = 3000)
 
     #cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments to 
     #comments that begin with '323:' are steps taken from the algorithm in the description of SL-323. 
