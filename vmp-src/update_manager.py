@@ -42,6 +42,7 @@ import errno
 import fnmatch
 import hashlib
 import InstallerUserMessage
+import itertools
 import json
 import os
 import os.path
@@ -68,14 +69,6 @@ download_process = None
 #so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
 #hence the strange equality test for 'Graphics' when we pop the last word off the string.
 mHD_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
-
-#this is a trick stolen from shutil.py.  WindowsError is not defined on POSIX implementations 
-#of python and will throw a NameError when make_download_dir() tries to catch it for the times
-#it is on Windows.  This sets the exception to a dummy value if WindowsError is not already defined.
-try:
-    WindowsError
-except NameError:
-    WindowsError = None
 
 #this is to support pyinstaller, which uses sys._MEIPASS to point to the location
 #the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
@@ -109,12 +102,11 @@ def md5file(fname=None, handle=None):
 
 def convert_version_file_style(version):
     #converts a version string a.b.c.d to a_b_c_d as used in downloaded filenames
-    #re will throw a TypeError if it gets None, just return that.
     try:
-        pattern = re.compile('\.')
-        return pattern.sub('_', version)
-    except TypeError, te:
-        return None
+        return version.replace('.', '_')
+    except AttributeError:
+        # if 'version' isn't a string, just return it
+        return version
 
 def make_download_dir(base_dir, new_version):
     #make a canonical download dir if it does not already exist
@@ -124,11 +116,9 @@ def make_download_dir(base_dir, new_version):
     try:
         download_dir = os.path.join(base_dir, "downloads", new_version)
         os.makedirs(download_dir)
-    except (OSError, WindowsError) as hell:
+    except OSError as hell:
         #Directory already exists, that's okay.  Other OSErrors are not okay.
-        if hell.errno == errno.EEXIST and os.path.isdir(download_dir): 
-            pass
-        else:
+        if not (hell.errno == errno.EEXIST and os.path.isdir(download_dir)):
             raise
     return download_dir
 
@@ -184,22 +174,22 @@ def check_for_completed_download(download_dir, expected_size = 0):
 def get_settings(parent_dir, other_file=None):
     #return the settings file parsed into a dict
     #defaults to settings.xml, use other_file for some other xml file in user_settings
-    settings=None
+    settings={}
     log=SL_Logging.getLogger('get_settings')
+    #this happens when the path to settings file happens on the command line
+    #we get a full path and don't need to munge it
+    if os.path.isfile(parent_dir):
+        settings_file = parent_dir
+    else:
+        settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings',
+                                                     other_file or 'settings.xml'))
+
     try:
-        if not other_file:
-            settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml'))
-        else:
-            settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings', other_file))
-        #this happens when the path to settings file happens on the command line
-        #we get a full path and don't need to munge it
-        if not os.path.exists(settings_file):
-            settings_file = parent_dir
         settings = llsd.parse((open(settings_file)).read())
     except llsd.LLSDParseError as lpe:
-        log.warning("Could not parse settings file %s" % lpe)
+        log.warning("Could not parse settings file %s: %s" % (settings_file, lpe))
     except Exception as e:
-        log.warning("Could not read settings file %s" % e)
+        log.warning("Could not read settings file %s: %s" % (settings_file, e))
     return settings
 
 def make_VVM_UUID_hash(platform_key):
@@ -344,11 +334,13 @@ def query_vvm(platform_key = None, settings = None,
               UpdaterServiceURL = None, UpdaterWillingToTest = None):
     result_data = None
 
-    VMM_platform = platform_key
+    VVM_platform = platform_key
     log=SL_Logging.getLogger('query_vvm')
 
     if not UpdaterServiceURL:
-        UpdaterServiceURL=os.getenv('SL_UPDATE_SERVICE',BuildData.get('Update Service','https://update.secondlife.com/update'))
+        UpdaterServiceURL=os.getenv('SL_UPDATE_SERVICE',
+            BuildData.get('Update Service',
+                          'https://update.secondlife.com/update'))
 
     # To disambiguate, we have two sources of platform here
     #   - platform_key is our platform name for the computer we are running on
@@ -364,12 +356,12 @@ def query_vvm(platform_key = None, settings = None,
             # the unexpected case where someone was running a 32 bit viewer on a 32 bit Windows box and upgraded their Windows to 64 bit
             #either way, the Windows bitness is the right bitness
             if bitness == 32:
-                VMM_platform = 'win32'
+                VVM_platform = 'win32'
     except Exception as e:
         log.warning("Could not parse viewer bitness from build_data.json %r" % e)
         #At these point, we have no idea what is really going on.  Since 32 installs on 64 and not vice-versa, fall back to safety
-        VMM_platform = 'win32'        
-    
+        VVM_platform = 'win32'        
+
     # URI template /update/v1.2/channelname/version/platformkey/platformversion/willing-to-test/uniqueid
     # https://wiki.lindenlab.com/wiki/Viewer_Version_Manager_REST_API#Viewer_Update_Query
     # For valid hosts, see https://wiki.lindenlab.com/wiki/Update_Service#Clusters
@@ -398,16 +390,12 @@ def query_vvm(platform_key = None, settings = None,
         </map>
     </map>
     """
-    if UpdaterWillingToTest is not None and UpdaterWillingToTest == 'testok':
+    if UpdaterWillingToTest == 'testok':
         test_ok = 'testok'
     elif re.search('^%s Test' % Application.name(), channelname) is not None:
         test_ok = 'testno'
-    else:   
-        try:
-            test_ok = settings['test']['Value']
-        except Exception:
-            #normal case, no testing key
-            test_ok = 'testok'
+    else:
+        test_ok = settings.get('test', {}).get('Value', 'testok')
             
     #suppress warning we get in dev env for altname cert 
     if UpdaterServiceURL != 'https://update.secondlife.com/update':
@@ -415,8 +403,8 @@ def query_vvm(platform_key = None, settings = None,
     
     #channelname is a list because although it is only one string, it is a kind of argument and viewer args can take multiple keywords.
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
-             (str(channelname), version, VMM_platform, platform_version, test_ok, UUID))
-    update_urlpath =  urllib.quote('/'.join(['v1.2', str(channelname), version, VMM_platform, platform_version, test_ok, UUID]))
+             (str(channelname), version, VVM_platform, platform_version, test_ok, UUID))
+    update_urlpath =  urllib.quote('/'.join(['v1.2', str(channelname), version, VVM_platform, platform_version, test_ok, UUID]))
     log.debug("Sending query to VVM: query %s/%s" % (UpdaterServiceURL, update_urlpath))
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
     
@@ -446,32 +434,32 @@ def query_vvm(platform_key = None, settings = None,
         #In these cases, we return a result that effectively says "required upgrade to win/win32".
         #otherwise result == current means no update (and likely, a test viewer)
         if result_data['version'] == version:
-            if VMM_platform == BuildData.get('platform'):
-                log.info("We have version %s for %s, which is correct" % (version, VMM_platform))
+            if VVM_platform == BuildData.get('platform'):
+                log.info("We have version %s for %s, which is correct" % (version, VVM_platform))
                 return None # we have what we should have
             else:
                 #Don't care what the VVM says, sideways upgrades are ALWAYS mandatory
                 result_data['required'] = True        
 
         try:
-            result_data.update(result_data['platforms'][VMM_platform]) # promote the target platform results 
-            result_data['VMM_platform'] = VMM_platform
+            result_data.update(result_data['platforms'][VVM_platform]) # promote the target platform results 
+            result_data['VVM_platform'] = VVM_platform
         except KeyError as ke:
             #this means we got a malformed response; either 'platforms' isn't in the results, or our platform is missing
             if 'platforms' in result_data:
-                log.warning("Unexpected response - no data for platform '%s': %r" % (VMM_platform, raw_result_data))
+                log.warning("Unexpected response - no data for platform '%s': %r" % (VVM_platform, raw_result_data))
             else:
                 log.error("Received malformed results from vvm: %r" % result_data)
             log.error("Error from reading VVM response: %r" % ke)
             result_data = None
         else:
             #get() sets missing key results to None.  If we are missing any data, set the whole thing to None
-            if not result_data.get('hash') or not result_data.get('size') or not result_data.get('url'):
+            if not ('hash' in result_data and 'size' in result_data and 'url' in result_data):
                 log.error("No update because response is missing url, size, or hash: %r" % raw_result_data)
                 result_data = None
                 
     #failsafe to prevent 64 bit viewer crashing on startup on a 32 bit host.
-    if VMM_platform == 'win32' and result_data is None and BuildData.get('Platform') != 'win32':
+    if VVM_platform == 'win32' and result_data is None and BuildData.get('Platform') != 'win32':
         log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % raw_result_data)
         after_frame("Failed to obtain a 32 bit viewer for your system.  Please download a viewer from http://secondlife.com/support/downloads/")
         #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
@@ -596,11 +584,19 @@ def download_and_install(downloaded = None, url = None, version = None, download
     else:
         #propagate failure
         return (False, 'apply', version)    
-            
 
-def update_manager(cli_overrides = None):
+def update_manager(*args, **kwds):
+    """wrapper that logs entry/exit"""
     log = SL_Logging.getLogger('update_manager')
-    log.debug("Update manager called with %r", cli_overrides)
+    log.debug("update_manager(%s)" %
+              ", ".join(itertools.chain((repr(arg) for arg in args),
+                                        "%s=%r" % item for item in kwds.items())))
+    result = _update_manager(*args, **kwds)
+    log.debug("update_manager() => %r" % result)
+    return result
+
+def _update_manager(cli_overrides = {}):
+    log = SL_Logging.getLogger('update_manager')
 
     after_frame(message = "Checking for updates\nThis may take a few moments...", timeout = 3000)
 
@@ -622,7 +618,6 @@ def update_manager(cli_overrides = None):
     #setup and getting initial parameters
     platform_key = Application.platform_key()
     parent_dir = Application.userpath()
-    settings = None
 
     #check to see if user has install rights
     #get the owner of the install and the current user
@@ -641,27 +636,13 @@ def update_manager(cli_overrides = None):
             if not frame.choice.get():
                 log.info("Upgrade attempt declined by userid " + username)
                 after_frame(message = "Please find a system admin to upgrade Second Life")
-                log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
                 return (False, 'setup', None)
     except (AttributeError, ImportError):
         #Windows throws AttributeError on getuid() and ImportError on pwd
         #Just ignore it and consider the ID check as passed.
         pass
 
-    settings = get_settings(parent_dir)
-    if cli_overrides is not None: 
-        if 'settings' in cli_overrides.keys():
-            if cli_overrides['settings'] is not None:
-                settings = get_settings(cli_overrides['settings'])
-        
-    if settings is None:
-        #if this fails as it sometimes does during Windows NSIS installs, 
-        #still query the VVM and assume testok for UpdaterServiceSetting
-        #by passing None to query_vvm
-        #see tests run during the testing of MAINT-7192, though this is not directly related to that issue
-        log.warning("Failed to load viewer settings (this may be normal) from " 
-                     +  os.path.abspath(os.path.join(parent_dir,'user_settings','settings.xml')))
-        log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
+    settings = get_settings(cli_overrides.get('settings') or parent_dir)
 
     #323: If a complete download of that update is found, check the update preference:
     #settings['UpdaterServiceSetting'] = 0 is manual install
@@ -676,56 +657,30 @@ def update_manager(cli_overrides = None):
     #     <string>0</string>
     # </map>
 
-    if cli_overrides is not None: 
-        if 'set' in cli_overrides.keys():
-            if 'UpdaterServiceSetting' in cli_overrides['set'].keys():
-                install_automatically = cli_overrides['set']['UpdaterServiceSetting']
-            else:
-                install_automatically = True
-    else:
-        try:
-            install_automatically = settings['UpdaterServiceSetting']['Value']
-        #because, for some godforsaken reason (we only write if it is not the default), 
-        #we fail to write it at all, rather than setting the value
-        except KeyError:
-            install_automatically = True
+    # If cli_overrides['set']['UpdaterServiceSetting'], use that;
+    # else if settings['UpdaterServiceSetting']['Value'], use that;
+    # if none of the above, default to True.
+    install_automatically = cli_overrides.get('set', {}).get('UpdaterServiceSetting',
+        settings.get('UpdaterServiceSetting', {}).get('Value', True))
     
     #use default chunk size if none is given, set UpdaterWillingToTest to None if not given
     #this is to prevent key errors on accessing keys that may or may not exist depending on cli options given
-    chunk_size = 1024
-    UpdaterWillingToTest = None
-    UpdaterServiceURL = None
-    if cli_overrides is not None: 
-        if 'set' in cli_overrides.keys():
-            if 'UpdaterMaximumBandwidth' in cli_overrides['set'].keys():    
-                chunk_size = cli_overrides['set']['UpdaterMaximumBandwidth']
-            if 'UpdaterWillingToTest' in cli_overrides['set'].keys():
-                UpdaterWillingToTest = cli_overrides['set']['UpdaterWillingToTest']
-            if 'UpdaterServiceURL' in cli_overrides['set'].keys():    
-                UpdaterServiceURL = cli_overrides['set']['UpdaterServiceURL']
+    cli_set = cli_overrides.get('set')
+    # "chunk_size" ? "UpdaterMaximumBandwidth" ? Are these the same thing?
+    chunk_size = cli_set.get('UpdaterMaximumBandwidth', 1024)
+    UpdaterWillingToTest = cli_set.get('UpdaterWillingToTest')
+    UpdaterServiceURL = cli_set.get('UpdaterServiceURL')
 
     # get channel and version
     default_channel = BuildData.get('Channel')
     # we send the override to the VVM, but retain the default_channel version for in_place computations
-    try:
-        if cli_overrides is not None:
-            if cli_overrides.get('channel') is not None:
-                if default_channel != cli_overrides['channel']:
-                    log.info("Overriding channel '%s' with '%s' from command line" % (default_channel, cli_overrides['channel']))
-                    BuildData.override('Channel', cli_overrides['channel'])
-
-    except Exception as e:
-        log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
-        log.warning("Could not obtain channel and version.\n%r" % e)
-        return (False, 'setup', None)   
+    channel = cli_overrides.get('channel') 
+    if channel not in (None, default_channel):
+        log.info("Overriding channel '%s' with '%s' from command line" %
+                 (default_channel, channel))
+        BuildData.override('Channel', channel)
     
-    ForceAddressSize = None
-    if cli_overrides is not None:
-        ForceAddressSize = cli_overrides.get('forceaddresssize')
-    if settings is not None:
-        settings['ForceAddressSize'] = ForceAddressSize
-    else:
-        settings = {'ForceAddressSize': ForceAddressSize}
+    settings['ForceAddressSize'] = cli_overrides.get('forceaddresssize')
         
     log.debug("Pre query settings: %r" % settings)
 
@@ -739,7 +694,6 @@ def update_manager(cli_overrides = None):
     #nothing to do or error
     if not result_data:
         log.info("No update.")
-        log.debug("Update manager exited with (Success = %s, Stage = %s, Update Required = %s)" % (True, None, None))
         #clean up any previous download dir on windows, see apply_update.apply_update()
         try:
             if platform_key == 'win':
@@ -760,7 +714,7 @@ def update_manager(cli_overrides = None):
     #Don't do sideways upgrades more than once.  See MAINT-7513
     #Get version and platform from build_data (source of truth for local install) and VVM query result
     #and if they pairwise equal return no update, e.g., we are running a 32 bit viewer on a 32 bit host.
-    if BuildData.get('Platform', None) == result_data['VMM_platform'] and BuildData.get('Version', None) == result_data['version']:
+    if BuildData.get('Platform', None) == result_data['VVM_platform'] and BuildData.get('Version', None) == result_data['version']:
         #no sideways upgrade required
         return (True, None, None)
     
@@ -769,7 +723,6 @@ def update_manager(cli_overrides = None):
         download_dir = make_download_dir(Application.userpath(), result_data['version'])
     except Exception as e:
         log.error("Caught exception making download dir %r" % e)
-        log.debug("Update manager exited with (Success = %s, Stage = %s)" % (False, 'setup'))
         return (False, 'setup', None)
     
     #if the channel name of the response is the same as the channel we are launched from, the update is "in place"
@@ -813,8 +766,6 @@ def update_manager(cli_overrides = None):
             log.info("Found optional update. Downloading in background to: " + download_dir)
             result = download(url = result_data['url'], version = result_data['version'], download_dir = download_dir, 
                               hash = result_data['hash'], size = result_data['size'], background = True)
-            log.debug("Update manager exited with (Success = %s, Stage = %s, Result = %s)" 
-                % (True, 'background download', result))   
             return (True, 'background', result)                 
         elif downloaded == 'done' or downloaded == 'next':
             log.info("Found previously downloaded update in: " + download_dir)
@@ -827,15 +778,12 @@ def update_manager(cli_overrides = None):
                 #overwrite path with in place signal value
                 if in_place:
                     result = True
-                log.debug("Update manager exited with (Success = %s, Install Type = %s, Install Type Decision = %s)" % (True, 'in place', str(result)))
                 return (True, 'in place', result)
             elif skip_me == 2:                  
                 tempfile.mkstemp(suffix=".skip", dir=download_dir)
-                log.debug("Update manager exited with (Success = %s, Install Type = %s, Install Type Decision = %s)" % (True, 'in place', True))
                 return (True, 'in place', True)
             else:
                 tempfile.mkstemp(suffix=".next", dir=download_dir)
-                log.debug("Update manager exited with (Success = %s, Install Type = %s, Install Type Decision = %s)" % (True, 'in place', True))
                 return (True, 'in place', True)                
         elif downloaded == 'skip':
             log.info("Skipping this update per previous choice.  Delete the .skip file in " + download_dir + " to change this.")
