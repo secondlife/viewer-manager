@@ -68,10 +68,10 @@ except:
 #Module level variables
 
 #fnmatch expressions
-LNX_REGEX = '*' + '.bz2'
-MAC_REGEX = '*' + '.dmg'
-MAC_APP_REGEX = '*' + '.app'
-WIN_REGEX = '*' + '.exe'
+LNX_GLOB = '*' + '.bz2'
+MAC_GLOB = '*' + '.dmg'
+MAC_APP_GLOB = '*' + '.app'
+WIN_GLOB = '*' + '.exe'
 
 #which install the updater is run from
 INSTALL_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
@@ -91,9 +91,9 @@ def get_filename(download_dir = None):
     #for platform Y, you are either trying something fancy or get what you deserve
     #or both
     for filename in os.listdir(download_dir):
-        if (fnmatch.fnmatch(filename, LNX_REGEX) 
-          or fnmatch.fnmatch(filename, MAC_REGEX) 
-          or fnmatch.fnmatch(filename, WIN_REGEX)):            
+        if (fnmatch.fnmatch(filename, LNX_GLOB) 
+          or fnmatch.fnmatch(filename, MAC_GLOB) 
+          or fnmatch.fnmatch(filename, WIN_GLOB)):            
             return os.path.join(download_dir, filename)
     #someone gave us a bad directory
     return None  
@@ -190,18 +190,22 @@ def apply_linux_update(installable = None):
 
 def apply_mac_update(installable = None):
     log = SL_Logging.getLogger("SL_Apply_Update")
-    success = False
-   
+
+    # TBD - add progress message
     #verify dmg file
     try:
-        output = subprocess.check_output(["hdiutil", "verify", installable], **subprocess_args(False))
+        verify_cmd=["hdiutil", "verify", installable]
+        output = subprocess.check_output(verify_cmd, **subprocess_args(include_stdout=False,
+                                                                       log_stream=SL_Logging.stream_from_process(verify_cmd)))
+
         log.info("result of subprocess call to verify dmg file: %r" % output)
         log.info("dmg verification succeeded")
     except Exception as e:
         log.error("Could not verify dmg file %s.  Error messages: %s" % (installable, e.message))
-        return success
+        return False
     #make temp dir and mount & attach dmg
     tmpdir = tempfile.mkdtemp()
+    # TBD - add progress message
     try:
         hdiutil_cmd=["hdiutil", "attach", installable, "-mountroot", tmpdir]
         output = subprocess.check_output(hdiutil_cmd,
@@ -211,13 +215,13 @@ def apply_mac_update(installable = None):
         log.info("hdiutil attach succeeded")
     except Exception as e:
         log.error("Could not attach dmg file %s.  Error messages: %s" % (installable, e.message))
-        return success
+        return False
     #verify plist
     mounted_appdir = None
     for top_dir in os.listdir(tmpdir):
         for appdir in os.listdir(os.path.join(tmpdir, top_dir)):
             appdir = os.path.join(os.path.join(tmpdir, top_dir), appdir)
-            if fnmatch.fnmatch(appdir, MAC_APP_REGEX):
+            if fnmatch.fnmatch(appdir, MAC_APP_GLOB):
                 try:
                     plist = os.path.join(appdir, "Contents", "Info.plist")
                     CFBundleIdentifier = plistlib.readPlist(plist)["CFBundleIdentifier"]
@@ -231,36 +235,31 @@ def apply_mac_update(installable = None):
     if CFBundleIdentifier != BuildData.get('Bundle Id'):
         log.error("Wrong or null bundle identifier for dmg %s.  Bundle identifier: %s" % (installable, CFBundleIdentifier))
         try_dismount(installable, tmpdir)                   
-        return success
+        return False
     log.debug("Found application directory at %r" % mounted_appdir)
-    log.debug("Contents of appdir: %r" % os.listdir(mounted_appdir))
        
     #do the install, finally       
     #copy over the new bits    
+    # TBD - add progress message
     try:
+        # in the future, we may want to make this $HOME/Applications ...
         deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
         log.debug("deploy target path: %r" % deploy_path)
-        try:
-            os.makedirs(deploy_path)
-        except OSError as e:
-            #don't care if it is already there, but makedirs does
-            if e.errno != errno.EEXIST:
-                raise 
-        #update only copies over the file if it doesn't exist or if the dst file is older
-        output = distutils.dir_util.copy_tree(mounted_appdir, deploy_path, update=True)
+        distutils.dir_util.remove_tree(deploy_path)
+        output = distutils.dir_util.copy_tree(mounted_appdir, deploy_path,
+                                            preserve_mode=1, preserve_symlinks=1, preserve_times=1)
         retcode = 0
         #This creates a huge amount of output.  Left as comment for future dev debug, but 
         #should not be in normal use.
         #log.debug("Distutils output: %r" % output)
         log.info("Copied %r files from installer." % len(output))
-        log.debug("Copied bits from dmg mount.  Return code: %r" % retcode)
     except Exception as e:
-        log.debug("distutils copy_tree threw exception %r" % e)
+        log.error("installation to %s failed: %r" % (deploy_path, e))
         retcode = 1
     finally:
         try_dismount(installable, tmpdir)
         if retcode:
-            return success
+            return False
             
     try:
         # Magic OS directory name that causes Cocoa viewer to crash on OS X 10.7.5
