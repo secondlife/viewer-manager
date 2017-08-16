@@ -6,6 +6,7 @@ import os.path
 import platform
 import subprocess
 import sys
+import tempfile
 import time
 
 from llbase import llsd
@@ -192,11 +193,11 @@ class Application(object):
     @staticmethod
     def userpath():
         """Return the conventional location for application specific user files on this platform"""
-        application_name = BuildData.get("Channel Base")
+        application_name = BuildData.get("Channel Base") # e.g. "Second Life"
         if not application_name:
             # see http://wiki.secondlife.com/wiki/Channel_and_Version_Requirements
             raise KeyError("No 'Channel Base' set in the application metadata; invalid build")
-        app_element_nowhite=''.join(application_name.split()) # remove all whitespace
+        app_element_nowhite=''.join(application_name.split()) # e.g. "SecondLife"
 
         running_on = platform.system()
         if (running_on == 'Darwin'):
@@ -204,7 +205,11 @@ class Application(object):
         elif (running_on == 'Linux'): 
             base_dir = os.path.join(os.path.expanduser('~'))
         elif (running_on == 'Windows'):
-            base_dir = os.path.join(os.path.expanduser('~'),'AppData','Roaming',app_element_nowhite)
+            import ctypes
+            dll = ctypes.windll.shell32
+            buf = ctypes.create_unicode_buffer(300)
+            dll.SHGetSpecialFolderPathW(None, buf, 26, False)
+            base_dir = os.path.join(buf.value, app_element_nowhite)
         else:
             raise ValueError("Unsupported platform '%s'" % running_on)
         return base_dir
@@ -309,6 +314,12 @@ def subprocess_args(include_stdout=True, log_stream=None):
                 'startupinfo': si,
                 'env': env })
     return ret
+
+
+def put_marker_file(dir, ext):
+    #mkstemp() returns (file handle, abspath)
+    os.close(tempfile.mkstemp(suffix=ext, dir=dir)[0])
+
 
 #struct used by update_manager and SL_Launcher to update the settings file
 #to skip benchmarking for HD graphics cards and passed to write_settings().

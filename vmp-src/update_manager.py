@@ -32,20 +32,22 @@ $/LicenseInfo$
 from copy import deepcopy
 from datetime import datetime   
 from sets import Set
-from vmp_util import Application, BuildData, SL_Logging, subprocess_args, skip_settings, write_settings
+from vmp_util import Application, BuildData, SL_Logging, subprocess_args, \
+     skip_settings, write_settings, put_marker_file
 from llbase import llsd
 from llbase import llrest
 
 import apply_update
 import download_update
 import errno
-import fnmatch
+import glob
 import hashlib
 import InstallerUserMessage
 import itertools
 import json
 import os
 import os.path
+from pprint import pformat
 import re
 import platform
 import shutil
@@ -58,6 +60,15 @@ import urllib
 #for the disable_warnings method 
 import urllib3
 import warnings
+
+
+class UpdateError(Exception):
+    pass
+
+class UpdateErrorIn(UpdateError):
+    def __init__(self, state):
+        super(UpdateErrorIn, self).__init__(
+            'Update failed in the %s process.  Please check logs.' % state)
 
 
 #module globals
@@ -108,13 +119,13 @@ def convert_version_file_style(version):
         # if 'version' isn't a string, just return it
         return version
 
-def make_download_dir(base_dir, new_version):
+def make_download_dir(new_version):
     #make a canonical download dir if it does not already exist
     #format: ../user_settings/downloads/1.2.3.456789
     #we do this so that multiple viewers on the same host can update separately
     #this also functions as a getter 
     try:
-        download_dir = os.path.join(base_dir, "downloads", new_version)
+        download_dir = os.path.join(Application.userpath(), "downloads", new_version)
         os.makedirs(download_dir)
     except OSError as hell:
         #Directory already exists, that's okay.  Other OSErrors are not okay.
@@ -123,53 +134,85 @@ def make_download_dir(base_dir, new_version):
     return download_dir
 
 def check_for_completed_download(download_dir, expected_size = 0):
+    """
+    Return:
+    'winstall' if we previously launched a Windows NSIS installer from there; else
+    'skip' if the user asked never to install this version; else
+    'next' if the user asked to defer installation until next run; else
+    'done' if we finished downloading a new installer; else
+    'initialized' if we have a partial download to resume; else
+    None if the directory doesn't even exist.
+    """
+    log=SL_Logging.getLogger('check_for_completed_download')
     #there will be two files on completion, the download and a marker file called "".done""
     #for optional upgrades, there may also be a .skip file to skip this particular upgrade 
     #or a next file which defers the choice to the next startup.
     if not os.path.exists(download_dir):
         return None
-    completed = 'initialized'
-    marker_regex = '*' + '.done'
-    skip_regex = '*' + '.skip'
-    next_regex = '*' + '.next'
-    win_regex = '*' + '.winstall'
-    installer = None
-    #We don't know what order the files will be seen in the loop.  Done has the least priority,
+    # Construct a dict whose keys are filename extensions and values are the filenames.
+    files_by_ext = { os.path.splitext(f)[1]: f
+                     for f in os.listdir(download_dir) }
+    #Done has the least priority,
     #next is second and skip is highest.  That is, if the resident said skip, never ask again.  
-    #While we are here, grab the name of the installer so we can hash the file later
-    for filename in os.listdir(download_dir):
-        if fnmatch.fnmatch(filename, win_regex):
-            return 'winstall'
-        elif fnmatch.fnmatch(filename, marker_regex):
-            #we could have both skip and done files, if so, return skip
-            if completed == 'initialized':
-                completed = 'done'
-        elif fnmatch.fnmatch(filename, skip_regex):
-            completed = 'skip'
-        elif fnmatch.fnmatch(filename, next_regex) and completed != 'skip':
-            completed = 'next'
+    #Recall that this download_dir is specific to this viewer version.
+    priority = ['.winstall', '.skip', '.next', '.done']
+
+    # return the highest-priority marker we have
+    for ext in priority:
+        if ext in files_by_ext:
+            log.debug('download_dir %s has %s marker', download_dir, ext)
+            return ext.lstrip('.')
+
+    # no markers: we found some sort of partial remnants of a download
+    # We don't know the name of the previously-downloaded installer, but it
+    # should be the only file in this download_dir other than the known
+    # markers. Since we have no known markers, there should be exactly one
+    # file in download_dir.
+    if len(files_by_ext) != 1:
+        if len(files_by_ext) > 1:
+            log.warning("download_dir %s has spurious files, deleting:\n%s",
+                        download_dir, ", ".join(files_by_ext.values()))
         else:
-            installer = filename
-    #we found some sort of partial remnants of a download
-    if completed == 'initialized':
-        if installer is not None:
-            installer = os.path.join(download_dir, installer)
-            if os.path.exists(installer):
-                #the theory of operation is that if the file hasn't changed in ten seconds
-                #there is no download in progress
-                first_sample = os.path.getsize(installer)
-                time.sleep(10)
-                second_sample = os.path.getsize(installer)
-                if (second_sample > first_sample) and (second_sample != expected_size):
-                    #this is a protocol hack.  The caller will see this and interpret the download
-                    #in progress as an optional update to be ignored.  Later, when done, a later launch
-                    #instance will see the completed download and act accordingly.
-                    return 'skip'
-        else:
-            #cleanup the mess, start over next time
-            shutil.rmtree(download_dir)
-            return None
-    return completed  
+            log.debug('download_dir %s completely empty, deleting', download_dir)
+        #cleanup the mess, start over next time
+        shutil.rmtree(download_dir)
+        return None
+
+    # We found our one non-marker file. Must be the installer.
+    installer = os.path.join(download_dir, files_by_ext.popitem()[1])
+    first_sample = os.path.getsize(installer)
+    if first_sample == expected_size:
+        log.debug('download_dir %s has installer %s of expected size %s, done',
+                  download_dir, installer, first_sample)
+        return 'done'
+
+    #the theory of operation is that if the file hasn't changed in ten seconds
+    #there is no download in progress
+    log.info('download_dir %s has partial installer %s (%s, expecting %s), sleeping',
+             download_dir, installer, first_sample, expected_size)
+    # TODO: Use OS exclusive locking to determine if someone's currently got
+    # the file open for writing, instead of comparing two size checks. Some
+    # operating systems don't update the file size in the directory listing
+    # until you close the updated file. Besides, people already complain that
+    # SL_Launcher runs too long before starting the viewer.
+    time.sleep(10)
+    second_sample = os.path.getsize(installer)
+    if second_sample == expected_size:
+        log.debug('download_dir %s now has installer %s of expected size %s, done',
+                  download_dir, installer, first_sample)
+        return 'done'
+    if second_sample > first_sample:
+        #this is a protocol hack.  The caller will see this and interpret the download
+        #in progress as an optional update to be ignored.  Later, when done, a later launch
+        #instance will see the completed download and act accordingly.
+        log.debug('download_dir %s has installer %s being downloaded, fake skip',
+                  download_dir, installer)
+        return 'skip'
+
+    # No markers, unfinished download, not currently downloading
+    log.debug('download_dir %s has partial installer %s (%s, expecting %s)',
+              download_dir, installer, second_sample, expected_size)
+    return 'initialized'
 
 def get_settings(parent_dir, other_file=None):
     #return the settings file parsed into a dict
@@ -473,7 +516,6 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
     download_tries = 0
     download_success = False
     download_process = None
-    download_process_args = None
     if not chunk_size:
         chunk_size = 5*1024
     #for background execution
@@ -531,59 +573,35 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                 log.warning("Failed to download new version in background downloader " + version + ". Trying again.")
 
     if not download_success:
-        log.warning("Failed to download new version " + version + " from " + str(url) + " Please check connectivity.")
+        message = "Failed to download new version %s from %s. Please check connectivity." % \
+                  (version, url)
+        log.warning(message)
         if not background:
-            after_frame(message = "Failed to download new version " + version + " from " + str(url) + " Please check connectivity.")
-        return False    
+            after_frame(message)
+        raise UpdateError(message)
     
     #cleanup, so that we don't download twice
-    for filename in os.listdir(download_dir):
-        if fnmatch.fnmatch(filename, '*' + '.next'):
-            os.remove(os.path.join(download_dir, filename))
+    for filename in glob.glob(os.path.join(download_dir, '*.next')):
+        os.remove(filename)
 
-    if download_process_args is not None:
-        log.debug("Returning downloader process args: %r" % download_process_args)
-        return download_process_args
-    else:
-        return True
-
-def install(platform_key = None, download_dir = None, in_place = None, downloaded = None):
+def install(platform_key = None, download_dir = None, in_place = None):
     log=SL_Logging.getLogger('install')
-    #user said no to this one
-    if downloaded != 'skip':
-        after_frame(message = "New version downloaded.\nInstalling now, please wait.")
-        success = apply_update.apply_update(download_dir, platform_key, in_place)
-        version = download_dir.split('/')[-1]
-        if success:
-            log.info("successfully updated to " + version)
-            #windows is cleaned up on the following run, see apply_update.apply_update()
-            if platform_key != 'win':
-                shutil.rmtree(download_dir)
-            #this is either True for in place or the path to the new install for not in place
-            return success
-        else:
-            after_frame(message = "Failed to apply " + version)
-            log.warning("Failed to update viewer to " + version)
-            return False
-        
-def download_and_install(downloaded = None, url = None, version = None, download_dir = None, size = None, 
-                        hash = None, platform_key = None, in_place = None, chunk_size = 1024):
-    #extracted to a method because we do it twice in update_manager() and this makes the logic clearer
-    #also, mandatory downloads ignore the distinction between skip and done, either result means we are gtg
-    if downloaded is None:
-        #do the download, exit if we fail
-        if not download(url = url, version = version, download_dir = download_dir, size = size, background = False,
-                        hash = hash, chunk_size = chunk_size): 
-            return (False, 'download', version)  
-    #do the install
-    path_to_new_launcher = install(platform_key = platform_key, download_dir = download_dir, 
-                                   in_place = in_place, downloaded = downloaded)
-    if path_to_new_launcher:
-        #if we succeed, propagate the success type upwards
-            return (True, 'in place', None)
-    else:
-        #propagate failure
-        return (False, 'apply', version)    
+    after_frame(message = "New version downloaded.\nInstalling now, please wait.")
+    version = os.path.basename(download_dir)
+    try:
+        viewer = apply_update.apply_update(download_dir, platform_key, in_place)
+    except apply_update.ApplyError as err:
+        after_frame(message = "Failed to apply " + version)
+        log.warning("Failed to update viewer to " + version)
+        raise UpdateError("Failed to apply version %s update: %s" %
+                          (version, err))
+
+    log.info("successfully updated to " + version)
+    #windows is cleaned up on the following run, see apply_update.apply_update()
+    if platform_key != 'win':
+        shutil.rmtree(download_dir)
+    #this is the path to the new install
+    return viewer
 
 def update_manager(*args, **kwds):
     """wrapper that logs entry/exit"""
@@ -595,7 +613,7 @@ def update_manager(*args, **kwds):
     log.debug("update_manager() => %r" % result)
     return result
 
-def _update_manager(cli_overrides = {}):
+def _update_manager(viewer_binary, cli_overrides = {}):
     log = SL_Logging.getLogger('update_manager')
 
     after_frame(message = "Checking for updates\nThis may take a few moments...", timeout = 3000)
@@ -604,21 +622,96 @@ def _update_manager(cli_overrides = {}):
     #comments that begin with '323:' are steps taken from the algorithm in the description of SL-323. 
     #  Note that in the interest of efficiency, such as determining download success once at the top
     #  The code does follow precisely the same order as the algorithm.
-    #return values rather than exit codes.  All of them are to communicate with launcher
-    #we print just before we return so that __main__ outputs something - returns are swallowed
-    #  (False, 'setup', None): error occurred before we knew what the update was (e.g., in setup or parsing)
-    #  (False, 'download', version): we failed to download the new version
-    #  (False, 'apply', version): we failed to apply the new version
-    #  (True, None, None): No update found
-    #  (True, 'in place', True): update applied in place
-    #  (True, 'in place', path_to_new_launcher): Update applied by a new install to a new location
-    #  (True, 'background', popen_object): background download initiated, object passed to wait on
-    #  (True, 'skip', True): User has chosen to skip this optional update
 
     #setup and getting initial parameters
-    platform_key = Application.platform_key()
-    parent_dir = Application.userpath()
+    platform_key = Application.platform_key() # e.g. "mac"
+    parent_dir = Application.userpath()       # e.g. "~/AppData/Roaming/SecondLife"
 
+    settings = get_settings(cli_overrides.get('settings') or parent_dir)
+
+    #323: If a complete download of that update is found, check the update preference:
+    #settings['UpdaterServiceSetting'] = 0 is manual install
+    #
+    # <key>UpdaterServiceSetting</key>
+    #     <map>
+    # <key>Comment</key>
+    #     <string>Configure updater service.</string>
+    # <key>Type</key>
+    #     <string>U32</string>
+    # <key>Value</key>
+    #     <string>0</string>
+    # </map>
+
+    # If cli_overrides['set']['UpdaterServiceSetting'], use that;
+    # else if settings['UpdaterServiceSetting']['Value'], use that;
+    # if none of the above, default to True.
+    install_automatically = cli_overrides.get('set', {}).get('UpdaterServiceSetting',
+        settings.get('UpdaterServiceSetting', {}).get('Value', True))
+
+    #use default chunk size if none is given, set UpdaterWillingToTest to None if not given
+    #this is to prevent key errors on accessing keys that may or may not exist depending on cli options given
+    cli_set = cli_overrides.get('set', {})
+    # "chunk_size" ? "UpdaterMaximumBandwidth" ? Are these the same thing?
+    chunk_size = cli_set.get('UpdaterMaximumBandwidth', 1024)
+    UpdaterWillingToTest = cli_set.get('UpdaterWillingToTest')
+    UpdaterServiceURL = cli_set.get('UpdaterServiceURL')
+
+    # get channel and version
+    default_channel = BuildData.get('Channel')
+    # we send the override to the VVM, but retain the default_channel version for in_place computations
+    try:
+        channel = cli_overrides['channel']
+    except KeyError:
+        pass
+    else:
+        if channel != default_channel:
+            log.info("Overriding channel '%s' with '%s' from command line" %
+                     (default_channel, channel))
+            BuildData.override('Channel', channel)
+
+    settings['ForceAddressSize'] = cli_overrides.get('forceaddresssize')
+
+    log.debug("Pre query settings:\n%s", pformat(settings))
+
+    #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
+    result_data = query_vvm(platform_key=platform_key,
+                            settings=settings,
+                            UpdaterServiceURL=UpdaterServiceURL,
+                            UpdaterWillingToTest=UpdaterWillingToTest)
+    log.debug("result_data received from query_vvm:\n%s", pformat(result_data))
+
+    #nothing to do or error
+    if not result_data:
+        log.info("No update.")
+        #clean up any previous download dir on windows, see apply_update.apply_update()
+        try:
+            if platform_key == 'win':
+                past_download_dir = make_download_dir(BuildData.get('Version'))
+                #call make to convert our version into a previous download dir path
+                #call check to see if the winstall file is there
+                installed = check_for_completed_download(past_download_dir)
+                log.debug("Checked for previous Windows install in %s with result %s." %
+                          (past_download_dir, installed))
+                if installed == 'winstall':
+                    log.info("Cleaning up past download directory '%s'" % past_download_dir)
+                    shutil.rmtree(past_download_dir)
+        except Exception as e:
+            #cleanup is best effort
+            log.error("Caught exception cleaning up download dir '%r'; skipping" % e)
+            pass
+        # run already-installed viewer
+        return viewer_binary
+
+    #Don't do sideways upgrades more than once.  See MAINT-7513
+    #Get version and platform from build_data (source of truth for local
+    #install) and VVM query result and if they pairwise equal return no
+    #update, e.g., we are running a 32 bit viewer on a 32 bit host.
+    if (BuildData.get('Platform', None), BuildData.get('Version', None)) \
+    == (result_data['VVM_platform'], result_data['version']):
+        #no sideways upgrade required
+        return viewer_binary
+
+    #Here we believe we need an update.
     #check to see if user has install rights
     #get the owner of the install and the current user
     #none of this is supported by Python on Windows
@@ -642,105 +735,40 @@ def _update_manager(cli_overrides = {}):
         #Just ignore it and consider the ID check as passed.
         pass
 
-    settings = get_settings(cli_overrides.get('settings') or parent_dir)
-
-    #323: If a complete download of that update is found, check the update preference:
-    #settings['UpdaterServiceSetting'] = 0 is manual install
-    #
-    # <key>UpdaterServiceSetting</key>
-    #     <map>
-    # <key>Comment</key>
-    #     <string>Configure updater service.</string>
-    # <key>Type</key>
-    #     <string>U32</string>
-    # <key>Value</key>
-    #     <string>0</string>
-    # </map>
-
-    # If cli_overrides['set']['UpdaterServiceSetting'], use that;
-    # else if settings['UpdaterServiceSetting']['Value'], use that;
-    # if none of the above, default to True.
-    install_automatically = cli_overrides.get('set', {}).get('UpdaterServiceSetting',
-        settings.get('UpdaterServiceSetting', {}).get('Value', True))
-    
-    #use default chunk size if none is given, set UpdaterWillingToTest to None if not given
-    #this is to prevent key errors on accessing keys that may or may not exist depending on cli options given
-    cli_set = cli_overrides.get('set')
-    # "chunk_size" ? "UpdaterMaximumBandwidth" ? Are these the same thing?
-    chunk_size = cli_set.get('UpdaterMaximumBandwidth', 1024)
-    UpdaterWillingToTest = cli_set.get('UpdaterWillingToTest')
-    UpdaterServiceURL = cli_set.get('UpdaterServiceURL')
-
-    # get channel and version
-    default_channel = BuildData.get('Channel')
-    # we send the override to the VVM, but retain the default_channel version for in_place computations
-    channel = cli_overrides.get('channel') 
-    if channel not in (None, default_channel):
-        log.info("Overriding channel '%s' with '%s' from command line" %
-                 (default_channel, channel))
-        BuildData.override('Channel', channel)
-    
-    settings['ForceAddressSize'] = cli_overrides.get('forceaddresssize')
-        
-    log.debug("Pre query settings: %r" % settings)
-
-    #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
-    result_data = query_vvm(platform_key=platform_key,
-                            settings=settings,
-                            UpdaterServiceURL=UpdaterServiceURL,
-                            UpdaterWillingToTest=UpdaterWillingToTest)
-    log.debug("result_data received from query_VVM: %r" % result_data)
-
-    #nothing to do or error
-    if not result_data:
-        log.info("No update.")
-        #clean up any previous download dir on windows, see apply_update.apply_update()
-        try:
-            if platform_key == 'win':
-                past_download_dir = make_download_dir(Application.userpath(), BuildData.get('Version'))
-                #call make to convert our version into a previous download dir path
-                #call check to see if the winstall file is there
-                installed = check_for_completed_download(past_download_dir)
-                log.debug("Checked for previous Windows install in %s with result %s." % (past_download_dir, installed))
-                if installed == 'winstall':
-                    log.info("Cleaning up past download dirctory '%s'" % past_download_dir)
-                    shutil.rmtree(past_download_dir)
-        except Exception as e:
-            #cleanup is best effort
-            log.error("Caught exception cleaning up download dir '%r'; skipping" % e)
-            pass
-        return (True, None, None)
-
-    #Don't do sideways upgrades more than once.  See MAINT-7513
-    #Get version and platform from build_data (source of truth for local install) and VVM query result
-    #and if they pairwise equal return no update, e.g., we are running a 32 bit viewer on a 32 bit host.
-    if BuildData.get('Platform', None) == result_data['VVM_platform'] and BuildData.get('Version', None) == result_data['version']:
-        #no sideways upgrade required
-        return (True, None, None)
-    
     #get download directory, if there are perm issues or similar problems, give up
     try:
-        download_dir = make_download_dir(Application.userpath(), result_data['version'])
+        download_dir = make_download_dir(result_data['version'])
     except Exception as e:
         log.error("Caught exception making download dir %r" % e)
-        return (False, 'setup', None)
+        return viewer_binary
     
-    #if the channel name of the response is the same as the channel we are launched from, the update is "in place"
-    #and launcher will launch the viewer in this install location.  Otherwise, it will launch the Launcher from 
-    #the new location and kill itself.
+    #if the channel name of the response is the same as the channel we are
+    #launched from, the update is "in place" and launcher will launch the
+    #viewer in this install location. Otherwise, it will launch the Launcher
+    #from the new location and kill itself.
     in_place = (default_channel == result_data['channel'])
-    log.debug("In place determination: in place %r build_data %r result_data %r" % (in_place, BuildData.get('Channel'), result_data['channel']))
-    
+    log.debug("In place determination: in place %r build_data %r result_data %r" %
+              (in_place, BuildData.get('Channel'), result_data['channel']))
+
     #determine if we've tried this download before
     downloaded = check_for_completed_download(download_dir, result_data['size'])
 
     #323: If the response indicates that there is a required update: 
-    if result_data['required'] or ((not result_data['required']) and (install_automatically == 1)):
+    if result_data['required'] or (install_automatically == 1):
         log.info("Required update to version %s" % result_data['version'])
         #323: Check for a completed download of the required update; if found, display an alert, install the required update, and launch the newly installed viewer.
         #323: If [optional download and] Install Automatically: display an alert, install the update and launch updated viewer.
-        return download_and_install(downloaded = downloaded, url = result_data['url'], version = result_data['version'], download_dir = download_dir, 
-                        hash = result_data['hash'], size = result_data['size'], platform_key = platform_key, in_place = in_place, chunk_size = chunk_size)
+        if downloaded is None: # or downloaded == 'initialized':
+            # start or resume the download, exception if we fail
+            download(url = result_data['url'],
+                     version = result_data['version'],
+                     download_dir = download_dir,
+                     hash = result_data['hash'],
+                     size = result_data['size'],
+                     background = False,
+                     chunk_size = chunk_size): 
+        #do the install
+        return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
     else:
         #323: If the update response indicates that there is an optional update: 
         #323: Check to see if the optional update has already been downloaded.
@@ -752,8 +780,7 @@ def _update_manager(cli_overrides = {}):
         #323: Install next time: create a marker that skips the prompt and installs on the next launch
         #323: Install and launch now: do it.
         log.info("Found optional update. Download directory is: " + download_dir)
-        choice = -1
-        if downloaded is None:        
+        if downloaded is None:
             # start a background download           
             try:
                 os.makedirs(download_dir)
@@ -764,34 +791,47 @@ def _update_manager(cli_overrides = {}):
                     raise
                 
             log.info("Found optional update. Downloading in background to: " + download_dir)
-            result = download(url = result_data['url'], version = result_data['version'], download_dir = download_dir, 
-                              hash = result_data['hash'], size = result_data['size'], background = True)
-            return (True, 'background', result)                 
+            download(url = result_data['url'],
+                     version = result_data['version'],
+                     download_dir = download_dir,
+                     hash = result_data['hash'],
+                     size = result_data['size'],
+                     background = True)
+            # run the previously-installed viewer
+            return viewer_binary
+##      elif downloaded == 'initialized':
+##          # TODO: resume interrupted download
         elif downloaded == 'done' or downloaded == 'next':
             log.info("Found previously downloaded update in: " + download_dir)
-            skip_frame = InstallerUserMessage.InstallerUserMessage(title = BuildData.get('Channel Base')+" Installer", icon_name="head-sl-logo.gif")
-            skip_frame.trinary_choice_link_message(message = "Optional Update %s ready to install. Install this version?\nSee Release Notes" % result_data['version'], 
-                url = str(result_data['more_info']), one = "Yes", two = "No", three = "Not Now")
+            skip_frame = InstallerUserMessage.InstallerUserMessage(
+                title = BuildData.get('Channel Base')+" Installer",
+                icon_name="head-sl-logo.gif")
+            skip_frame.trinary_choice_link_message(
+                message = "Optional Update %s ready to install. Install this version?\n"
+                "See Release Notes" % result_data['version'], 
+                url = str(result_data['more_info']),
+                one = "Yes", two = "No", three = "Not Now")
             skip_me = skip_frame.choice3.get()
-            if skip_me == 1:
-                result = install(platform_key = platform_key, download_dir = download_dir, in_place = in_place, downloaded = downloaded)
-                #overwrite path with in place signal value
-                if in_place:
-                    result = True
-                return (True, 'in place', result)
-            elif skip_me == 2:                  
-                tempfile.mkstemp(suffix=".skip", dir=download_dir)
-                return (True, 'in place', True)
-            else:
-                tempfile.mkstemp(suffix=".next", dir=download_dir)
-                return (True, 'in place', True)                
+            if skip_me == 1:            # Yes
+                return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
+            elif skip_me == 2:          # No
+                put_marker_file(download_dir, ".skip")
+                # run previously-installed viewer
+                return viewer_binary
+            else:                       # Not Now
+                put_marker_file(download_dir, ".next")
+                # run previously-installed viewer
+                return viewer_binary
         elif downloaded == 'skip':
-            log.info("Skipping this update per previous choice.  Delete the .skip file in " + download_dir + " to change this.")
-            return (True, 'skip', True)        
+            log.info("Skipping this update per previous choice.  "
+                     "Delete the .skip file in " + download_dir + " to change this.")
+            # run previously-installed viewer
+            return viewer_binary
         else:
             #shouldn't be here
-            log.warning("Found nonempty download dir but no flag file. Check returned: %r" % downloaded)
-            return (True, 'skip', True)
+            log.warning("Found nonempty download dir but no flag file. Check returned: %r" %
+                        downloaded)
+            return viewer_binary
 
 
 if __name__ == '__main__':
@@ -802,6 +842,7 @@ if __name__ == '__main__':
     # Initialize the python logging system to SL Logging format and destination
     log = SL_Logging.getLogger('SL_Updater')
     try:
-        update_manager()
+        viewer_binary = os.path.join(os.path.dirname(sys.executable), Application.name())
+        update_manager(viewer_binary)
     except Exception:
         log.exception("Unhandled exception")

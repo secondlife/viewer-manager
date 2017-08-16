@@ -34,7 +34,7 @@ Applies an already downloaded update.
 """
 
 from datetime import datetime
-from vmp_util import subprocess_args, SL_Logging, BuildData
+from vmp_util import subprocess_args, SL_Logging, BuildData, put_marker_file
 
 import distutils
 from distutils import dir_util
@@ -44,6 +44,7 @@ import cgitb
 import ctypes
 import errno
 import fnmatch
+import glob
 import imp
 import InstallerUserMessage as IUM
 import os
@@ -56,16 +57,12 @@ import sys
 import tarfile
 import tempfile
 
-#we only use this for a best effort process cleanup
-#if its not there, it doesn't matter.
-try:
-    if os.name == 'nt':
-        import psutil
-except:
-    pass
-    
-
 #Module level variables
+class ApplyError(Exception):
+    def __init__(self, message):
+        super(ApplyError, self).__init__(message)
+        log = SL_Logging.getLogger("SL_Apply_Update")
+        log.error(message)
 
 #fnmatch expressions
 LNX_GLOB = '*' + '.bz2'
@@ -76,25 +73,21 @@ WIN_GLOB = '*' + '.exe'
 #which install the updater is run from
 INSTALL_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 
-#whether the update is to the INSTALL_DIR or not.  Most of the time this is the case.
-IN_PLACE = True
-
 #this is to support pyinstaller, which uses sys._MEIPASS to point to the location
 #the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
 #normal Python environment.
 if getattr(sys, 'frozen', False):
     __file__ = sys._MEIPASS
 
-def get_filename(download_dir = None):
+def get_filename(download_dir):
     #given a directory that supposedly has the download, find the installable
     #if you are on platform X and you give the updater a directory with an installable  
     #for platform Y, you are either trying something fancy or get what you deserve
     #or both
     for filename in os.listdir(download_dir):
-        if (fnmatch.fnmatch(filename, LNX_GLOB) 
-          or fnmatch.fnmatch(filename, MAC_GLOB) 
-          or fnmatch.fnmatch(filename, WIN_GLOB)):            
-            return os.path.join(download_dir, filename)
+        for glob in LNX_GLOB, MAC_GLOB, WIN_GLOB:
+            if (fnmatch.fnmatch(filename, glob):
+                return os.path.join(download_dir, filename)
     #someone gave us a bad directory
     return None  
           
@@ -139,13 +132,8 @@ def try_dismount(installable = None, tmpdir = None):
             log.error("Could not umount dmg file %s.  Error messages: %s" % (installable, e.message))    
 
 def apply_update(download_dir = None, platform_key = None, in_place = True):
-    #for lnx and mac, returns path to newly installed viewer
-    #for win, return the name of the executable
-    #returns None on failure for all three
-    #throws an exception if it can't find an installable at all
-    global IN_PLACE
-    IN_PLACE = in_place
-    
+    #returns path to newly installed viewer, or None ("don't launch")
+    #throws an exception on failure for all three
     installable = get_filename(download_dir)
     if not installable:
         #could not find the download
@@ -153,30 +141,25 @@ def apply_update(download_dir = None, platform_key = None, in_place = True):
     
     #apply update using the platform specific tools
     if platform_key == 'lnx':
-        installed = apply_linux_update(installable)
+        installed = apply_linux_update(installable, in_place)
     elif platform_key == 'mac':
         installed = apply_mac_update(installable)
     elif platform_key == 'win':
         installed = apply_windows_update(installable)
-
-        #in the Windows case, we launch NSIS and never get a return to check
-        #assume that if we got this far, NSIS succeeds
-        #put a marker in the dir to signal to update manager to rm the directory on the next run
-        tempfile.mkstemp(suffix=".winstall", dir=os.path.dirname(installable))
     else:
         #wtf?
         raise ValueError("Unknown Platform: " + platform_key)
         
     return installed
-    
-def apply_linux_update(installable = None):
+
+def apply_linux_update(installable, in_place):
     log = SL_Logging.getLogger("SL_Apply_Update")
     try:
         #untar to tmpdir
         tmpdir = tempfile.mkdtemp()
         tar = tarfile.open(name = installable, mode="r:bz2")
         tar.extractall(path = tmpdir)
-        if IN_PLACE:
+        if in_place:
             #rename current install dir
             shutil.move(INSTALL_DIR,install_dir + ".bak")
         #mv new to current
@@ -184,11 +167,10 @@ def apply_linux_update(installable = None):
         #delete tarball on success
         os.remove(installable)
     except Exception as e:
-        log.error("Update failed due to %r" % e)
-        return None
-    return INSTALL_DIR
+        raise ApplyError("Can't install %s: %r" % (installable, e))
+    return os.path.join(INSTALL_DIR, "secondlife")
 
-def apply_mac_update(installable = None):
+def apply_mac_update(installable):
     log = SL_Logging.getLogger("SL_Apply_Update")
 
     # TBD - add progress message
@@ -201,8 +183,7 @@ def apply_mac_update(installable = None):
         log.info("result of subprocess call to verify dmg file: %r" % output)
         log.info("dmg verification succeeded")
     except Exception as e:
-        log.error("Could not verify dmg file %s.  Error messages: %s" % (installable, e.message))
-        return False
+        raise ApplyError("Could not verify dmg file %s.  Error messages: %s" % (installable, e))
     #make temp dir and mount & attach dmg
     tmpdir = tempfile.mkdtemp()
     # TBD - add progress message
@@ -214,58 +195,66 @@ def apply_mac_update(installable = None):
         log.info("result of subprocess call to attach dmg to mount point: %r" % output)
         log.info("hdiutil attach succeeded")
     except Exception as e:
-        log.error("Could not attach dmg file %s.  Error messages: %s" % (installable, e.message))
-        return False
-    #verify plist
-    mounted_appdir = None
-    for top_dir in os.listdir(tmpdir):
-        for appdir in os.listdir(os.path.join(tmpdir, top_dir)):
-            appdir = os.path.join(os.path.join(tmpdir, top_dir), appdir)
-            if fnmatch.fnmatch(appdir, MAC_APP_GLOB):
-                try:
-                    plist = os.path.join(appdir, "Contents", "Info.plist")
-                    CFBundleIdentifier = plistlib.readPlist(plist)["CFBundleIdentifier"]
-                    mounted_appdir = appdir
-                except:
-                    #there is no except for this try because there are multiple directories that legimately don't have what we are looking for
-                    pass
-    if not mounted_appdir:
-        log.error("Could not find app bundle in dmg %s." % (installable,))
-        return None        
-    if CFBundleIdentifier != BuildData.get('Bundle Id'):
-        log.error("Wrong or null bundle identifier for dmg %s.  Bundle identifier: %s" % (installable, CFBundleIdentifier))
-        try_dismount(installable, tmpdir)                   
-        return False
-    log.debug("Found application directory at %r" % mounted_appdir)
-       
-    #do the install, finally       
-    #copy over the new bits    
-    # TBD - add progress message
+        raise ApplyError("Could not attach dmg file %s.  Error messages: %s" %
+                         (installable, e))
+
+    # Now that we've successfully mounted the .dmg, from now on any exit from
+    # this function should unmount it.
     try:
-        # in the future, we may want to make this $HOME/Applications ...
-        deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
-        log.debug("deploy target path: %r" % deploy_path)
-        distutils.dir_util.remove_tree(deploy_path)
-        output = distutils.dir_util.copy_tree(mounted_appdir, deploy_path,
-                                            preserve_mode=1, preserve_symlinks=1, preserve_times=1)
-        retcode = 0
-        #This creates a huge amount of output.  Left as comment for future dev debug, but 
-        #should not be in normal use.
-        #log.debug("Distutils output: %r" % output)
-        log.info("Copied %r files from installer." % len(output))
-    except Exception as e:
-        log.error("installation to %s failed: %r" % (deploy_path, e))
-        retcode = 1
+
+        #verify plist
+        mounted_appdir = None
+        for appdir in glob.glob(os.path.join(tmpdir, '*', MAC_APP_GLOB)):
+            try:
+                plist = os.path.join(appdir, "Contents", "Info.plist")
+                CFBundleIdentifier = plistlib.readPlist(plist)["CFBundleIdentifier"]
+                mounted_appdir = appdir
+                break
+            except:
+                #there is no except for this try because there are multiple directories that legimately don't have what we are looking for
+                pass
+        else:
+            raise ApplyError("Could not find app bundle in dmg %s." % (installable,))
+
+        bundle_id = BuildData.get('Bundle Id')
+        if CFBundleIdentifier != bundle_id:
+            raise ApplyError("Wrong bundle identifier for dmg %s.  "
+                             "Bundle identifier: %s, expecting %s" %
+                             (installable, CFBundleIdentifier, bundle_id))
+        log.debug("Found application directory at %r" % mounted_appdir)
+
+        #do the install, finally       
+        #copy over the new bits    
+        # TBD - add progress message
+        try:
+            # in the future, we may want to make this $HOME/Applications ...
+            deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
+            log.debug("deploy target path: %r" % deploy_path)
+            distutils.dir_util.remove_tree(deploy_path)
+            output = distutils.dir_util.copy_tree(mounted_appdir,
+                                                  deploy_path,
+                                                  preserve_mode=1,
+                                                  preserve_symlinks=1,
+                                                  preserve_times=1)
+            #This creates a huge amount of output.  Left as comment for future dev debug, but 
+            #should not be in normal use.
+            #log.debug("Distutils output: %r" % output)
+            # 'output' is a list of copied files, which is why it's reasonable
+            # to report len(output)
+            log.info("Copied %r files from installer." % len(output))
+        except Exception as e:
+            raise ApplyError("installation from %s to %s failed: %r" %
+                             (installable, deploy_path, e))
+
     finally:
+        # okay, done with mounted .dmg, try to unmount
         try_dismount(installable, tmpdir)
-        if retcode:
-            return False
-            
+
     try:
         # Magic OS directory name that causes Cocoa viewer to crash on OS X 10.7.5
         # (see MAINT-3331)
         STATE_DIR = os.path.join(os.environ["HOME"], "Library", "Saved Application State",
-            BuildData.get('Bundle Id') + ".savedState")
+                                 bundle_id + ".savedState")
         shutil.rmtree(STATE_DIR)  
     except OSError as e:
         #if we fail to delete something that isn't there, that's okay
@@ -275,15 +264,10 @@ def apply_mac_update(installable = None):
             raise
     
     os.remove(installable)
-    #If this is a cross channel deploy, compute new location for viewer launch
-    #app_dir is, for example, Second Life Viewer.app as computed relative to this script
-    app_dir =  os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    if app_dir != os.path.basename(deploy_path):
-        return os.path.join(deploy_path, 'Second Life')
-    else:
-        return True
+    #compute location for viewer launch
+    return os.path.join(deploy_path, 'Contents', 'MacOS', 'Second Life')
     
-def apply_windows_update(installable = None):
+def apply_windows_update(installable):
     log = SL_Logging.getLogger("SL_Apply_Update")
 
     #This is the point of no return for VMP.  The executable is launched and we exit immediately
@@ -296,8 +280,15 @@ def apply_windows_update(installable = None):
     else:
         log.debug("Launching installer as user")
         ctypes.windll.shell32.ShellExecuteW(None, u'runas', unicode(installable), "", None, 1)
-        
-    return os.path.dirname(installable)
+
+    #in the Windows case, we launch NSIS and never get a return to check
+    #assume that if we got this far, NSIS succeeds
+    #put a marker in the dir to signal to update manager to rm the directory on the next run
+    put_marker_file(download_dir, ".winstall")
+
+    # Tell SL_Launcher not to run the old viewer -- the installer is still
+    # running, and presumably will continue running for some time to come.
+    return None
 
 def main():
     parser = argparse.ArgumentParser("Apply Downloaded Update")
@@ -307,10 +298,8 @@ def main():
 
     args = parser.parse_args()
    
-    IN_PLACE = args.in_place
-    result = apply_update(download_dir = args.download_dir, platform_key = args.platform_key)
-    if not result:
-        SL_Logging.getLogger('apply_update').error("Update failed")
+    result = apply_update(download_dir = args.download_dir, platform_key = args.platform_key,
+                          in_place = args.in_place)
     
 if __name__ == "__main__":
     cgitb.enable(format='text')
