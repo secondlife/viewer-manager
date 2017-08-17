@@ -106,7 +106,7 @@ def test_query_vvm():
     matt.setDaemon(True)    
     matt.start()
 
-    results = update_manager.query_vvm(platform_key=Application.platform_key(), settings=None, UpdaterServiceURL='http://localhost:'+str(port)+'/update')
+    results = update_manager.query_vvm(platform_key=Application.platform_key(), settings={}, UpdaterServiceURL='http://localhost:'+str(port)+'/update')
 
     assert results
     assert channel_pattern.search(results['channel']), "Bad results returned %s" % str(results)

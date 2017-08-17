@@ -608,12 +608,25 @@ def update_manager(*args, **kwds):
     log = SL_Logging.getLogger('update_manager')
     log.debug("update_manager(%s)" %
               ", ".join(itertools.chain((repr(arg) for arg in args),
-                                        "%s=%r" % item for item in kwds.items())))
+                                        ("%s=%r" % item for item in kwds.items()))))
     result = _update_manager(*args, **kwds)
     log.debug("update_manager() => %r" % result)
     return result
 
 def _update_manager(viewer_binary, cli_overrides = {}):
+    """
+    Pass:
+    viewer_binary: string pathname of the existing viewer executable, the one
+                   installed along with this SL_Launcher instance
+    cli_overrides: a dict containing command-line switches
+
+    Return:
+    - string pathname of the viewer executable to launch -- whether the same
+      as viewer_binary or a newly-installed one
+    - None if no launch is desired
+
+    Raises UpdateError in various failure cases.
+    """
     log = SL_Logging.getLogger('update_manager')
 
     after_frame(message = "Checking for updates\nThis may take a few moments...", timeout = 3000)
@@ -766,7 +779,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                      hash = result_data['hash'],
                      size = result_data['size'],
                      background = False,
-                     chunk_size = chunk_size): 
+                     chunk_size = chunk_size)
         #do the install
         return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
     else:

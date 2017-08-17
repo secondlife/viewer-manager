@@ -229,6 +229,8 @@ def main():
 
     log.debug("Calling update manager with %r" % vmp_args)
     try:
+        # update_manager() returns the viewer to launch, or None if no launch
+        # is desired -- or raises UpdateError.
         new_viewer = update_manager.update_manager(viewer_binary, vmp_args)
     except update_manager.UpdateError as err:
         log.debug("Update manager raised %r" % err)

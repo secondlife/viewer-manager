@@ -73,15 +73,5 @@ def test_get_settings_bad_key(tmpdir1):
         
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
 def test_get_settings_bad_path(tmpdir1):
-    flag = False
-    try:
-        settings_llsd = update_manager.get_settings(os.path.dirname(data_dir))
-    except Exception, e:
-        #should not happen, get_settings should consume the exception and log it
-        print "get settings not quiet, threw %s" % e
-        assert flag
-        return
-    #None is the signal retcode for failure
-    if settings_llsd is None:
-        flag = True
-    assert flag
+    settings_llsd = update_manager.get_settings(os.path.dirname(data_dir))
+    assert not settings_llsd

@@ -86,7 +86,7 @@ def get_filename(download_dir):
     #or both
     for filename in os.listdir(download_dir):
         for glob in LNX_GLOB, MAC_GLOB, WIN_GLOB:
-            if (fnmatch.fnmatch(filename, glob):
+            if (fnmatch.fnmatch(filename, glob)):
                 return os.path.join(download_dir, filename)
     #someone gave us a bad directory
     return None  
