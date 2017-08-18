@@ -31,7 +31,6 @@ $/LicenseInfo$
 
 from copy import deepcopy
 from datetime import datetime   
-from sets import Set
 from vmp_util import Application, BuildData, SL_Logging, subprocess_args, \
      skip_settings, write_settings, put_marker_file
 from llbase import llsd

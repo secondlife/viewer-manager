@@ -284,7 +284,6 @@ def apply_windows_update(installable):
     #in the Windows case, we launch NSIS and never get a return to check
     #NSIS will put a marker in the dir to signal to update manager to rm the
     #directory on the next run
-##  put_marker_file(download_dir, ".winstall")
 
     # Tell SL_Launcher not to run the old viewer -- the installer is still
     # running, and presumably will continue running for some time to come.
