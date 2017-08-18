@@ -208,7 +208,22 @@ class Application(object):
             import ctypes
             dll = ctypes.windll.shell32
             buf = ctypes.create_unicode_buffer(300)
-            dll.SHGetSpecialFolderPathW(None, buf, 26, False)
+            # SHGetSpecialFolderPath():
+            # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762204(v=vs.85).aspx
+            # This says it has been deprecated in favor of SHGetFolderPath():
+            # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762181(v=vs.85).aspx
+            # which in turn says new code should use SHGetKnownFolderPath:
+            # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762188(v=vs.85).aspx
+            # However, the parameters to each of those get more and more
+            # complicated (therefore harder to fake up with Python ctypes),
+            # until with the recommended SHGetKnownFolderPath() you need an
+            # entire Python module just to make that one call:
+            # https://gist.github.com/mkropat/7550097
+            # Therefore just use freakin SHGetSpecialFolderPath(), whose
+            # parameters are decimal integers documented here:
+            # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762494(v=vs.85).aspx
+            CSIDL_APPDATA = 26
+            dll.SHGetSpecialFolderPathW(None, buf, CSIDL_APPDATA, False)
             base_dir = os.path.join(buf.value, app_element_nowhite)
         else:
             raise ValueError("Unsupported platform '%s'" % running_on)
@@ -318,7 +333,10 @@ def subprocess_args(include_stdout=True, log_stream=None):
 
 def put_marker_file(dir, ext):
     #mkstemp() returns (file handle, abspath)
-    os.close(tempfile.mkstemp(suffix=ext, dir=dir)[0])
+    try:
+        os.close(tempfile.mkstemp(suffix=ext, dir=dir)[0])
+    except OSError:
+        pass
 
 
 #struct used by update_manager and SL_Launcher to update the settings file

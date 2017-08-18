@@ -54,7 +54,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
+# specifically import the sleep() function for testability
+from time import sleep
 #for the quote method
 import urllib
 #for the disable_warnings method 
@@ -140,7 +141,6 @@ def check_for_completed_download(download_dir, expected_size = 0):
     'skip' if the user asked never to install this version; else
     'next' if the user asked to defer installation until next run; else
     'done' if we finished downloading a new installer; else
-    'initialized' if we have a partial download to resume; else
     None if the directory doesn't even exist.
     """
     log=SL_Logging.getLogger('check_for_completed_download')
@@ -155,6 +155,7 @@ def check_for_completed_download(download_dir, expected_size = 0):
     #Done has the least priority,
     #next is second and skip is highest.  That is, if the resident said skip, never ask again.  
     #Recall that this download_dir is specific to this viewer version.
+    #List marker-file extensions in the order in which we care about them.
     priority = ['.winstall', '.skip', '.next', '.done']
 
     # return the highest-priority marker we have
@@ -164,44 +165,37 @@ def check_for_completed_download(download_dir, expected_size = 0):
             return ext.lstrip('.')
 
     # no markers: we found some sort of partial remnants of a download
-    # We don't know the name of the previously-downloaded installer, but it
-    # should be the only file in this download_dir other than the known
-    # markers. Since we have no known markers, there should be exactly one
-    # file in download_dir.
-    if len(files_by_ext) != 1:
-        if len(files_by_ext) > 1:
-            log.warning("download_dir %s has spurious files, deleting:\n%s",
-                        download_dir, ", ".join(files_by_ext.values()))
-        else:
-            log.debug('download_dir %s completely empty, deleting', download_dir)
+    installer = apply_update.get_filename(download_dir)
+    if not installer:
+        log.warning("no installer in download_dir %s, deleting", download_dir)
         #cleanup the mess, start over next time
         shutil.rmtree(download_dir)
         return None
 
-    # We found our one non-marker file. Must be the installer.
-    installer = os.path.join(download_dir, files_by_ext.popitem()[1])
-    first_sample = os.path.getsize(installer)
-    if first_sample == expected_size:
-        log.debug('download_dir %s has installer %s of expected size %s, done',
-                  download_dir, installer, first_sample)
-        return 'done'
-
     #the theory of operation is that if the file hasn't changed in ten seconds
     #there is no download in progress
-    log.info('download_dir %s has partial installer %s (%s, expecting %s), sleeping',
-             download_dir, installer, first_sample, expected_size)
-    # TODO: Use OS exclusive locking to determine if someone's currently got
-    # the file open for writing, instead of comparing two size checks. Some
-    # operating systems don't update the file size in the directory listing
-    # until you close the updated file. Besides, people already complain that
-    # SL_Launcher runs too long before starting the viewer.
-    time.sleep(10)
-    second_sample = os.path.getsize(installer)
-    if second_sample == expected_size:
-        log.debug('download_dir %s now has installer %s of expected size %s, done',
-                  download_dir, installer, first_sample)
-        return 'done'
-    if second_sample > first_sample:
+    samples = []
+    for x in sleep_between(
+        range(2),                       # returned items
+        'download_dir %s has partial installer %s (expecting %s), sleeping' %
+        (download_dir, installer, expected_size),
+        10):                            # sleep seconds
+        # See sleep_between() below. The idea is to execute this block once,
+        # maybe twice -- but we sleep() only after the *first* iteration, not
+        # the second.
+        # Are we there yet?
+        samples.append(os.path.getsize(installer))
+        # If, on either check, the file reached the expected size, we're good.
+        if samples[-1] == expected_size:
+            log.debug('%d: download_dir %s has installer %s of expected size %s, done',
+                      x+1, download_dir, installer, expected_size)
+            # Place a marker for future reference.
+            put_marker_file(download_dir, ".done")
+            return 'done'
+
+    # If we get here at all, there are exactly two samples. If the second is
+    # bigger than the first, there's a download in progress elsewhere.
+    if samples[1] > samples[0]:
         #this is a protocol hack.  The caller will see this and interpret the download
         #in progress as an optional update to be ignored.  Later, when done, a later launch
         #instance will see the completed download and act accordingly.
@@ -210,9 +204,39 @@ def check_for_completed_download(download_dir, expected_size = 0):
         return 'skip'
 
     # No markers, unfinished download, not currently downloading
-    log.debug('download_dir %s has partial installer %s (%s, expecting %s)',
+    log.debug('download_dir %s has partial installer %s (%s, expecting %s), deleting',
               download_dir, installer, second_sample, expected_size)
-    return 'initialized'
+    shutil.rmtree(download_dir)
+    return None
+
+def sleep_between(iterable, message, duration):
+    """
+    Yield items from the passed iterable, logging (and sleeping) in between
+    items. This is a bit like str.join() in that the sleep only happens
+    *between* items -- neither before the first nor after the last. In other
+    words:
+
+    0 items: no sleep
+    1 item:  no sleep
+    2 items: 1 sleep
+    etc.
+
+    If your 'message' contains '{n}', it is replaced with the count of items
+    that have already been yielded -- thus, '1' for the first log message, '2'
+    for the second and so forth.
+
+    If your 'message' contains '{t}', it is replaced with the passed duration.
+    """
+    log = SL_Logging.getLogger('sleep_between')
+    it = iter(iterable)
+    # Yield the first item immediately.
+    # Of course let StopIteration propagate for the empty case.
+    yield next(it)
+    # loop over the rest of the items
+    for n, item in enumerate(it):
+        log.info(message.format(n=n+1, t=duration))
+        sleep(duration)
+        yield item
 
 def get_settings(parent_dir, other_file=None):
     #return the settings file parsed into a dict
@@ -742,7 +766,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
             if not frame.choice.get():
                 log.info("Upgrade attempt declined by userid " + username)
                 after_frame(message = "Please find a system admin to upgrade Second Life")
-                return (False, 'setup', None)
+                return viewer_binary
     except (AttributeError, ImportError):
         #Windows throws AttributeError on getuid() and ImportError on pwd
         #Just ignore it and consider the ID check as passed.
@@ -771,8 +795,8 @@ def _update_manager(viewer_binary, cli_overrides = {}):
         log.info("Required update to version %s" % result_data['version'])
         #323: Check for a completed download of the required update; if found, display an alert, install the required update, and launch the newly installed viewer.
         #323: If [optional download and] Install Automatically: display an alert, install the update and launch updated viewer.
-        if downloaded is None: # or downloaded == 'initialized':
-            # start or resume the download, exception if we fail
+        if downloaded is None:
+            # start the download, exception if we fail
             download(url = result_data['url'],
                      version = result_data['version'],
                      download_dir = download_dir,
@@ -812,8 +836,6 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                      background = True)
             # run the previously-installed viewer
             return viewer_binary
-##      elif downloaded == 'initialized':
-##          # TODO: resume interrupted download
         elif downloaded == 'done' or downloaded == 'next':
             log.info("Found previously downloaded update in: " + download_dir)
             skip_frame = InstallerUserMessage.InstallerUserMessage(
