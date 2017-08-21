@@ -695,15 +695,13 @@ def _update_manager(viewer_binary, cli_overrides = {}):
     # get channel and version
     default_channel = BuildData.get('Channel')
     # we send the override to the VVM, but retain the default_channel version for in_place computations
-    try:
-        channel = cli_overrides['channel']
-    except KeyError:
-        pass
-    else:
-        if channel != default_channel:
-            log.info("Overriding channel '%s' with '%s' from command line" %
-                     (default_channel, channel))
-            BuildData.override('Channel', channel)
+    # note that this get() intentionally conflates the case of 'no channel
+    # key' with 'not bool(value of channel key)'
+    channel = cli_overrides.get('channel')
+    if channel and channel != default_channel:
+        log.info("Overriding channel '%s' with '%s' from command line" %
+                 (default_channel, channel))
+        BuildData.override('Channel', channel)
 
     settings['ForceAddressSize'] = cli_overrides.get('forceaddresssize')
 
