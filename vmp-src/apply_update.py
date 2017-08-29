@@ -147,7 +147,6 @@ def apply_update(download_dir = None, platform_key = None, in_place = True):
     elif platform_key == 'win':
         installed = apply_windows_update(installable)
     else:
-        #wtf?
         raise ValueError("Unknown Platform: " + platform_key)
         
     return installed
@@ -168,13 +167,14 @@ def apply_linux_update(installable, in_place):
         os.remove(installable)
     except Exception as e:
         raise ApplyError("Can't install %s: %r" % (installable, e))
-    return os.path.join(INSTALL_DIR, "secondlife")
+
+    return os.path.join(INSTALL_DIR, "SL_Launcher")
 
 def apply_mac_update(installable):
     log = SL_Logging.getLogger("SL_Apply_Update")
 
-    # TBD - add progress message
     #verify dmg file
+    # TBD - add progress message "Verifying installer image..."
     try:
         verify_cmd=["hdiutil", "verify", installable]
         output = subprocess.check_output(verify_cmd, **subprocess_args(include_stdout=False,
@@ -186,7 +186,7 @@ def apply_mac_update(installable):
         raise ApplyError("Could not verify dmg file %s.  Error messages: %s" % (installable, e))
     #make temp dir and mount & attach dmg
     tmpdir = tempfile.mkdtemp()
-    # TBD - add progress message
+    # TBD - add progress message "Mounting installer image..."
     try:
         hdiutil_cmd=["hdiutil", "attach", installable, "-mountroot", tmpdir]
         output = subprocess.check_output(hdiutil_cmd,
@@ -225,7 +225,7 @@ def apply_mac_update(installable):
 
         #do the install, finally       
         #copy over the new bits    
-        # TBD - add progress message
+        # TBD - add progress message "Copying updated viewer..."
         try:
             # in the future, we may want to make this $HOME/Applications ...
             deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
@@ -251,8 +251,8 @@ def apply_mac_update(installable):
         try_dismount(installable, tmpdir)
 
     try:
-        # Magic OS directory name that causes Cocoa viewer to crash on OS X 10.7.5
-        # (see MAINT-3331)
+        # Clean up viewer saved state 
+        # (see MAINT-3331; this caused a crash on OSX 10.7.5)
         STATE_DIR = os.path.join(os.environ["HOME"], "Library", "Saved Application State",
                                  bundle_id + ".savedState")
         shutil.rmtree(STATE_DIR)  
@@ -264,30 +264,12 @@ def apply_mac_update(installable):
             raise
     
     os.remove(installable)
-    #compute location for viewer launch
-    return os.path.join(deploy_path, 'Contents', 'MacOS', 'Second Life')
+    # return the .app to be launched
+    return deploy_path
     
 def apply_windows_update(installable):
-    log = SL_Logging.getLogger("SL_Apply_Update")
-
-    #This is the point of no return for VMP.  The executable is launched and we exit immediately
-    #relying on the NSIS messaging subsystem to warn the resident on error.
-    log.info("Launching installer %s." % installable)
-    #this is the P_NOWAIT version, returns immediately
-    if ctypes.windll.shell32.IsUserAnAdmin():
-        log.debug("Launching installer as admin")
-        subprocess.Popen(installable, stdin=None, stderr=None)
-    else:
-        log.debug("Launching installer as user")
-        ctypes.windll.shell32.ShellExecuteW(None, u'runas', unicode(installable), "", None, 1)
-
-    #in the Windows case, we launch NSIS and never get a return to check
-    #NSIS will put a marker in the dir to signal to update manager to rm the
-    #directory on the next run
-
-    # Tell SL_Launcher not to run the old viewer -- the installer is still
-    # running, and presumably will continue running for some time to come.
-    return None
+    # pass back the installer; SL_Launcher will exec it and replace this process
+    return installable
 
 def main():
     parser = argparse.ArgumentParser("Apply Downloaded Update")

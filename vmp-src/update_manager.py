@@ -550,7 +550,7 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
     #three strikes and you're out
     log.info("Preparing to download new version " + version + " destination " + download_dir + ".")
     while download_tries < 3 and not download_success:
-        #323: Check for a partial update of the required update; in either event, display an alert that a download is required, initiate the download, and then install and launch
+        #  Check for a partial update of the required update; in either event, display an alert that a download is required, initiate the download, and then install and launch
         if not background:
             log.debug("foreground downloader args: %r" % ["--url", url, "--dir", download_dir, 
                             "--size", str(size), "--chunk_size", str(chunk_size)])
@@ -612,19 +612,18 @@ def install(platform_key = None, download_dir = None, in_place = None):
     after_frame(message = "New version downloaded.\nInstalling now, please wait.")
     version = os.path.basename(download_dir)
     try:
-        viewer = apply_update.apply_update(download_dir, platform_key, in_place)
+        next_executable = apply_update.apply_update(download_dir, platform_key, in_place)
     except apply_update.ApplyError as err:
         after_frame(message = "Failed to apply " + version)
         log.warning("Failed to update viewer to " + version)
         raise UpdateError("Failed to apply version %s update: %s" %
                           (version, err))
 
-    log.info("successfully updated to " + version)
     #windows is cleaned up on the following run, see apply_update.apply_update()
     if platform_key != 'win':
         shutil.rmtree(download_dir)
     #this is the path to the new install
-    return viewer
+    return next_executable
 
 def update_manager(*args, **kwds):
     """wrapper that logs entry/exit"""
@@ -644,19 +643,16 @@ def _update_manager(viewer_binary, cli_overrides = {}):
     cli_overrides: a dict containing command-line switches
 
     Return:
-    - string pathname of the viewer executable to launch -- whether the same
-      as viewer_binary or a newly-installed one
-    - None if no launch is desired
+    - string pathname of the executable to launch
 
     Raises UpdateError in various failure cases.
     """
     log = SL_Logging.getLogger('update_manager')
-
     after_frame(message = "Checking for updates\nThis may take a few moments...", timeout = 3000)
 
-    #cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments to 
-    #comments that begin with '323:' are steps taken from the algorithm in the description of SL-323. 
-    #  Note that in the interest of efficiency, such as determining download success once at the top
+    # cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments to 
+    # comments that begin with ' ' are steps taken from the algorithm in the description of SL-323. 
+    #   Note that in the interest of efficiency, such as determining download success once at the top
     #  The code does follow precisely the same order as the algorithm.
 
     #setup and getting initial parameters
@@ -665,7 +661,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
 
     settings = get_settings(cli_overrides.get('settings') or parent_dir)
 
-    #323: If a complete download of that update is found, check the update preference:
+    #  If a complete download of that update is found, check the update preference:
     #settings['UpdaterServiceSetting'] = 0 is manual install
     #
     # <key>UpdaterServiceSetting</key>
@@ -707,7 +703,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
 
     log.debug("Pre query settings:\n%s", pformat(settings))
 
-    #323: On launch, the Viewer Manager should query the Viewer Version Manager update api.
+    #  On launch, the Viewer Manager should query the Viewer Version Manager update api.
     result_data = query_vvm(platform_key=platform_key,
                             settings=settings,
                             UpdaterServiceURL=UpdaterServiceURL,
@@ -756,12 +752,12 @@ def _update_manager(viewer_binary, cli_overrides = {}):
             import pwd
             script_owner_name = pwd.getpwuid(script_owner_id)[0]
             username = pwd.getpwuid(user_id)[0]
-            log.info("Upgrade notification attempted by userid " + username)    
+            log.info("Upgrade notification attempted by user " + username)    
             frame = InstallerUserMessage.InstallerUserMessage(title = "Second Life Installer", icon_name="head-sl-logo.gif")
             frame.binary_choice_message(message = "Second Life was installed by userid " + script_owner_name 
                 + ".  Do you have privileges to install?", true = "Yes", false = 'No')
             if not frame.choice.get():
-                log.info("Upgrade attempt declined by userid " + username)
+                log.info("Upgrade attempt declined by user " + username)
                 after_frame(message = "Please find a system admin to upgrade Second Life")
                 return viewer_binary
     except (AttributeError, ImportError):
@@ -780,18 +776,18 @@ def _update_manager(viewer_binary, cli_overrides = {}):
     #launched from, the update is "in place" and launcher will launch the
     #viewer in this install location. Otherwise, it will launch the Launcher
     #from the new location and kill itself.
-    in_place = (default_channel == result_data['channel'])
+    in_place = (default_channel == result_data['channel']) # TBD?
     log.debug("In place determination: in place %r build_data %r result_data %r" %
               (in_place, BuildData.get('Channel'), result_data['channel']))
 
     #determine if we've tried this download before
     downloaded = check_for_completed_download(download_dir, result_data['size'])
 
-    #323: If the response indicates that there is a required update: 
-    if result_data['required'] or (install_automatically == 1):
+    #  If the response indicates that there is a required update: 
+    if result_data['required']:
         log.info("Required update to version %s" % result_data['version'])
-        #323: Check for a completed download of the required update; if found, display an alert, install the required update, and launch the newly installed viewer.
-        #323: If [optional download and] Install Automatically: display an alert, install the update and launch updated viewer.
+        #  Check for a completed download of the required update; if found, display an alert, install the required update, and launch the newly installed viewer.
+        #  If [optional download and] Install Automatically: display an alert, install the update and launch updated viewer.
         if downloaded is None:
             # start the download, exception if we fail
             download(url = result_data['url'],
@@ -804,15 +800,15 @@ def _update_manager(viewer_binary, cli_overrides = {}):
         #do the install
         return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
     else:
-        #323: If the update response indicates that there is an optional update: 
-        #323: Check to see if the optional update has already been downloaded.
-        #323: If a complete download of that update is found, check the update preference: 
-        #note: automatic install handled above as the steps are the same as required upgrades
-        #323: If Install Manually: display a message with the update information and ask the user whether or not to install the update with three choices:
-        #323: Skip this update: create a marker that subsequent launches should not prompt for this update as long as it is optional, 
-        #     but leave the download in place so that if it becomes required it will be there.
-        #323: Install next time: create a marker that skips the prompt and installs on the next launch
-        #323: Install and launch now: do it.
+        # If the update response indicates that there is an optional update: 
+        # Check to see if the optional update has already been downloaded.
+        # If a complete download of that update is found, check the update preference: 
+        # Note: automatic install handled above as the steps are the same as required upgrades
+        # If Install Manually: display a message with the update information and ask the user whether or not to install the update with three choices:
+        # Skip this update: create a marker that subsequent launches should not prompt for this update as long as it is optional, 
+        # but leave the download in place so that if it becomes required it will be there.
+        # Install next time: create a marker that skips the prompt and installs on the next launch
+        # Install and launch now: do it.
         log.info("Found optional update. Download directory is: " + download_dir)
         if downloaded is None:
             # start a background download           
@@ -835,25 +831,29 @@ def _update_manager(viewer_binary, cli_overrides = {}):
             return viewer_binary
         elif downloaded == 'done' or downloaded == 'next':
             log.info("Found previously downloaded update in: " + download_dir)
-            skip_frame = InstallerUserMessage.InstallerUserMessage(
-                title = BuildData.get('Channel Base')+" Installer",
-                icon_name="head-sl-logo.gif")
-            skip_frame.trinary_choice_link_message(
-                message = "Optional Update %s ready to install. Install this version?\n"
-                "See Release Notes" % result_data['version'], 
-                url = str(result_data['more_info']),
-                one = "Yes", two = "No", three = "Not Now")
-            skip_me = skip_frame.choice3.get()
-            if skip_me == 1:            # Yes
+            if install_automatically:
                 return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
-            elif skip_me == 2:          # No
-                put_marker_file(download_dir, ".skip")
-                # run previously-installed viewer
-                return viewer_binary
-            else:                       # Not Now
-                put_marker_file(download_dir, ".next")
-                # run previously-installed viewer
-                return viewer_binary
+            else:
+                # ask the user what to do with the optional update
+                skip_frame = InstallerUserMessage.InstallerUserMessage(
+                    title = BuildData.get('Channel Base')+" Installer",
+                    icon_name="head-sl-logo.gif")
+                skip_frame.trinary_choice_link_message(
+                    message = "Optional Update %s ready to install. Install this version?\n"
+                    "See Release Notes" % result_data['version'], 
+                    url = str(result_data['more_info']),
+                    one = "Yes", two = "No", three = "Not Now")
+                update_action = skip_frame.choice3.get()
+                if update_action == 1:            # Yes - install now
+                    return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
+                elif update_action == 2:          # No - skip this version
+                    put_marker_file(download_dir, ".skip")
+                    # run previously-installed viewer
+                    return viewer_binary
+                else:                       # Not Now
+                    put_marker_file(download_dir, ".next")
+                    # run previously-installed viewer
+                    return viewer_binary
         elif downloaded == 'skip':
             log.info("Skipping this update per previous choice.  "
                      "Delete the .skip file in " + download_dir + " to change this.")
@@ -861,7 +861,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
             return viewer_binary
         else:
             #shouldn't be here
-            log.warning("Found nonempty download dir but no flag file. Check returned: %r" %
+            log.error("Found nonempty download dir but no flag file. Check returned: %r" %
                         downloaded)
             return viewer_binary
 

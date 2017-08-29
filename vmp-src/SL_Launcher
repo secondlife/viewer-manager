@@ -34,6 +34,7 @@ import os.path
 import platform
 import subprocess
 import sys
+import logging
 from vmp_util import SL_Logging, Application, BuildData
 
 #if for some reason we are running on a POSIX machine with python less than 2.7
@@ -234,59 +235,90 @@ def main():
         new_viewer = update_manager.update_manager(viewer_binary, vmp_args)
     except update_manager.UpdateError as err:
         log.debug("Update manager raised %r" % err)
-        msg = '%s Viewer will launch momentarily.' % err
+        msg = '%s\nViewer will launch momentarily.' % err
         update_manager.after_frame(msg)
-        launch(viewer_binary, command, "viewer after failed update attempt")
+        new_viewer = viewer_binary
     else:
         log.debug("Update manager returned %r" % new_viewer)
-        # If update_manager() returns None, it means: take no action; silently
-        # terminate.
-        if not new_viewer:
-            log.info("Skipping viewer launch.")
-            return
 
-        launch(new_viewer, command, "viewer returned by update_manager")
-
+    if (viewer_binary != new_viewer):
+        launch_as_replacement(new_viewer) # forget arguments 
+        # does not return
+ 
+    viewer_process = launch_as_child(viewer_binary, command)
+    # at the moment, we just wait here.  Later, the crash monitor will be launched at this point
+    rc = viewer_process.wait()
+    log.info("Viewer terminated with %s" % rc)
     log.info("Launcher exiting after viewer exit.")
 
-def launch(viewer_binary, command, viewer_desc="viewer"):
+def launch_as_child(viewer, command_args):
     """
-    Launch the passed 'viewer_binary' with arguments as specified by
-    'command'. Use 'viewer_desc' to describe the viewer for log messages.
-    Unless you pass info=False, also produce an info log message that we are
-    about to try to launch the viewer.
+    Launch the passed 'viewer' with arguments as specified by 'command'. 
 
     If the launch attempt fails, squawk in various ways (log, stderr, popup)
     and terminate.
 
-    If it succeeds, wait for the viewer to terminate and then return the
-    subprocess.Popen object.
+    If it succeeds, return the subprocess.Popen object.
     """
-    # don't alter caller's 'command' list
-    command = [viewer_binary] + command
-    log.info("Launching new %s: %s." % (viewer_desc, command))
+    log.info("Launching viewer %s %s" % (viewer, command_args))
+    command = [viewer] + command_args
 
     env = os.environ.copy()
-    env["PARENT"] = "SL_Launcher"
+    env["PARENT"] = "SL_Launcher" # suppresses warning about not running the viewer directly
 
     try:
         viewer_process = subprocess.Popen(command, env=env)
     except Exception as e:
-        log.warning("Failed to launch %s. Error messages as follows:\n%r" % (viewer_desc, e))
-        message = ["Failed to launch %s" % viewer_desc, "see log for details"]
+        log.error("Failed to launch %s. Error messages as follows:\n%r" % (viewer, e))
+        message = "Failed to launch %s" % viewer, "see log for details"
         frame = InstallerUserMessage.InstallerUserMessage(
             title="SL_Launcher",
-            text=message[0],
+            text=message,
             icon_name="head-sl-logo.gif",
             )
-        frame.basic_message(message=message[1])
-        sys.exit(', '.join(message))
+        frame.basic_message(message=message)
+        sys.exit(-1)
 
-    log.info("Successfully launched%s. %r " % (viewer_desc, command))
-    #at the moment, we just wait here.  Later, the crash monitor will be launched at this point
-    rc = viewer_process.wait()
-    log.info("Viewer terminated with %s" % rc)
+    log.info("Successfully launched %s" % command)
     return viewer_process
+
+def launch_as_replacement(next_executable):
+    """
+    Run next_executable as a replacement for the current process.
+    Depending on the platform, the executable may be an installer or the next viewer.
+    """
+    exec_args=[]
+    if sys.platform.startswith('darwin'):
+        executable = '/usr/bin/open' # we can't just exec the .app
+        exec_args.insert(0, next_executable)
+
+    elif sys.platform.startswith('win') or sys.platform == 'cygwin':
+        executable = next_executable
+
+    else:
+        executable = next_executable
+
+    exec_args.insert(0, os.path.basename(executable))
+
+    log.info("Executing %s as '%s'" % (executable, "', '".join(exec_args)))
+    
+    # ensure that logs are closed and flushed before execing
+    logging.shutdown()
+    try:
+        os.execv(executable, exec_args)
+        # if that worked, we're gone...
+
+    except Exception as err:
+        # logging is gone, can't do that, so put up a dialog
+        message = "Launch failed\n%s" % err
+        frame = InstallerUserMessage.InstallerUserMessage(
+            title="SL_Launcher",
+            text=message,
+            icon_name="head-sl-logo.gif",
+            )
+        frame.basic_message(message=message)
+        sys.exit(-1)
+    # process has been replaced or killed - does not return
 
 if __name__ == "__main__":
     # Initialize the python logging system to SL Logging format and destination
