@@ -100,6 +100,8 @@ def test_query_vvm():
     matt.setDaemon(True)    
     matt.start()
 
+    # This test CANNOT succeed with $http_proxy in the environment.
+    os.environ.pop("http_proxy", None)
     results = update_manager.query_vvm(platform_key=Application.platform_key(), settings={}, UpdaterServiceURL='http://localhost:'+str(port)+'/update')
 
     assert results
