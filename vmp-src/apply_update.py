@@ -230,7 +230,15 @@ def apply_mac_update(installable):
             # in the future, we may want to make this $HOME/Applications ...
             deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
             log.debug("deploy target path: %r" % deploy_path)
-            distutils.dir_util.remove_tree(deploy_path)
+            try:
+                shutil.rmtree(deploy_path)
+            except OSError as e:
+                #if we fail to delete something that isn't there, that's okay
+                if e.errno == errno.ENOENT:
+                    pass
+                else:
+                    raise ApplyError("failed to remove existing install %s: %r" % (deploy_path, e))
+
             output = distutils.dir_util.copy_tree(mounted_appdir,
                                                   deploy_path,
                                                   preserve_mode=1,

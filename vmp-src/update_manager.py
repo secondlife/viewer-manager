@@ -662,8 +662,9 @@ def _update_manager(viewer_binary, cli_overrides = {}):
     settings = get_settings(cli_overrides.get('settings') or parent_dir)
 
     #  If a complete download of that update is found, check the update preference:
-    #settings['UpdaterServiceSetting'] = 0 is manual install
-    #
+    #settings['UpdaterServiceSetting'] =
+    #    0 is manual install (prompt)
+    #    3 is automatic install
     # <key>UpdaterServiceSetting</key>
     #     <map>
     # <key>Comment</key>
@@ -677,14 +678,15 @@ def _update_manager(viewer_binary, cli_overrides = {}):
     # If cli_overrides['set']['UpdaterServiceSetting'], use that;
     # else if settings['UpdaterServiceSetting']['Value'], use that;
     # if none of the above, default to True.
-    install_automatically = cli_overrides.get('set', {}).get('UpdaterServiceSetting',
-        settings.get('UpdaterServiceSetting', {}).get('Value', True))
+    #    (the 'int()' is because a cli override is a string value)
+    install_automatically = int(updater_service_setting = cli_overrides.get('set', {}).get('UpdaterServiceSetting',
+            settings.get('UpdaterServiceSetting', {}).get('Value', True)))
 
     #use default chunk size if none is given, set UpdaterWillingToTest to None if not given
     #this is to prevent key errors on accessing keys that may or may not exist depending on cli options given
     cli_set = cli_overrides.get('set', {})
     # "chunk_size" ? "UpdaterMaximumBandwidth" ? Are these the same thing?
-    chunk_size = cli_set.get('UpdaterMaximumBandwidth', 1024)
+    chunk_size = int(cli_set.get('UpdaterMaximumBandwidth', 1024))
     UpdaterWillingToTest = cli_set.get('UpdaterWillingToTest')
     UpdaterServiceURL = cli_set.get('UpdaterServiceURL')
 
@@ -832,9 +834,11 @@ def _update_manager(viewer_binary, cli_overrides = {}):
         elif downloaded == 'done' or downloaded == 'next':
             log.info("Found previously downloaded update in: " + download_dir)
             if install_automatically:
+                log.info("updating automatically")
                 return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
             else:
                 # ask the user what to do with the optional update
+                log.info("asking the user what to do with the update")
                 skip_frame = InstallerUserMessage.InstallerUserMessage(
                     title = BuildData.get('Channel Base')+" Installer",
                     icon_name="head-sl-logo.gif")
