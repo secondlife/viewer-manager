@@ -679,7 +679,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
     # else if settings['UpdaterServiceSetting']['Value'], use that;
     # if none of the above, default to True.
     #    (the 'int()' is because a cli override is a string value)
-    install_automatically = int(updater_service_setting = cli_overrides.get('set', {}).get('UpdaterServiceSetting',
+    install_automatically = int(cli_overrides.get('set', {}).get('UpdaterServiceSetting',
             settings.get('UpdaterServiceSetting', {}).get('Value', True)))
 
     #use default chunk size if none is given, set UpdaterWillingToTest to None if not given
