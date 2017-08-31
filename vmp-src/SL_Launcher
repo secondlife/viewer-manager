@@ -234,15 +234,13 @@ def main():
         # is desired -- or raises UpdateError.
         new_viewer = update_manager.update_manager(viewer_binary, vmp_args)
     except update_manager.UpdateError as err:
-        log.debug("Update manager raised %r" % err)
+        log.error("Update manager raised %r" % err)
         msg = '%s\nViewer will launch momentarily.' % err
         update_manager.after_frame(msg)
         new_viewer = viewer_binary
-    else:
-        log.debug("Update manager returned %r" % new_viewer)
 
     if (viewer_binary != new_viewer):
-        launch_as_replacement(new_viewer) # forget arguments 
+        launch_as_replacement(new_viewer) # forget arguments since they don't apply to installers
         # does not return
  
     viewer_process = launch_as_child(viewer_binary, command)
@@ -260,7 +258,7 @@ def launch_as_child(viewer, command_args):
 
     If it succeeds, return the subprocess.Popen object.
     """
-    log.info("Launching viewer %s %s" % (viewer, command_args))
+    log.info("Launching current viewer '%s' '%s'" % (viewer, "' '".join(command_args)))
     command = [viewer] + command_args
 
     env = os.environ.copy()
@@ -300,7 +298,7 @@ def launch_as_replacement(next_executable):
 
     exec_args.insert(0, os.path.basename(executable))
 
-    log.info("Executing %s as '%s'" % (executable, "', '".join(exec_args)))
+    log.info("Executing %s as '%s'" % (executable, "' '".join(exec_args)))
     
     # ensure that logs are closed and flushed before execing
     logging.shutdown()

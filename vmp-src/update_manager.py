@@ -679,16 +679,17 @@ def _update_manager(viewer_binary, cli_overrides = {}):
     # else if settings['UpdaterServiceSetting']['Value'], use that;
     # if none of the above, default to True.
     #    (the 'int()' is because a cli override is a string value)
-    install_automatically = int(cli_overrides.get('set', {}).get('UpdaterServiceSetting',
-            settings.get('UpdaterServiceSetting', {}).get('Value', True)))
+    cli_settings = cli_overrides.get('set', {})
+    cli_updater_service_setting = cli_settings.get('UpdaterServiceSetting',None)
+    install_automatically = int(cli_updater_service_setting) if cli_updater_service_setting else settings.get('UpdaterServiceSetting', {}).get('Value', True)
 
     #use default chunk size if none is given, set UpdaterWillingToTest to None if not given
     #this is to prevent key errors on accessing keys that may or may not exist depending on cli options given
-    cli_set = cli_overrides.get('set', {})
     # "chunk_size" ? "UpdaterMaximumBandwidth" ? Are these the same thing?
-    chunk_size = int(cli_set.get('UpdaterMaximumBandwidth', 1024))
-    UpdaterWillingToTest = cli_set.get('UpdaterWillingToTest')
-    UpdaterServiceURL = cli_set.get('UpdaterServiceURL')
+    cli_chunk_size_setting = cli_settings.get('UpdaterMaximumBandwidth', None)
+    chunk_size = int(cli_chunk_size_setting) if cli_chunk_size_setting else 1024 * 10
+    UpdaterWillingToTest = cli_settings.get('UpdaterWillingToTest')
+    UpdaterServiceURL = cli_settings.get('UpdaterServiceURL')
 
     # get channel and version
     default_channel = BuildData.get('Channel')
