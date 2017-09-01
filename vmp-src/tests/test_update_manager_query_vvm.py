@@ -83,29 +83,25 @@ def test_query_vvm():
     #   https://wiki.lindenlab.com/wiki/Login_Test#Test_Viewer_Updater
     #for test plans on all cases, as it requires setting up a truly functional fake VVM service
     #pick a random, unused port to serve on
-    found_port = False
-    httpd = None
-    results = None
     
-    while not found_port:
+    while True:
         port = random.randint(1025,65535) 
         log.info("trying a port for server: " + str(port))
         try:
             httpd = Server(('', port), TestHTTPRequestHandler)    
         except:
-            pass
-        finally:
-            if httpd is not None:
-                found_port = True
-                log.info("httpd: %r" % httpd)
-                log.info("found a port for server: " + str(port))
-            else:
-                log.info("httpd is None")
+            continue
+        else:
+            break
+    log.info("httpd: %r" % httpd)
+    log.info("found a port for server: " + str(port))
     
     matt = threading.Thread(name='vvm_daemon', args=(httpd,), target=vvm_daemon)
     matt.setDaemon(True)    
     matt.start()
 
+    # This test CANNOT succeed with $http_proxy in the environment.
+    os.environ.pop("http_proxy", None)
     results = update_manager.query_vvm(platform_key=Application.platform_key(), settings={}, UpdaterServiceURL='http://localhost:'+str(port)+'/update')
 
     assert results
