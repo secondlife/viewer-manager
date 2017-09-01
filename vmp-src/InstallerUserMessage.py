@@ -50,6 +50,55 @@ from vmp_util import Application
 if getattr(sys, 'frozen', False):
     __file__ = sys._MEIPASS
 
+# ****************************************************************************
+#   status frame functionality
+# ****************************************************************************
+# When we're currently displaying a StatusMessage, this module global holds
+# that instance so we can find it again. StatusMessage is just like
+# InstallerUserMessage (see below) but with hooks to set/clear _status_frame.
+_status_frame = None
+
+def status_message(text):
+    """
+    Pass a string message. If this is the first status_message() call, this
+    will pop up a new StatusMessage frame containing that text and immediately
+    return. If there's already a StatusMessage frame displayed, it will
+    instead update that frame with the new text.
+
+    Pass None to close the StatusMessage frame.
+    """
+    global _status_frame
+    if text is not None:
+        # display new text
+        if _status_frame is None:
+            # StatusMessage constructor sets _status_frame
+            frame = StatusMessage()
+            frame.basic_message(text, wait=False)
+        else:
+            # there's an existing StatusMessage instance, just use that
+            _status_frame.set_message(text)
+
+    else:
+        # text=None means: make the StatusMessage go away
+        if _status_frame is not None:
+            _status_frame.destroy()
+            _status_frame = None
+
+# ****************************************************************************
+#   Convenience
+# ****************************************************************************
+# please keep the defaults for title and icon_name in sync with the constructor
+def basic_message(text, title=Application.name(), icon_name="head_sl_logo.gif"):
+    """
+    basic_message(text) just pops up a message box which the user must clear.
+    """
+    # since by default InstallerUserMessage.basic_message() hangs around until
+    # the user clears the message frame, we don't even need to save the instance
+    InstallerUserMessage(title=title, icon_name=icon_name).basic_message(text)
+
+# ****************************************************************************
+#   InstallerUserMessage class
+# ****************************************************************************
 class InstallerUserMessage(tk.Tk):
     #Goals for this class:
     #  Provide a uniform look and feel
@@ -63,8 +112,8 @@ class InstallerUserMessage(tk.Tk):
     #Linden standard green color, from Marketing
     linden_green = "#487A7B"
 
-    def __init__(self, text="", title="", width=500, height=200, wraplength = 400,
-                 icon_name = None, icon_path = None):
+    def __init__(self, title=Application.name(), width=500, height=200,
+                 icon_name = "head-sl-logo.gif", icon_path = None):
         tk.Tk.__init__(self)
         self.grid()
         self.title(title)
@@ -105,7 +154,7 @@ class InstallerUserMessage(tk.Tk):
 
         #defines what to do when window is closed
         self.protocol("WM_DELETE_WINDOW", self._delete_window)
-        
+
         #callback id
         self.id = -1
 
@@ -166,6 +215,7 @@ class InstallerUserMessage(tk.Tk):
         for y in range(row_count):
             self.rowconfigure(y, weight=(2 if y == heavy_row else 1))
 
+    # ---------------------------- basic_message -----------------------------
     def basic_message(self, message, wait=True):
         #message: text to be displayed
         #usage:
@@ -190,6 +240,7 @@ class InstallerUserMessage(tk.Tk):
         if wait:
             self.mainloop()
 
+    # ------------------------ binary_choice_message -------------------------
     def binary_choice_message(self, message, true = 'Yes', false = 'No', wait=True):
         #true: first option, returns True
         #false: second option, returns False
@@ -213,7 +264,8 @@ class InstallerUserMessage(tk.Tk):
         if wait:
             self.mainloop()
             return self.choice.get()
-        
+
+    # ------------------------ trinary_choice_message ------------------------
     def trinary_choice_message(self, message, one = 1, two = 2, three = 3, wait=True):
         #one: first option, returns 1
         #two: second option, returns 2
@@ -241,6 +293,7 @@ class InstallerUserMessage(tk.Tk):
             self.mainloop()
             return self.choice3.get()
 
+    # --------------------- trinary_choice_link_message ----------------------
     def trinary_choice_link_message(self, message, url, one = 1, two = 2, three = 3, wait=True):
         #url is hypertext for message
         #one: first option, returns 1
@@ -305,6 +358,29 @@ class InstallerUserMessage(tk.Tk):
                 #nothing to do
                 return
 
+# ****************************************************************************
+#   StatusMessage
+# ****************************************************************************
+class StatusMessage(InstallerUserMessage):
+    def __init__(self, *args, **kwds):
+        # forward the call to base class constructor
+        InstallerUserMessage.__init__(self, *args, **kwds)
+
+        # set ourselves as canonical instance
+        global _status_frame
+        _status_frame = self
+
+    def _delete_window(self):
+        # canonical instance is going away
+        global _status_frame
+        _status_frame = None
+
+        # forward the call to base class deletion handler
+        InstallerUserMessage._delete_window(self)
+
+# ****************************************************************************
+#   Testing
+# ****************************************************************************
 class ThreadedClient(threading.Thread):
     #for test only, not part of the functional code
     def __init__(self, queue):
@@ -338,27 +414,27 @@ if __name__ == "__main__":
             print "Over now"
 
     #basic message window test
-    frame2 = InstallerUserMessage(text = "Something in the way she moves....", title = "Beatles Quotes for 100", icon_name="head-sl-logo.gif")
+    frame2 = InstallerUserMessage(text = "Something in the way she moves....", title = "Beatles Quotes for 100")
     frame2.basic_message(message = "...attracts me like no other.")
     print "Destroyed!"
     sys.stdout.flush()
 
     #binary choice test.  User destroys window when they select.
-    frame3 = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 200", icon_name="head-sl-logo.gif")
+    frame3 = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 200")
     frame3.binary_choice_message(message = "And all I have to do is think of her.", 
         true = "Don't want to leave her now", false = 'You know I believe and how')
     print frame3.choice.get()
     sys.stdout.flush()
     
     #trinary choice test.  User destroys window when they select.
-    frame3a = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 400", icon_name="head-sl-logo.gif")
+    frame3a = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 400")
     frame3a.trinary_choice_message(message = "And all I have to do is think of her.", 
         one = "Don't want to leave her now", two = 'You know I believe and how', three = 'John is Dead')
     print frame3a.choice3.get()
     sys.stdout.flush()
     
     #trinary link choice test. Click on message text to go to URL. User destroys window when they select.
-    frame3b = InstallerUserMessage(text = "Come together....", title = "Beatles Quotes for 500", icon_name="head-sl-logo.gif")
+    frame3b = InstallerUserMessage(text = "Come together....", title = "Beatles Quotes for 500")
     frame3b.trinary_choice_link_message(message = "Got to be good looking,\n'Cause he so hard to see", url = "http://www.ucla.edu", 
             one = "He bag production.", two = 'He got walrus gumboot.', three = 'He got Ono sideboard.')    
     print frame3b.choice3.get()
@@ -370,7 +446,7 @@ if __name__ == "__main__":
     thread.start()
     print "thread started"
 
-    frame4 = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 300", icon_name="head-sl-logo.gif")
+    frame4 = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 300")
     frame4.progress_bar(message = "You're asking me will my love grow", size = 100, pb_queue = queue)
     print "frame defined"
     frame4.mainloop()

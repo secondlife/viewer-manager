@@ -174,7 +174,7 @@ def apply_mac_update(installable):
     log = SL_Logging.getLogger("SL_Apply_Update")
 
     #verify dmg file
-    # TBD - add progress message "Verifying installer image..."
+    IUM.status_message("Verifying installer image...")
     try:
         verify_cmd=["hdiutil", "verify", installable]
         output = subprocess.check_output(verify_cmd, **subprocess_args(include_stdout=False,
@@ -186,7 +186,7 @@ def apply_mac_update(installable):
         raise ApplyError("Could not verify dmg file %s.  Error messages: %s" % (installable, e))
     #make temp dir and mount & attach dmg
     tmpdir = tempfile.mkdtemp()
-    # TBD - add progress message "Mounting installer image..."
+    IUM.status_message("Mounting installer image...")
     try:
         hdiutil_cmd=["hdiutil", "attach", installable, "-mountroot", tmpdir]
         output = subprocess.check_output(hdiutil_cmd,
@@ -225,7 +225,7 @@ def apply_mac_update(installable):
 
         #do the install, finally       
         #copy over the new bits    
-        # TBD - add progress message "Copying updated viewer..."
+        IUM.status_message("Copying updated viewer...")
         try:
             # in the future, we may want to make this $HOME/Applications ...
             deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
