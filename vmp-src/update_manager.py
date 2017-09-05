@@ -237,25 +237,17 @@ def sleep_between(iterable, message, duration):
         sleep(duration)
         yield item
 
-def get_settings(parent_dir, other_file=None):
+def get_settings(settings_file):
     #return the settings file parsed into a dict
-    #defaults to settings.xml, use other_file for some other xml file in user_settings
     settings={}
     log=SL_Logging.getLogger('get_settings')
-    #this happens when the path to settings file happens on the command line
-    #we get a full path and don't need to munge it
-    if os.path.isfile(parent_dir):
-        settings_file = parent_dir
-    else:
-        settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings',
-                                                     other_file or 'settings.xml'))
 
     try:
-        settings = llsd.parse((open(settings_file)).read())
+        settings = llsd.parse(open(settings_file).read())
     except llsd.LLSDParseError as lpe:
-        log.warning("Could not parse settings file %s: %s" % (settings_file, lpe))
+        log.warning("Could not parse settings file %s: %s" % (os.path.abspath(settings_file), lpe))
     except Exception as e:
-        log.warning("Could not read settings file %s: %s" % (settings_file, e))
+        log.warning("Could not read settings file %s: %s" % (os.path.abspath(settings_file), e))
     return settings
 
 def make_VVM_UUID_hash(platform_key):
@@ -347,7 +339,7 @@ def getBitness(platform_key, settings):
 
     log.info("Turning off benchmarking in viewer startup.")
     #write to settings file, see MAINT-7571
-    settings_path = os.path.join(Application.userpath(),'user_settings', 'settings.xml')
+    settings_path = Application.user_settings_path()
     settings = get_settings(settings_path)
     log.debug("Settings before skip benchmark modification:\n%s" % pformat(settings))
 
@@ -662,9 +654,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
 
     #setup and getting initial parameters
     platform_key = Application.platform_key() # e.g. "mac"
-    parent_dir = Application.userpath()       # e.g. "~/AppData/Roaming/SecondLife"
-
-    settings = get_settings(cli_overrides.get('settings') or parent_dir)
+    settings = get_settings(cli_overrides.get('settings') or Application.user_settings_path())
 
     #323: If a complete download of that update is found, check the update preference:
     #settings['UpdaterServiceSetting'] = 0 is manual install
