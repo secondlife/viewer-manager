@@ -128,17 +128,21 @@ class DummyApplication(object):
     def userpath(self):
         return self.path
 
+    def user_settings_path(self):
+        return os.path.join(self.path, 'user_settings', 'settings.xml')
+
 def test_win_only_bad_card_force_address_64():
     # This is the case in which getBitness() tries to force 'SkipBenchmark'
     # into Application.userpath()/user_settings/settings.xml. We'll have to
     # make a temporary one of those.
     tempdir = tempfile.mkdtemp()
     try:
-        settings_path = os.path.join(tempdir, 'user_settings', 'settings.xml')
+        Application = DummyApplication(tempdir)
+        settings_path = Application.user_settings_path()
 
         # ensure Application.userpath() returns our tempdir
         with patch_dict(os.environ, 'PROGRAMFILES(X86)', 'nonempty'), \
-             patch(update_manager, "Application", DummyApplication(tempdir)), \
+             patch(update_manager, "Application", Application), \
              patch(update_manager, "wmic",
                    lambda *args:
                    'Name                    \r\r\n'
@@ -151,7 +155,7 @@ def test_win_only_bad_card_force_address_64():
                          64)
 
             # settings file should have been created with that one entry
-            assert_equal(update_manager.get_settings(tempdir), skip_settings)
+            assert_equal(update_manager.get_settings(settings_path), skip_settings)
 
             # overwrite that settings file with an empty one
             write_settings(settings_object={}, settings_path=settings_path)
@@ -161,7 +165,7 @@ def test_win_only_bad_card_force_address_64():
                          64)
 
             # settings file should have been rewritten with that one entry
-            assert_equal(update_manager.get_settings(tempdir), skip_settings)
+            assert_equal(update_manager.get_settings(settings_path), skip_settings)
 
             # now put a non-empty settings file
             write_settings(settings_object=dict(ForceAddressSize='64'),
@@ -172,7 +176,7 @@ def test_win_only_bad_card_force_address_64():
                          64)
 
             # should have preserved the existing entries, while adding SkipBenchmark
-            settings = update_manager.get_settings(tempdir)
+            settings = update_manager.get_settings(settings_path)
             assert_equal(settings["ForceAddressSize"], "64")
             assert_equal(settings["SkipBenchmark"], skip_settings["SkipBenchmark"])
 
