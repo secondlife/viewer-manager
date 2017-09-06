@@ -36,6 +36,7 @@ import subprocess
 import sys
 import logging
 from vmp_util import SL_Logging, Application, BuildData
+from InstallerUserMessage import status_message
 
 #if for some reason we are running on a POSIX machine with python less than 2.7
 #just give up on VMP and execute the viewer per product.
@@ -235,8 +236,9 @@ def main():
         new_viewer = update_manager.update_manager(viewer_binary, vmp_args)
     except update_manager.UpdateError as err:
         log.error("Update manager raised %r" % err)
-        msg = '%s\nViewer will launch momentarily.' % err
-        update_manager.after_frame(msg)
+        # use status_message() so the frame will persist until this process
+        # terminates
+        status_message('%s\nViewer will launch momentarily.' % err)
         new_viewer = viewer_binary
 
     if (viewer_binary != new_viewer):

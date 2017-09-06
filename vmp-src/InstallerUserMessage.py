@@ -42,7 +42,7 @@ import Tkinter as tk
 import ttk
 #for hyperlinks
 import webbrowser
-from vmp_util import Application
+from vmp_util import Application, SL_Logging
 
 #this is to support pyinstaller, which uses sys._MEIPASS to point to the location
 #the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
@@ -68,8 +68,12 @@ def status_message(text):
     Pass None to close the StatusMessage frame.
     """
     global _status_frame
+    # Log each status message we display to help diagnose VMP slow operation
+    # -- since each log message gets a timestamp.
+    log = SL_Logging.getLogger('status_message')
     if text is not None:
         # display new text
+        log.info(text)
         if _status_frame is None:
             # StatusMessage constructor sets _status_frame
             frame = StatusMessage()
@@ -80,6 +84,7 @@ def status_message(text):
 
     else:
         # text=None means: make the StatusMessage go away
+        log.info("(close)")
         if _status_frame is not None:
             _status_frame.destroy()
             _status_frame = None
@@ -87,14 +92,18 @@ def status_message(text):
 # ****************************************************************************
 #   Convenience
 # ****************************************************************************
-# please keep the defaults for title and icon_name in sync with the constructor
-def basic_message(text, title=Application.name(), icon_name="head_sl_logo.gif"):
+def basic_message(text, **kwds):
     """
     basic_message(text) just pops up a message box which the user must clear.
+
+    Any parameter overrides for the implicit InstallerUserMessage constructor
+    must be passed as keyword arguments, e.g.:
+
+    basic_message(text, title='This is a non-standard title')
     """
     # since by default InstallerUserMessage.basic_message() hangs around until
     # the user clears the message frame, we don't even need to save the instance
-    InstallerUserMessage(title=title, icon_name=icon_name).basic_message(text)
+    InstallerUserMessage(**kwds).basic_message(text)
 
 # ****************************************************************************
 #   InstallerUserMessage class

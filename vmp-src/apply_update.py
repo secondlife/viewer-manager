@@ -153,6 +153,7 @@ def apply_update(download_dir = None, platform_key = None, in_place = True):
 
 def apply_linux_update(installable, in_place):
     log = SL_Logging.getLogger("SL_Apply_Update")
+    IUM.status_message("Installing from tarball...")
     try:
         #untar to tmpdir
         tmpdir = tempfile.mkdtemp()
@@ -276,6 +277,7 @@ def apply_mac_update(installable):
     return deploy_path
     
 def apply_windows_update(installable):
+    IUM.status_message("Launching installer...")
     # pass back the installer; SL_Launcher will exec it and replace this process
     return installable
 
