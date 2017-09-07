@@ -237,25 +237,17 @@ def sleep_between(iterable, message, duration):
         sleep(duration)
         yield item
 
-def get_settings(parent_dir, other_file=None):
+def get_settings(settings_file):
     #return the settings file parsed into a dict
-    #defaults to settings.xml, use other_file for some other xml file in user_settings
     settings={}
     log=SL_Logging.getLogger('get_settings')
-    #this happens when the path to settings file happens on the command line
-    #we get a full path and don't need to munge it
-    if os.path.isfile(parent_dir):
-        settings_file = parent_dir
-    else:
-        settings_file = os.path.abspath(os.path.join(parent_dir,'user_settings',
-                                                     other_file or 'settings.xml'))
 
     try:
-        settings = llsd.parse((open(settings_file)).read())
+        settings = llsd.parse(open(settings_file).read())
     except llsd.LLSDParseError as lpe:
-        log.warning("Could not parse settings file %s: %s" % (settings_file, lpe))
+        log.warning("Could not parse settings file %s: %s" % (os.path.abspath(settings_file), lpe))
     except Exception as e:
-        log.warning("Could not read settings file %s: %s" % (settings_file, e))
+        log.warning("Could not read settings file %s: %s" % (os.path.abspath(settings_file), e))
     return settings
 
 def make_VVM_UUID_hash(platform_key):
@@ -290,14 +282,11 @@ def make_VVM_UUID_hash(platform_key):
         log.debug("result of subprocess call to get mac MUUID: %r" % muuid)
     elif (platform_key == 'win'):
         # wmic csproduct get UUID | grep -v UUID
-        wmic_cmd=['wmic','csproduct','get','UUID']
-        muuid = subprocess.check_output(wmic_cmd,
-                                        **subprocess_args(include_stdout=False,
-                                                          log_stream=SL_Logging.stream_from_process(wmic_cmd)))
+        muuid = wmic('csproduct','get','UUID')
         #outputs in two rows:
         #UUID
         #XXXXXXX-XXXX...
-        muuid = re.split('\n',muuid)[1].rstrip()
+        muuid = muuid.splitlines()[1].rstrip()
         log.debug("result of subprocess call to get win MUUID: %r" % muuid)
             
     if muuid is not None:
@@ -308,77 +297,81 @@ def make_VVM_UUID_hash(platform_key):
         hash = hashlib.md5(str(uuid.uuid1())).hexdigest()
     return hash
 
-def getBitness(platform_key = None, settings=None):
+def getBitness(platform_key, settings):
     log=SL_Logging.getLogger('getBitness')
     log.debug("getBitness called with: %r and %r" % (platform_key, settings))
     if platform_key in ['lnx', 'mac']:
         return 64
+
     if 'PROGRAMFILES(X86)' not in os.environ:
         return 32
-    else:
-        #see MAINT-6832, MAINT-7571 and IQA-4130
-        wmic_cmd=['wmic','path','Win32_VideoController','get','NAME']
-        wmic_graphics = subprocess.check_output(wmic_cmd,
-                                                **subprocess_args(include_stdout=False,
-                                                                  log_stream=SL_Logging.stream_from_process(wmic_cmd)))
-        log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
-        wmic_graphics = wmic_graphics.rstrip()
-        wmic_list = re.split('\r', wmic_graphics)
-        good = True
-        # the first line of the response is always the string literal 'Name' and then a ''  Discard them.
-        wmic_list.pop(0)
-        wmic_list.pop(0)
 
-        for line in wmic_list:
-            log.debug("Current WMIC list entry: %r"% line)
-            #Any card other than the bad ones will work
-            if line.find("Intel(R) HD Graphics") > -1:
-                word = line.split().pop()
-                log.debug("Current word: %r"% word)
-                if word in mHD_GRAPHICS_LIST:
-                    log.debug("Found a bad card")
-                    good = False
-            # '' and '\n' occurs as a split artifact, ignore them
-            elif (line != '' and line != '\n'):
-                #some other card, anything is good.
-                good = True
-                log.debug("Found a good card")
-                #there's no order guarantee from wmic, this is to prevent an
-                #HD card discovered after a good card from overwriting the state variable
-                #by specification, a machine is bad iff ALL of the cards on the machine are bad ones
-                break
-            
-        if not good:
-            log.debug("Graphics card determined to be bad.")
-            addr = 32
-            if 'ForceAddressSize' in settings.keys():
-                addr = settings['ForceAddressSize']
-                log.debug("ForceAddressSize parameter found with argument: %r" % addr)
-            if addr == '64':
-                log.info("Turning off benchmarking in viewer startup.")
-                #write to settings file, see MAINT-7571
-                settings_path = os.path.join(Application.userpath(),'user_settings', 'settings.xml')
-                settings = get_settings(settings_path)
-                log.debug("Settings before skip benchmark modification: %r" % settings)
-                
-                #overwrite settings files          
-                if settings is not None:
-                    if 'SkipBenchmark' in settings.keys():
-                        #don't care what it was, kill it and then write what we want
-                        settings.pop('SkipBenchmark')
-                    settings.append(skip_settings)
-                else:
-                    #no settings file, just make one.  llsd printer invoked via write_settings handles the enclosing llsd/xml
-                    settings = skip_settings
-                try:
-                    log.debug("Settings just before skip benchmark writing: %r" % settings)
-                    write_settings(settings_object=settings, settings_path=settings_path)
-                except Exception, e:
-                    log.error("Failed to write to settings file: %r" % e)
-                    return 32
-            else:
-                return 32
+    #see MAINT-6832, MAINT-7571 and IQA-4130
+    wmic_graphics = wmic('path','Win32_VideoController','get','NAME')
+    log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
+    # first rstrip() every line, then discard any that are completely blank
+    # the first line of the response is always the string literal 'Name'
+    wmic_list = [line for line in (ln.rstrip() for ln in wmic_graphics.splitlines())
+                 if line][1:]
+    # The logic here is a little complicated:
+    # - If there's no bad card, we're good.
+    # - If there's a bad card AND some other card, still good.
+    # - If the only card(s) present are bad cards, not good.
+    good_cards = [line for line in wmic_list
+                  if not ("Intel(R) HD Graphics" in line and
+                          line.split()[-1] in mHD_GRAPHICS_LIST)]
+    #there's no order guarantee from wmic, this is to prevent an
+    #HD card discovered after a good card from overwriting the state variable
+    #by specification, a machine is bad iff ALL of the cards on the machine are bad ones
+    if good_cards:
+        log.debug("Found good graphics cards: %s", ", ".join(good_cards))
         return 64
+
+    # The case in which wmic shows no cards at all comes here too... must we
+    # defend against that?!
+    log.debug("Found only bad graphics cards: %s", ", ".join(wmic_list))
+    addr = 32
+    if 'ForceAddressSize' in settings:
+        addr = settings['ForceAddressSize']
+        log.debug("ForceAddressSize parameter found with argument: %r" % addr)
+    if addr != '64':
+        return 32
+
+    log.info("Turning off benchmarking in viewer startup.")
+    #write to settings file, see MAINT-7571
+    settings_path = Application.user_settings_path()
+    settings = get_settings(settings_path)
+    log.debug("Settings before skip benchmark modification:\n%s" % pformat(settings))
+
+    #overwrite settings file
+    settings.update(skip_settings)
+    log.debug("Settings just before skip benchmark writing:\n%s" % pformat(settings))
+    try:
+        write_settings(settings_object=settings, settings_path=settings_path)
+    except Exception as e:
+        log.error("Failed to write to settings file %s: %r" % (settings_path, e))
+        return 32
+    else:
+        return 64
+
+def wmic(*args):
+    """
+    Run the Windows wmic command with specified arguments, returning its
+    stdout (or raising an exception).
+
+    Breaking this out as a separate function improves testability.
+    """
+    log = SL_Logging.getLogger('wmic')
+    wmic_cmd = ("wmic",) + args
+    try:
+        return subprocess.check_output(
+            wmic_cmd,
+            **subprocess_args(include_stdout=False,
+                              log_stream=SL_Logging.stream_from_process(wmic_cmd)))
+    except OSError as err:
+        if err.errno == errno.ENOENT:
+            log.error("No wmic command found - bad Windows install?")
+        raise
 
 def isViewerMachineBitMatched(viewer_platform = None, platform_key = None, bitness = 64):
     if not viewer_platform or not platform_key:
@@ -396,7 +389,7 @@ def isViewerMachineBitMatched(viewer_platform = None, platform_key = None, bitne
         win_plat_key = 'win32'
     return (viewer_platform == win_plat_key)
 
-def query_vvm(platform_key = None, settings = None,
+def query_vvm(platform_key = None, settings = {},
               UpdaterServiceURL = None, UpdaterWillingToTest = None):
     result_data = None
 
@@ -657,9 +650,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
 
     #setup and getting initial parameters
     platform_key = Application.platform_key() # e.g. "mac"
-    parent_dir = Application.userpath()       # e.g. "~/AppData/Roaming/SecondLife"
-
-    settings = get_settings(cli_overrides.get('settings') or parent_dir)
+    settings = get_settings(cli_overrides.get('settings') or Application.user_settings_path())
 
     #  If a complete download of that update is found, check the update preference:
     #settings['UpdaterServiceSetting'] =

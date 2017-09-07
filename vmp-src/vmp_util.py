@@ -229,6 +229,11 @@ class Application(object):
             raise ValueError("Unsupported platform '%s'" % running_on)
         return base_dir
 
+    @staticmethod
+    def user_settings_path():
+        """Return the conventional location for the user settings file on this platform"""
+        return os.path.join(Application.userpath(), "user_settings", "settings.xml")
+
     PlatformKey = {'Darwin':'mac', 'Linux':'lnx', 'Windows':'win'}
     @staticmethod
     def platform_key():
@@ -368,6 +373,5 @@ def write_settings(settings_object=None, settings_path=None):
             pass
         else:
             raise
-    f = open(settings_path, 'wb')
     with open(settings_path, 'wb') as f:
         f.write(llsd.format_pretty_xml(settings_object))

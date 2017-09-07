@@ -51,18 +51,15 @@ def get_settings_teardown(tmpdir1):
 
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
 def test_get_settings(tmpdir1):   
-    settings_llsd = update_manager.get_settings(data_dir)
+    settings_llsd = update_manager.get_settings(
+        os.path.join(data_dir, "user_settings", "settings.xml"))
     #we aren't testing the LLSD library, one dictionary value is enough
     assert_equal(settings_llsd['CurrentGrid']['Value'],'util.agni.lindenlab.com')
-    
-@with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
-def test_get_other_file(tmpdir1):
-    settings_llsd = update_manager.get_settings(data_dir, 'cmd_line.xml')
-    assert_equal(settings_llsd['console']['map-to'],'ShowConsoleWindow')
 
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
 def test_get_settings_bad_key(tmpdir1):
-    settings_llsd = update_manager.get_settings(data_dir)
+    settings_llsd = update_manager.get_settings(
+        os.path.join(data_dir, "user_settings", "settings.xml"))
     try:
         settings_llsd['LagAmount']['Value']
     except KeyError:
