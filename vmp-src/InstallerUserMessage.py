@@ -123,6 +123,16 @@ class InstallerUserMessage(tk.Tk):
 
     def __init__(self, title=Application.name(), width=500, height=200,
                  icon_name = "head-sl-logo.gif", icon_path = None):
+        # Before we even perform base-class initialization, suppress any
+        # existing _status_frame. Deriving from tk.Tk (vs. tk.Frame) is great
+        # when you know that any one of these might be the first visible
+        # frame, but empirically, multiple concurrent instances of tk.Tk
+        # subclasses confuse the communication between Python and Tkinter:
+        # things end up in the wrong frame. Make them mutually exclusive by
+        # destroying any existing _status_frame before constructing this tk.Tk
+        # subclass.
+        status_message(None)
+        # Now initialize base class.
         tk.Tk.__init__(self)
         self.grid()
         self.title(title)
