@@ -241,6 +241,9 @@ def main():
         status_message('%s\nViewer will launch momentarily.' % err)
         new_viewer = viewer_binary
 
+    # Clear any existing status message: we're about to launch the viewer.
+    status_message(None)
+
     if (viewer_binary != new_viewer):
         launch_as_replacement(new_viewer) # forget arguments since they don't apply to installers
         # does not return
