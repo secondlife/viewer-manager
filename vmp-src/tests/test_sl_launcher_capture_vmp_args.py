@@ -82,6 +82,6 @@ def test_capture_vmp_args_simple():
 @with_setup_args.with_setup_args(capture_vmp_args_setup, capture_vmp_args_teardown)
 def test_capture_vmp_args_setter(): 
     cmd_settings_file = SLL.get_cmd_line(test_file)
-    overrides = SLL.capture_vmp_args(['--set', 'UpdaterServiceCheckPeriod', '333'], cmd_settings_file)
+    overrides = SLL.capture_vmp_args(['--set', 'UpdaterServiceSetting', '2'], cmd_settings_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
-    assert_equal(overrides['set']['UpdaterServiceCheckPeriod'], '333')
+    assert_equal(overrides['set']['UpdaterServiceSetting'], '2')

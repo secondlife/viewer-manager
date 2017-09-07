@@ -299,11 +299,14 @@ def make_VVM_UUID_hash(platform_key):
 
 def getBitness(platform_key, settings):
     log=SL_Logging.getLogger('getBitness')
-    log.debug("getBitness called with: %r and %r" % (platform_key, settings))
+    # log.debug("getBitness called with: %r and %r" % (platform_key, settings))
     if platform_key in ['lnx', 'mac']:
+        log.info("%s is always 64bit" % platform_key)
         return 64
+    # always Windows from here down...
 
     if 'PROGRAMFILES(X86)' not in os.environ:
+        log.info("'PROGRAMFILES(X86)' not found in environment; returning 32bit")
         return 32
 
     #see MAINT-6832, MAINT-7571 and IQA-4130
@@ -333,7 +336,7 @@ def getBitness(platform_key, settings):
     addr = 32
     if 'ForceAddressSize' in settings:
         addr = settings['ForceAddressSize']
-        log.debug("ForceAddressSize parameter found with argument: %r" % addr)
+        log.info("ForceAddressSize setting: %r" % addr)
     if addr != '64':
         return 32
 
@@ -341,11 +344,11 @@ def getBitness(platform_key, settings):
     #write to settings file, see MAINT-7571
     settings_path = Application.user_settings_path()
     settings = get_settings(settings_path)
-    log.debug("Settings before skip benchmark modification:\n%s" % pformat(settings))
+    #log.debug("Settings before skip benchmark modification:\n%s" % pformat(settings))
 
     #overwrite settings file
     settings.update(skip_settings)
-    log.debug("Settings just before skip benchmark writing:\n%s" % pformat(settings))
+    #log.debug("Settings just before skip benchmark writing:\n%s" % pformat(settings))
     try:
         write_settings(settings_object=settings, settings_path=settings_path)
     except Exception as e:
@@ -654,8 +657,10 @@ def _update_manager(viewer_binary, cli_overrides = {}):
 
     #  If a complete download of that update is found, check the update preference:
     #settings['UpdaterServiceSetting'] =
-    #    0 is manual install (prompt)
-    #    3 is automatic install
+    INSTALL_MODE_AUTO=3            # Install each update automatically
+    INSTALL_MODE_PROMPT_OPTIONAL=1 # Ask me when an optional update is ready to install
+    INSTALL_MODE_MANDATORY_ONLY=0  # Install only mandatory updates
+    # (see panel_preferences_setup.xml)
     # <key>UpdaterServiceSetting</key>
     #     <map>
     # <key>Comment</key>
@@ -672,13 +677,17 @@ def _update_manager(viewer_binary, cli_overrides = {}):
     #    (the 'int()' is because a cli override is a string value)
     cli_settings = cli_overrides.get('set', {})
     cli_updater_service_setting = cli_settings.get('UpdaterServiceSetting',None)
-    install_automatically = int(cli_updater_service_setting) if cli_updater_service_setting else settings.get('UpdaterServiceSetting', {}).get('Value', True)
+    install_mode = int(cli_updater_service_setting if cli_updater_service_setting else settings.get('UpdaterServiceSetting', {}).get('Value', INSTALL_MODE_AUTO))
+    # validate the install_mode
+    if install_mode != INSTALL_MODE_AUTO and install_mode != INSTALL_MODE_PROMPT_OPTIONAL and install_mode != INSTALL_MODE_MANDATORY_ONLY:
+        log.error("Invalid setting value for UpdaterServiceSetting (%d); using automatic install (%d)" % (install_mode, INSTALL_MODE_AUTO))
+        install_mode = INSTALL_MODE_AUTO
 
     #use default chunk size if none is given, set UpdaterWillingToTest to None if not given
     #this is to prevent key errors on accessing keys that may or may not exist depending on cli options given
     # "chunk_size" ? "UpdaterMaximumBandwidth" ? Are these the same thing?
     cli_chunk_size_setting = cli_settings.get('UpdaterMaximumBandwidth', None)
-    chunk_size = int(cli_chunk_size_setting) if cli_chunk_size_setting else 1024 * 10
+    chunk_size = int(cli_chunk_size_setting if cli_chunk_size_setting else 1024 * 10)
     UpdaterWillingToTest = cli_settings.get('UpdaterWillingToTest')
     UpdaterServiceURL = cli_settings.get('UpdaterServiceURL')
 
@@ -695,14 +704,14 @@ def _update_manager(viewer_binary, cli_overrides = {}):
 
     settings['ForceAddressSize'] = cli_overrides.get('forceaddresssize')
 
-    log.debug("Pre query settings:\n%s", pformat(settings))
+    #log.debug("Pre query settings:\n%s", pformat(settings))
 
     #  On launch, the Viewer Manager should query the Viewer Version Manager update api.
     result_data = query_vvm(platform_key=platform_key,
                             settings=settings,
                             UpdaterServiceURL=UpdaterServiceURL,
                             UpdaterWillingToTest=UpdaterWillingToTest)
-    log.debug("result_data received from query_vvm:\n%s", pformat(result_data))
+    log.debug("result_data received from query_vvm:\n%s", result_data) # wrap result_data in pformat() for readability, but don't commit that way
 
     #nothing to do or error
     if not result_data:
@@ -825,31 +834,40 @@ def _update_manager(viewer_binary, cli_overrides = {}):
             return viewer_binary
         elif downloaded == 'done' or downloaded == 'next':
             log.info("Found previously downloaded update in: " + download_dir)
-            if install_automatically:
+
+            if INSTALL_MODE_AUTO == install_mode:
                 log.info("updating automatically")
                 return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
-            else:
+
+            elif INSTALL_MODE_PROMPT_OPTIONAL == install_mode:
                 # ask the user what to do with the optional update
                 log.info("asking the user what to do with the update")
                 skip_frame = InstallerUserMessage.InstallerUserMessage(
                     title = BuildData.get('Channel Base')+" Installer",
                     icon_name="head-sl-logo.gif")
                 skip_frame.trinary_choice_link_message(
-                    message = "Optional Update %s ready to install. Install this version?\n"
-                    "See Release Notes" % result_data['version'], 
+                    message = "Optional update %s is ready to install. Install this version?\n"
+                    "See Release Notes:\n" % result_data['version'], 
                     url = str(result_data['more_info']),
-                    one = "Yes", two = "No", three = "Not Now")
+                    one = "Install", two = "Skip", three = "Not Now")
                 update_action = skip_frame.choice3.get()
-                if update_action == 1:            # Yes - install now
+                if update_action == 1:
+                    log.info("User chose 'Install'")
                     return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
-                elif update_action == 2:          # No - skip this version
+                elif update_action == 2:
+                    log.info("User chose 'Skip'")
                     put_marker_file(download_dir, ".skip")
                     # run previously-installed viewer
                     return viewer_binary
                 else:                       # Not Now
+                    log.info("User chose 'Not Now'")
                     put_marker_file(download_dir, ".next")
                     # run previously-installed viewer
                     return viewer_binary
+            else:
+               log.info("not installing optional update per UpdaterServiceSetting")
+               return viewer_binary
+
         elif downloaded == 'skip':
             log.info("Skipping this update per previous choice.  "
                      "Delete the .skip file in " + download_dir + " to change this.")
