@@ -87,14 +87,6 @@ mHD_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
 if getattr(sys, 'frozen', False):
     __file__ = sys._MEIPASS
 
-def after_frame(message, timeout = 10000):
-    #pop up a InstallerUserMessage.basic_message that kills itself after timeout milliseconds
-    #note that this blocks the caller for the duration of timeout
-    frame = InstallerUserMessage.InstallerUserMessage(title = "Second Life Installer", icon_name="head-sl-logo.gif")
-    #this is done before basic_message so that we aren't blocked by mainloop()
-    frame.after(timeout, lambda: frame.destroy())
-    frame.basic_message(message = message)
-
 def md5file(fname=None, handle=None):
     #utility method to compute the checksum of the contents of a file
     hash_md5 = hashlib.md5()
@@ -523,7 +515,9 @@ def query_vvm(platform_key = None, settings = {},
     #failsafe to prevent 64 bit viewer crashing on startup on a 32 bit host.
     if VVM_platform == 'win32' and result_data is None and BuildData.get('Platform') != 'win32':
         log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % raw_result_data)
-        after_frame("Failed to obtain a 32 bit viewer for your system.  Please download a viewer from http://secondlife.com/support/downloads/")
+        InstallerUserMessage.basic_message(
+            "Failed to obtain a 32 bit viewer for your system. "
+            "Please download a viewer from http://secondlife.com/support/downloads/")
         #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
         #better to die gracefully than horribly
         sys.exit(1) 
@@ -551,9 +545,11 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
             log.debug("foreground downloader args: %r" % ["--url", url, "--dir", download_dir, 
                             "--size", str(size), "--chunk_size", str(chunk_size)])
             if download_tries == 0:
-                after_frame(message = "Downloading new version " + version + " Please wait.", timeout = 5000)
+                InstallerUserMessage.status_message("Downloading new version " + version +
+                                                    " Please wait.")
             else:
-                after_frame(message = "Trying again to download new version " + version + " Please wait.", timeout = 5000)
+                InstallerUserMessage.status_message("Trying again to download new version " +
+                                                    version + " Please wait.")
             try:
                 download_update.download_update(url = url, download_dir = download_dir, size = size, progressbar = True, chunk_size = chunk_size)
                 download_success = True
@@ -596,7 +592,7 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
                   (version, url)
         log.warning(message)
         if not background:
-            after_frame(message)
+            InstallerUserMessage.basic_message(message)
         raise UpdateError(message)
     
     #cleanup, so that we don't download twice
@@ -605,12 +601,13 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
 
 def install(platform_key = None, download_dir = None, in_place = None):
     log=SL_Logging.getLogger('install')
-    after_frame(message = "New version downloaded.\nInstalling now, please wait.")
+    InstallerUserMessage.status_message("New version downloaded.\n"
+                                        "Installing now, please wait.")
     version = os.path.basename(download_dir)
     try:
         next_executable = apply_update.apply_update(download_dir, platform_key, in_place)
     except apply_update.ApplyError as err:
-        after_frame(message = "Failed to apply " + version)
+        InstallerUserMessage.basic_message("Failed to apply " + version)
         log.warning("Failed to update viewer to " + version)
         raise UpdateError("Failed to apply version %s update: %s" %
                           (version, err))
@@ -644,7 +641,8 @@ def _update_manager(viewer_binary, cli_overrides = {}):
     Raises UpdateError in various failure cases.
     """
     log = SL_Logging.getLogger('update_manager')
-    after_frame(message = "Checking for updates\nThis may take a few moments...", timeout = 3000)
+    InstallerUserMessage.status_message("Checking for updates\n"
+                                        "This may take a few moments...")
 
     # cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments to 
     # comments that begin with ' ' are steps taken from the algorithm in the description of SL-323. 
@@ -756,12 +754,13 @@ def _update_manager(viewer_binary, cli_overrides = {}):
             script_owner_name = pwd.getpwuid(script_owner_id)[0]
             username = pwd.getpwuid(user_id)[0]
             log.info("Upgrade notification attempted by user " + username)    
-            frame = InstallerUserMessage.InstallerUserMessage(title = "Second Life Installer", icon_name="head-sl-logo.gif")
+            frame = InstallerUserMessage.InstallerUserMessage(title = "Second Life Installer")
             frame.binary_choice_message(message = "Second Life was installed by userid " + script_owner_name 
                 + ".  Do you have privileges to install?", true = "Yes", false = 'No')
             if not frame.choice.get():
                 log.info("Upgrade attempt declined by user " + username)
-                after_frame(message = "Please find a system admin to upgrade Second Life")
+                InstallerUserMessage.basic_message(
+                    "Please find a system admin to upgrade Second Life")
                 return viewer_binary
     except (AttributeError, ImportError):
         #Windows throws AttributeError on getuid() and ImportError on pwd
@@ -843,8 +842,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                 # ask the user what to do with the optional update
                 log.info("asking the user what to do with the update")
                 skip_frame = InstallerUserMessage.InstallerUserMessage(
-                    title = BuildData.get('Channel Base')+" Installer",
-                    icon_name="head-sl-logo.gif")
+                    title = BuildData.get('Channel Base')+" Installer")
                 skip_frame.trinary_choice_link_message(
                     message = "Optional update %s is ready to install. Install this version?\n"
                     "See Release Notes:\n" % result_data['version'], 

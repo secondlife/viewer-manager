@@ -42,7 +42,7 @@ import Tkinter as tk
 import ttk
 #for hyperlinks
 import webbrowser
-from vmp_util import Application
+from vmp_util import Application, SL_Logging
 
 #this is to support pyinstaller, which uses sys._MEIPASS to point to the location
 #the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
@@ -50,6 +50,64 @@ from vmp_util import Application
 if getattr(sys, 'frozen', False):
     __file__ = sys._MEIPASS
 
+# ****************************************************************************
+#   status frame functionality
+# ****************************************************************************
+# When we're currently displaying a StatusMessage, this module global holds
+# that instance so we can find it again. StatusMessage is just like
+# InstallerUserMessage (see below) but with hooks to set/clear _status_frame.
+_status_frame = None
+
+def status_message(text):
+    """
+    Pass a string message. If this is the first status_message() call, this
+    will pop up a new StatusMessage frame containing that text and immediately
+    return. If there's already a StatusMessage frame displayed, it will
+    instead update that frame with the new text.
+
+    Pass None to close the StatusMessage frame.
+    """
+    global _status_frame
+    # Log each status message we display to help diagnose VMP slow operation
+    # -- since each log message gets a timestamp.
+    log = SL_Logging.getLogger('status_message')
+    if text is not None:
+        # display new text
+        log.info(text)
+        if _status_frame is None:
+            # StatusMessage constructor sets _status_frame
+            frame = StatusMessage()
+            frame.basic_message(text, wait=False)
+        else:
+            # there's an existing StatusMessage instance, just use that
+            _status_frame.set_message(text)
+
+    else:
+        # text=None means: make the StatusMessage go away
+        log.info("(close)")
+        if _status_frame is not None:
+            _status_frame.destroy()
+            _status_frame = None
+
+# ****************************************************************************
+#   Convenience
+# ****************************************************************************
+def basic_message(text, **kwds):
+    """
+    basic_message(text) just pops up a message box which the user must clear.
+
+    Any parameter overrides for the implicit InstallerUserMessage constructor
+    must be passed as keyword arguments, e.g.:
+
+    basic_message(text, title='This is a non-standard title')
+    """
+    # since by default InstallerUserMessage.basic_message() hangs around until
+    # the user clears the message frame, we don't even need to save the instance
+    InstallerUserMessage(**kwds).basic_message(text)
+
+# ****************************************************************************
+#   InstallerUserMessage class
+# ****************************************************************************
 class InstallerUserMessage(tk.Tk):
     #Goals for this class:
     #  Provide a uniform look and feel
@@ -63,20 +121,39 @@ class InstallerUserMessage(tk.Tk):
     #Linden standard green color, from Marketing
     linden_green = "#487A7B"
 
-    def __init__(self, text="", title="", width=500, height=200, wraplength = 400, icon_name = None, icon_path = None):
+    def __init__(self, title=Application.name(), width=500, height=200,
+                 icon_name = "head-sl-logo.gif", icon_path = None):
+        # Before we even perform base-class initialization, suppress any
+        # existing _status_frame. Deriving from tk.Tk (vs. tk.Frame) is great
+        # when you know that any one of these might be the first visible
+        # frame, but empirically, multiple concurrent instances of tk.Tk
+        # subclasses confuse the communication between Python and Tkinter:
+        # things end up in the wrong frame. Make them mutually exclusive by
+        # destroying any existing _status_frame before constructing this tk.Tk
+        # subclass.
+        status_message(None)
+        # Now initialize base class.
         tk.Tk.__init__(self)
         self.grid()
         self.title(title)
         self.choice = tk.BooleanVar()
         self.choice3 = tk.IntVar()
+        # Use of StringVar allows us to dynamically change the displayed text.
+        self.message = tk.StringVar()
+        # Use a Message widget for its automatic text reflow:
+        # http://effbot.org/tkinterbook/message.htm
+        # Initial width is arbitrary; we just need to suppress Message's
+        # default behavior of trying to preserve the specified aspect ratio.
+        self.text_label = tk.Message(textvariable=self.message, width=width)
         self.config(background = 'black')
         # background="..." doesn't work on MacOS for radiobuttons or progress bars
         # http://tinyurl.com/tkmacbuttons
-        ttk.Style().configure('Linden.TLabel', foreground=InstallerUserMessage.linden_green, background='black')
-        ttk.Style().configure('Linden.TButton', foreground=InstallerUserMessage.linden_green, background='black')
-        ttk.Style().configure("black.Horizontal.TProgressbar", foreground=InstallerUserMessage.linden_green, background='black')
+        for style in 'Linden.TLabel', 'Linden.TButton', "black.Horizontal.TProgressbar":
+            ttk.Style().configure(style, foreground=InstallerUserMessage.linden_green,
+                                  background='black')
 
         #This bit of configuration centers the window on the screen
+        #https://stackoverflow.com/q/3352918/5533635
         # The constants below are to adjust for typical overhead from the
         # frame borders.
         self.xp = (self.winfo_screenwidth()  / 2) - (width  / 2) - 8
@@ -96,9 +173,27 @@ class InstallerUserMessage(tk.Tk):
 
         #defines what to do when window is closed
         self.protocol("WM_DELETE_WINDOW", self._delete_window)
-        
+
         #callback id
         self.id = -1
+
+    def place_message(self, row, column, sticky='EW', **kwds):
+        # Empirically, *all three* of sticky='EW', configuring the column
+        # weight and resetting the Message width on <Configure> are necessary
+        # for a self-adjusting Message with proper text flow.
+        self.text_label.grid(row = row, column = column, sticky = sticky, **kwds)
+        # necessary to make column stretch to fill the frame
+        # https://mail.python.org/pipermail/python-list/2000-June/055758.html
+        self.grid_columnconfigure(column, weight=1)
+        # https://stackoverflow.com/a/8364895/5533635
+        self.text_label.bind("<Configure>",
+                             lambda event: self.text_label.config(width=event.width))
+
+    def set_message(self, message):
+        self.message.set(message)
+        self.set_colors(self.text_label)
+        self.set_colors(self.image_label)
+        self.update()
 
     def _delete_window(self):
         #capture and discard all destroy events before the choice is set
@@ -134,125 +229,105 @@ class InstallerUserMessage(tk.Tk):
         #auto resize window to fit all rows and columns
         #"heavy" gets extra weight
         for x in range(column_count):
-            if x == heavy_column:
-                self.columnconfigure(x, weight = 2)
-            else:
-                self.columnconfigure(x, weight=1)
+            self.columnconfigure(x, weight=(2 if x == heavy_column else 1))
 
         for y in range(row_count):
-            if y == heavy_row:
-                self.rowconfigure(y, weight = 2)
-            else:
-                self.rowconfigure(x, weight=1)
+            self.rowconfigure(y, weight=(2 if y == heavy_row else 1))
 
-    def basic_message(self, message):
+    # ---------------------------- basic_message -----------------------------
+    def basic_message(self, message, wait=True):
         #message: text to be displayed
+        #usage:
+        #   frame = InstallerUserMessage.InstallerUserMessage( ... )
+        #   frame.basic_message("message")
+        #   # ^ waits for user to close message frame
+        #usage for non-interactive status frame:
+        #   frame = InstallerUserMessage.InstallerUserMessage( ... )
+        #   frame.basic_message("initial status", wait=False)
+        #   # ...
+        #   frame.set_message("subsequent status")
+        #   # ...
+        #   frame.destroy()
         #icon_path: directory holding the icon, defaults to icons subdir of script dir
         #icon_name: filename of icon to be displayed
         self.choice.set(True)
-        self.text_label = tk.Label(text = message)
-        self.set_colors(self.text_label)
-        self.set_colors(self.image_label)
+        self.set_message(message)
         #pad, direction and weight are all experimentally derived by retrying various values
         self.image_label.grid(row = 1, column = 0, sticky = 'W')
-        self.text_label.grid(row = 2, column = 0, sticky = 'W', padx =100)
-        self.mainloop()
+        self.place_message(row = 2, column = 0, padx = 100)
+        self.update()
+        if wait:
+            self.mainloop()
 
-    def binary_choice_message(self, message, true = 'Yes', false = 'No'):
+    # ------------------------ binary_choice_message -------------------------
+    def binary_choice_message(self, message, true = 'Yes', false = 'No', wait=True):
         #true: first option, returns True
         #false: second option, returns False
-        #usage is kind of opaque and relies on this object persisting after the window destruction to pass back choice
         #usage:
         #   frame = InstallerUserMessage.InstallerUserMessage( ... )
-        #   frame = frame.binary_choice_message( ... )
-        #   (wait for user to click)
-        #   value = frame.choice.get()
+        #   result = frame.binary_choice_message( ... )
 
-        self.text_label = tk.Label(text = message)
+        self.set_message(message)
         #command registers the callback to the method named.  We want the frame to go away once clicked.
         #button 1 returns True/1, button 2 returns False/0
         self.button_one = ttk.Radiobutton(text = true, variable = self.choice, value = True, 
             command = self._delete_window, style = 'Linden.TButton')
         self.button_two = ttk.Radiobutton(text = false, variable = self.choice, value = False, 
             command = self._delete_window, style = 'Linden.TButton')
-        self.set_colors(self.text_label)
-        self.set_colors(self.image_label)
         #pads are all experimentally derived by retrying various values
         self.image_label.grid(row = 1, column = 1, columnspan = 2)
-        self.text_label.grid(row = 2, column = 1, columnspan = 2, pady = 40)
-        self.button_one.grid(row = 3, column = 1, padx = 30)
-        self.button_two.grid(row = 3, column = 2, padx = 30)
+        self.place_message(row = 2, column = 1, columnspan = 3, pady = 40)
+        self.button_one.grid(row = 3, column = 2, padx = 30)
+        self.button_two.grid(row = 3, column = 3, padx = 30)
         self.update()
-        self.mainloop()
-        
-    def trinary_choice_message(self, message, one = 1, two = 2, three = 3):
+        if wait:
+            self.mainloop()
+            return self.choice.get()
+
+    # ------------------------ trinary_choice_message ------------------------
+    def trinary_choice_message(self, message, one = 1, two = 2, three = 3, wait=True):
         #one: first option, returns 1
         #two: second option, returns 2
         #three: third option, returns 3
-        #usage is kind of opaque and relies on this object persisting after the window destruction to pass back choice
         #usage:
         #   frame = InstallerUserMessage.InstallerUserMessage( ... )
-        #   frame = frame.binary_choice_message( ... )
-        #   (wait for user to click)
-        #   value = frame.choice.get()
+        #   result = frame.trinary_choice_message( ... )
 
-        self.text_label = tk.Label(text = message)
+        self.set_message(message)
         #command registers the callback to the method named.  We want the frame to go away once clicked.
-        self.button_one = ttk.Radiobutton(text = one, variable = self.choice3, value = 1, 
-            command = self._delete_window, style = 'Linden.TButton')
-        self.button_two = ttk.Radiobutton(text = two, variable = self.choice3, value = 2, 
-            command = self._delete_window, style = 'Linden.TButton')
-        self.button_three = ttk.Radiobutton(text = three, variable = self.choice3, value = 3, 
-            command = self._delete_window, style = 'Linden.TButton')
-        self.set_colors(self.text_label)
-        self.set_colors(self.image_label)
+        self.button = [ttk.Radiobutton(text = text, variable = self.choice3, value = v0+1,
+                                       command = self._delete_window, style = 'Linden.TButton')
+                       for v0, text in enumerate((one, two, three))]
         #pads are all experimentally derived by retrying various values
         self.image_label.grid(row = 1, column = 0, columnspan = 3)
-        self.text_label.grid(row = 2, column = 0, columnspan = 3, pady = 40)
-        self.button_one.grid(row = 3, column = 0, padx = 10, pady = 10)
-        self.button_two.grid(row = 3, column = 1, padx = 10, pady = 10)
-        self.button_three.grid(row = 3, column = 2, padx = 10, pady = 10)
+        self.place_message(row = 2, column = 0, columnspan = 4, pady = 40)
+        # We want column 0 to expand with the frame to reflow text
+        # automatically: that's what place_message() does. So, don't put the
+        # buttons into column 0 -- put them in 1, 2, 3 -- and make the message
+        # widget span all 4 columns.
+        for b in range(len(self.button)):
+            self.button[b].grid(row = 3, column = b+1, padx = 10, pady = 10)
         self.update()
-        self.mainloop() 
+        if wait:
+            self.mainloop()
+            return self.choice3.get()
 
-    def trinary_choice_link_message(self, message, url, one = 1, two = 2, three = 3):
+    # --------------------- trinary_choice_link_message ----------------------
+    def trinary_choice_link_message(self, message, url, one = 1, two = 2, three = 3, wait=True):
         #url is hypertext for message
         #one: first option, returns 1
         #two: second option, returns 2
         #three: third option, returns 3
-        #usage is kind of opaque and relies on this object persisting after the window destruction to pass back choice
         #usage:
         #   frame = InstallerUserMessage.InstallerUserMessage( ... )
-        #   frame = frame.binary_choice_message( ... )
-        #   (wait for user to click)
-        #   value = frame.choice.get()
+        #   result = frame.trinary_choice_link_message( ... )
         #store url for callback, pick a failsafe default in case we get crap
-        if url is not None and url != '':
-            self.url = url
-        else:
-            self.url = 'http://www.secondlife.com'
+        self.url = url or 'http://www.secondlife.com'
         #stay on top even when browser is invoked
         self.attributes("-topmost", True)
-        self.text_label = tk.Label(text = message)
         #bind the hyperlink text to the open action, "Button-1" is assigned by Tkinter
         self.text_label.bind("<Button-1>", self.link_callback)
-        #command registers the callback to the method named.  We want the frame to go away once clicked.
-        self.button_one = ttk.Radiobutton(text = one, variable = self.choice3, value = 1, 
-            command = self._delete_window, style = 'Linden.TButton')
-        self.button_two = ttk.Radiobutton(text = two, variable = self.choice3, value = 2, 
-            command = self._delete_window, style = 'Linden.TButton')
-        self.button_three = ttk.Radiobutton(text = three, variable = self.choice3, value = 3, 
-            command = self._delete_window, style = 'Linden.TButton')
-        self.set_colors(self.text_label)
-        self.set_colors(self.image_label)
-        #pads are all experimentally derived by retrying various values
-        self.image_label.grid(row = 1, column = 0, columnspan = 3)
-        self.text_label.grid(row = 2, column = 0, columnspan = 3, pady = 40)
-        self.button_one.grid(row = 3, column = 0, padx = 10, pady = 10)
-        self.button_two.grid(row = 3, column = 1, padx = 10, pady = 10)
-        self.button_three.grid(row = 3, column = 2, padx = 10, pady = 10)      
-        self.update()
-        self.mainloop()
+        return self.trinary_choice_message(message, one=one, two=two, three=three, wait=wait)
         
     def link_callback(self, event):
         webbrowser.open_new(self.url)   
@@ -263,11 +338,10 @@ class InstallerUserMessage(tk.Tk):
         #size: denominator of percent complete
         #interval: frequency, in ms, of how often to poll the file for progress
         #pb_queue: queue object used to send updates to the bar
-        self.text_label = tk.Label(text = message)
-        self.set_colors(self.text_label)
-        self.set_colors(self.image_label)
+        self.interval = interval
+        self.set_message(message)
         self.image_label.grid(row = 1, column = 1, sticky = 'NSEW')
-        self.text_label.grid(row = 2, column = 1, sticky = 'NSEW')
+        self.place_message(row = 2, column = 1, sticky = 'NSEW')
         self.progress = ttk.Progressbar(self, style = 'black.Horizontal.TProgressbar', orient="horizontal", length=100, mode="determinate")
         self.progress.grid(row = 3, column = 1, sticky = 'NSEW', pady = 25)
         self.value = 0
@@ -280,7 +354,7 @@ class InstallerUserMessage(tk.Tk):
         try:
             if self.value < self.progress["maximum"]:
                 self.check_queue()            
-                self.id = self.after(100, self.check_scheduler)
+                self.id = self.after(self.interval, self.check_scheduler)
             else:
                 #prevent a race condition between polling and the widget destruction
                 self.after_cancel(self.id)
@@ -303,6 +377,29 @@ class InstallerUserMessage(tk.Tk):
                 #nothing to do
                 return
 
+# ****************************************************************************
+#   StatusMessage
+# ****************************************************************************
+class StatusMessage(InstallerUserMessage):
+    def __init__(self, *args, **kwds):
+        # forward the call to base class constructor
+        InstallerUserMessage.__init__(self, *args, **kwds)
+
+        # set ourselves as canonical instance
+        global _status_frame
+        _status_frame = self
+
+    def _delete_window(self):
+        # canonical instance is going away
+        global _status_frame
+        _status_frame = None
+
+        # forward the call to base class deletion handler
+        InstallerUserMessage._delete_window(self)
+
+# ****************************************************************************
+#   Testing
+# ****************************************************************************
 class ThreadedClient(threading.Thread):
     #for test only, not part of the functional code
     def __init__(self, queue):
@@ -336,27 +433,27 @@ if __name__ == "__main__":
             print "Over now"
 
     #basic message window test
-    frame2 = InstallerUserMessage(text = "Something in the way she moves....", title = "Beatles Quotes for 100", icon_name="head-sl-logo.gif")
+    frame2 = InstallerUserMessage(text = "Something in the way she moves....", title = "Beatles Quotes for 100")
     frame2.basic_message(message = "...attracts me like no other.")
     print "Destroyed!"
     sys.stdout.flush()
 
     #binary choice test.  User destroys window when they select.
-    frame3 = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 200", icon_name="head-sl-logo.gif")
+    frame3 = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 200")
     frame3.binary_choice_message(message = "And all I have to do is think of her.", 
         true = "Don't want to leave her now", false = 'You know I believe and how')
     print frame3.choice.get()
     sys.stdout.flush()
     
     #trinary choice test.  User destroys window when they select.
-    frame3a = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 400", icon_name="head-sl-logo.gif")
+    frame3a = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 400")
     frame3a.trinary_choice_message(message = "And all I have to do is think of her.", 
         one = "Don't want to leave her now", two = 'You know I believe and how', three = 'John is Dead')
     print frame3a.choice3.get()
     sys.stdout.flush()
     
     #trinary link choice test. Click on message text to go to URL. User destroys window when they select.
-    frame3b = InstallerUserMessage(text = "Come together....", title = "Beatles Quotes for 500", icon_name="head-sl-logo.gif")
+    frame3b = InstallerUserMessage(text = "Come together....", title = "Beatles Quotes for 500")
     frame3b.trinary_choice_link_message(message = "Got to be good looking,\n'Cause he so hard to see", url = "http://www.ucla.edu", 
             one = "He bag production.", two = 'He got walrus gumboot.', three = 'He got Ono sideboard.')    
     print frame3b.choice3.get()
@@ -368,7 +465,7 @@ if __name__ == "__main__":
     thread.start()
     print "thread started"
 
-    frame4 = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 300", icon_name="head-sl-logo.gif")
+    frame4 = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 300")
     frame4.progress_bar(message = "You're asking me will my love grow", size = 100, pb_queue = queue)
     print "frame defined"
     frame4.mainloop()

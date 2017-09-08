@@ -34,6 +34,10 @@ from nose import with_setup
 import os
 import shutil
 import tempfile
+
+# ensure we find local build_data.json file
+os.environ["APP_DATA_DIR"] = os.path.dirname(__file__)
+
 import apply_update
 import with_setup_args
 

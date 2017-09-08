@@ -34,6 +34,10 @@ def patch(object, attr, newvalue):
     finally:
         setattr(object, attr, oldvalue)
 
+# Make a distinguished value other than None: caller might want to use
+# patch_dict() to temporarily set a particular dict value None.
+DELETE = object()
+
 @contextmanager
 def patch_dict(dct, key, newvalue):
     """
@@ -42,26 +46,38 @@ def patch_dict(dct, key, newvalue):
     with patch_dict(somedict, 'key', replacement):
         # ...
 
-    For the duration of the 'with' block, any references to the specified
-    dict's key will retrieve the replacement value instead of the original
-    value.
+    For the duration of the 'with' block, somedict['key'] will retrieve the
+    replacement value instead of the original value.
+
+    Alternatively:
+
+    with patch_dict(somedict, 'key', DELETE):
+        # ...
+
+    For the duration of the 'with' block, somedict['key'] will raise KeyError.
 
     The importance of this function is that when the 'with' block exits, by
-    any means, the original value of that key will be restored.
+    any means, the original value of that key will be restored. If somedict
+    had no such key, it will be deleted again.
     """
     try:
         oldvalue = dct[key]
     except KeyError:
         # that key didn't exist before: restoring it means deleting it
         def restore():
-            del dct[key]
+            # discard dct[key] if it exists
+            dct.pop(key, None)
     else:
         # key did exist before: restoring it means assigning oldvalue
         def restore():
             dct[key] = oldvalue
 
     # now, either way, set the new value
-    dct[key] = newvalue
+    if newvalue is DELETE:
+        # discard dct[key] if it exists
+        dct.pop(key, None)
+    else:
+        dct[key] = newvalue
 
     try:
         # run the body of the 'with' block

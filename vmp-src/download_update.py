@@ -78,7 +78,7 @@ def download_update(url = None, download_dir = None, size = None, progressbar = 
     log.debug("Started download thread.")
 
     if progressbar:
-        frame = IUM.InstallerUserMessage(title = Application.name()+" Downloader", icon_name="head-sl-logo.gif")
+        frame = IUM.InstallerUserMessage(title = Application.name()+" Downloader")
         frame.progress_bar(message = "Download Progress", size = size, pb_queue = queue)
         frame.mainloop()
     else:
