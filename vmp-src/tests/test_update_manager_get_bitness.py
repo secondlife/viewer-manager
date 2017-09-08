@@ -35,7 +35,11 @@ import shutil
 import tempfile
 import update_manager
 from vmp_util import skip_settings, write_settings
-from patch import patch, patch_dict
+from patch import patch, patch_dict, DELETE
+
+def force(address_size):
+    """convenience function for generating command-line overrides"""
+    return dict(ForceAddressSize=str(address_size))
 
 def test_linux():
     bitness = update_manager.getBitness('lnx', settings={})
@@ -45,12 +49,11 @@ def test_mac():
     bitness = update_manager.getBitness('mac', settings={})
     assert_equal(bitness, 64)
 
-def test_win():
-    if 'PROGRAMFILES(X86)' in os.environ:
-        bitness = 64
-    else:
-        bitness = 32
-    assert_equal(bitness, update_manager.getBitness('win', settings={}))
+def test_win32():
+    with patch_dict(os.environ, 'PROGRAMFILES(X86)', DELETE):
+        # If getBitness() thinks we're running on 32-bit Windows, it should
+        # return 32 regardless of graphics card.
+        assert_equal(update_manager.getBitness('win', settings={}), 32)
     
 def test_win_no_bad_card():
     # For the duration, pretend we're running 64-bit Windows.
@@ -117,9 +120,7 @@ def test_win_only_bad_card_force_address_32():
                'Name                    \r\r\n'
                'Intel(R) HD Graphics 2500 \r\r\n'
                '\r\r\n'):
-       assert_equal(update_manager.getBitness('win',
-                                              settings=dict(ForceAddressSize='32')),
-                    32)
+       assert_equal(update_manager.getBitness('win', settings=force(32)), 32)
 
 class DummyApplication(object):
     def __init__(self, path):
@@ -150,9 +151,7 @@ def test_win_only_bad_card_force_address_64():
                    '\r\r\n'):
 
             # no settings file at first
-            assert_equal(update_manager.getBitness('win',
-                                                   settings=dict(ForceAddressSize='64')),
-                         64)
+            assert_equal(update_manager.getBitness('win', settings=force(64)), 64)
 
             # settings file should have been created with that one entry
             assert_equal(update_manager.get_settings(settings_path), skip_settings)
@@ -160,20 +159,15 @@ def test_win_only_bad_card_force_address_64():
             # overwrite that settings file with an empty one
             write_settings(settings_object={}, settings_path=settings_path)
 
-            assert_equal(update_manager.getBitness('win',
-                                                   settings=dict(ForceAddressSize='64')),
-                         64)
+            assert_equal(update_manager.getBitness('win', settings=force(64)), 64)
 
             # settings file should have been rewritten with that one entry
             assert_equal(update_manager.get_settings(settings_path), skip_settings)
 
             # now put a non-empty settings file
-            write_settings(settings_object=dict(ForceAddressSize='64'),
-                           settings_path=settings_path)
+            write_settings(settings_object=force(64), settings_path=settings_path)
 
-            assert_equal(update_manager.getBitness('win',
-                                                   settings=dict(ForceAddressSize='64')),
-                         64)
+            assert_equal(update_manager.getBitness('win', settings=force(64)), 64)
 
             # should have preserved the existing entries, while adding SkipBenchmark
             settings = update_manager.get_settings(settings_path)
