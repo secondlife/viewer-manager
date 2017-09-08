@@ -679,7 +679,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
     cli_updater_service_setting = cli_settings.get('UpdaterServiceSetting',None)
     install_mode = int(cli_updater_service_setting if cli_updater_service_setting else settings.get('UpdaterServiceSetting', {}).get('Value', INSTALL_MODE_AUTO))
     # validate the install_mode
-    if install_mode != INSTALL_MODE_AUTO and install_mode != INSTALL_MODE_PROMPT_OPTIONAL and install_mode != INSTALL_MODE_MANDATORY_ONLY:
+    if install_mode not in (INSTALL_MODE_AUTO, INSTALL_MODE_PROMPT_OPTIONAL, INSTALL_MODE_MANDATORY_ONLY):
         log.error("Invalid setting value for UpdaterServiceSetting (%d); using automatic install (%d)" % (install_mode, INSTALL_MODE_AUTO))
         install_mode = INSTALL_MODE_AUTO
 
@@ -864,7 +864,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                     put_marker_file(download_dir, ".next")
                     # run previously-installed viewer
                     return viewer_binary
-            else:
+            else: # INSTALL_MODE_MANDATORY_ONLY
                log.info("not installing optional update per UpdaterServiceSetting")
                return viewer_binary
 
