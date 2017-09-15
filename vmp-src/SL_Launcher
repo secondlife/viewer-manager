@@ -203,7 +203,8 @@ def main():
     args, args_list_to_pass = parser.parse_known_args()
 
     version=BuildData.get('Version')
-    log.info("Viewer version %s" % version)
+    address_size=BuildData.get('Address Size')
+    log.info("Viewer version %s (%d bit)" % (version, address_size))
 
     executable_name = Application.name()
 
