@@ -31,6 +31,7 @@ $/LicenseInfo$
 
 from copy import deepcopy
 from datetime import datetime   
+from logging import DEBUG
 from vmp_util import Application, BuildData, SL_Logging, subprocess_args, \
      skip_settings, write_settings, put_marker_file
 from llbase import llsd
@@ -404,7 +405,7 @@ def query_vvm(platform_key = None, settings = {},
     log.debug("Bitness determined to be %r" % bitness)
     
     try:
-        if not isViewerMachineBitMatched(BuildData.get('platform'), platform_key, bitness):
+        if not isViewerMachineBitMatched(BuildData.get('Platform'), platform_key, bitness):
             #there are two cases:
             # the expected case where we downloaded a 64 bit viewer to a 32 bit machine on spec
             # the unexpected case where someone was running a 32 bit viewer on a 32 bit Windows box and upgraded their Windows to 64 bit
@@ -459,41 +460,47 @@ def query_vvm(platform_key = None, settings = {},
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
              (str(channelname), version, VVM_platform, platform_version, test_ok, UUID))
     update_urlpath =  urllib.quote('/'.join(['v1.2', str(channelname), version, VVM_platform, platform_version, test_ok, UUID]))
-    log.debug("Sending query to VVM: query %s/%s" % (UpdaterServiceURL, update_urlpath))
+    debug_param= {'explain': 1} if log.isEnabledFor(DEBUG) else {}; # if debugging, ask the VVM to say how it got the response 
+    log.debug("Sending query to VVM: query %s/%s%s" % (UpdaterServiceURL, update_urlpath, (" with explain requested" if debug_param else "")))
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
     
     try:
-        result_data = VVMService.get(update_urlpath)
-        log.info("received result from VVM: %r" % result_data)
+        result_data = VVMService.get(update_urlpath, params=debug_param)
+        log.debug("received result from VVM: %r" % result_data)
     except llrest.RESTError as res:
         if res.status == 404: # 404 is how the Viewer Version Manager indicates that the channel is unmanaged
             log.info("Update service returned 'not found'; normally this means the channel is unmanaged (and allowed)")
         else:
             log.warning("Update service %s/%s failed: %s" % (UpdaterServiceURL, update_urlpath, res))
+        result_data = None
+
     #keep a copy for logging later
     raw_result_data = result_data
             
-    #As of VVM v1.2, the result_data object is now a bit more complicated.  The general information
-    #such as required, channel and so on are still at the top level, but url, hash and size are now returned 
-    #for all platforms at once, keyed by platform key.  So, the mac download url is result_data['platforms']['mac']['url']
-    #and similarly for the other values and platforms.  Platform key is still one of {lnx,mac,win,win32}
-    #Before this, the result_data had these three at the top level, which is what the caller expects.  We
-    #continue this contract by selecting the right values here where we know the correct bitness and this means
-    #the rest of the code does not need to be changed.
-    if result_data is not None:
-        #no update or VVM doesn't know about this version.
-        #we only do an "cross-platform" update in the case where we have downloaded a win64 viewer on initial install
-        #to a win32 bit machine or when a 64 bit host has a win32 viewer.
+    # As of VVM v1.2, the result_data object is now a bit more complicated.  The general information
+    # such as required, channel and so on are still at the top level, but url, hash and size are now returned 
+    # for all platforms at once, keyed by platform key.  So, the mac download url is result_data['platforms']['mac']['url']
+    # and similarly for the other values and platforms.  Platform key is still one of {lnx,mac,win,win32}
+    # Before this, the result_data had these three at the top level, which is what the caller expects.  We
+    # continue this contract by selecting the right values here where we know the correct bitness and this means
+    # the rest of the code does not need to be changed.
+    if result_data:
+        # no update or VVM doesn't know about this version.
+        # we only do an "cross-platform" update in the case where we have downloaded a win64 viewer on initial install
+        # to a win32 bit machine or when a 64 bit host has a win32 viewer.
         #
-        #In these cases, we return a result that effectively says "required upgrade to win/win32".
-        #otherwise result == current means no update (and likely, a test viewer)
+        # In these cases, we return a result that effectively says "required upgrade to win/win32".
+        # otherwise result == current means no update (and likely, a test viewer)
         if result_data['version'] == version:
-            if VVM_platform == BuildData.get('platform'):
-                log.info("We have version %s for %s, which is correct" % (version, VVM_platform))
+            if VVM_platform == BuildData.get('Platform'):
+                log.info("We have version %s for %s, which is current" % (version, VVM_platform))
                 return None # we have what we should have
             else:
                 #Don't care what the VVM says, sideways upgrades are ALWAYS mandatory
+                log.info('requested platform (%s) does not match current application (%s); update is required', (VVM_platform, BuildData.get('Platform')))
                 result_data['required'] = True        
+        else:
+            log.info("result version (%s) does not match current version (%s)" % (result_data['version'], version))
 
         try:
             result_data.update(result_data['platforms'][VVM_platform]) # promote the target platform results 
@@ -504,7 +511,7 @@ def query_vvm(platform_key = None, settings = {},
                 log.warning("Unexpected response - no data for platform '%s': %r" % (VVM_platform, raw_result_data))
             else:
                 log.error("Received malformed results from vvm: %r" % result_data)
-            log.error("Error from reading VVM response: %r" % ke)
+            log.error("Error reading VVM response: %r" % ke)
             result_data = None
         else:
             #get() sets missing key results to None.  If we are missing any data, set the whole thing to None
@@ -709,7 +716,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                             settings=settings,
                             UpdaterServiceURL=UpdaterServiceURL,
                             UpdaterWillingToTest=UpdaterWillingToTest)
-    log.debug("result_data received from query_vvm:\n%s", result_data) # wrap result_data in pformat() for readability, but don't commit that way
+    log.debug("result_data received from query_vvm: %r", result_data) # wrap result_data in pformat() for readability, but don't commit that way
 
     #nothing to do or error
     if not result_data:
