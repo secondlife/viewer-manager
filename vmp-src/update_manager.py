@@ -495,7 +495,7 @@ def query_vvm(platform_key = None, settings = {},
             #Don't care what the VVM says, sideways upgrades are ALWAYS mandatory
             log.info('required platform (%s) does not match this build (%s); update is required' % (VVM_platform, BuildData.get('Platform')))
             result_data['required'] = True
-        elif result_data['version'] == version:
+        elif result_data.get('version') == version:
             log.info("We have version %s for %s, which is current" % (version, VVM_platform))
             return None # we have what we should have, both platform and version
         else:
