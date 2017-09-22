@@ -275,12 +275,8 @@ def launch_as_child(viewer, command_args):
     except Exception as e:
         log.error("Failed to launch %s. Error messages as follows:\n%r" % (viewer, e))
         message = "Failed to launch %s, see log for details" % viewer
-        frame = InstallerUserMessage.InstallerUserMessage(
-            title="SL_Launcher",
-            text=message,
-            icon_name="head-sl-logo.gif",
-            )
-        frame.basic_message(message=message)
+        frame = InstallerUserMessage.InstallerUserMessage()
+        frame.basic_message(text=message)
         sys.exit(-1)
 
     log.info("Successfully launched %s" % command)
@@ -315,12 +311,8 @@ def launch_as_replacement(next_executable):
     except Exception as err:
         # logging is gone, can't do that, so put up a dialog
         message = "Launch failed\n%s" % err
-        frame = InstallerUserMessage.InstallerUserMessage(
-            title="SL_Launcher",
-            text=message,
-            icon_name="head-sl-logo.gif",
-            )
-        frame.basic_message(message=message)
+        frame = InstallerUserMessage.InstallerUserMessage()
+        frame.basic_message(text=message)
         sys.exit(-1)
     # process has been replaced or killed - does not return
 
