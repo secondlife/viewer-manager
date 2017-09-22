@@ -491,14 +491,13 @@ def query_vvm(platform_key = None, settings = {},
         #
         # In these cases, we return a result that effectively says "required upgrade to win/win32".
         # otherwise result == current means no update (and likely, a test viewer)
-        if result_data['version'] == version:
-            if VVM_platform == BuildData.get('Platform'):
-                log.info("We have version %s for %s, which is current" % (version, VVM_platform))
-                return None # we have what we should have
-            else:
-                #Don't care what the VVM says, sideways upgrades are ALWAYS mandatory
-                log.info('requested platform (%s) does not match current application (%s); update is required', (VVM_platform, BuildData.get('Platform')))
-                result_data['required'] = True        
+        if VVM_platform != BuildData.get('Platform'):
+            #Don't care what the VVM says, sideways upgrades are ALWAYS mandatory
+            log.info('required platform (%s) does not match this build (%s); update is required', (VVM_platform, BuildData.get('Platform')))
+            result_data['required'] = True
+        elif result_data['version'] == version:
+            log.info("We have version %s for %s, which is current" % (version, VVM_platform))
+            return None # we have what we should have, both platform and version
         else:
             log.info("result version (%s) does not match current version (%s)" % (result_data['version'], version))
 
@@ -512,16 +511,17 @@ def query_vvm(platform_key = None, settings = {},
             else:
                 log.error("Received malformed results from vvm: %r" % result_data)
             log.error("Error reading VVM response: %r" % ke)
-            result_data = None
+            result_data = None # we didn't get what we need, so clear result_data to allow failsafe check below
         else:
-            #get() sets missing key results to None.  If we are missing any data, set the whole thing to None
+            # get() sets missing key results to None.
+            # If we are missing any data, set result_data to None to allow failsafe check below
             if not ('hash' in result_data and 'size' in result_data and 'url' in result_data):
                 log.error("No update because response is missing url, size, or hash: %r" % raw_result_data)
                 result_data = None
                 
-    #failsafe to prevent 64 bit viewer crashing on startup on a 32 bit host.
+    # failsafe to prevent 64 bit viewer crashing on startup on a 32 bit host.
     if VVM_platform == 'win32' and result_data is None and BuildData.get('Platform') != 'win32':
-        log.error("Could not obtain 32 bit viewer information.  Response from VVM was %r " % raw_result_data)
+        log.error("Could not obtain 32 bit viewer download information")
         InstallerUserMessage.basic_message(
             "Failed to obtain a 32 bit viewer for your system. "
             "Please download a viewer from http://secondlife.com/support/downloads/")
