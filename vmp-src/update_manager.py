@@ -493,7 +493,7 @@ def query_vvm(platform_key = None, settings = {},
         # otherwise result == current means no update (and likely, a test viewer)
         if VVM_platform != BuildData.get('Platform'):
             #Don't care what the VVM says, sideways upgrades are ALWAYS mandatory
-            log.info('required platform (%s) does not match this build (%s); update is required', (VVM_platform, BuildData.get('Platform')))
+            log.info('required platform (%s) does not match this build (%s); update is required' % (VVM_platform, BuildData.get('Platform')))
             result_data['required'] = True
         elif result_data['version'] == version:
             log.info("We have version %s for %s, which is current" % (version, VVM_platform))
