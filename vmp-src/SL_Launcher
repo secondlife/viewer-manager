@@ -203,7 +203,7 @@ def main():
     args, args_list_to_pass = parser.parse_known_args()
 
     version=BuildData.get('Version')
-    address_size=BuildData.get('Address Size')
+    address_size=int(BuildData.get('Address Size'))
     log.info("Viewer version %s (%d bit)" % (version, address_size))
 
     executable_name = Application.name()
@@ -264,8 +264,13 @@ def launch_as_child(viewer, command_args):
 
     If it succeeds, return the subprocess.Popen object.
     """
-    log.info("Launching current viewer '%s' '%s'" % (viewer, "' '".join(command_args)))
+    if update_manager.onWindows10orHigher() \
+      and int(BuildData.get('Address Size')) == 64 \
+      and update_manager.Windows10Video.isUnsupported():
+        command_args = command_args + ['--set', 'SkipBenchmark', '1']
+        
     command = [viewer] + command_args
+    log.info("Launching current viewer '%s' '%s'" % (viewer, "' '".join(command_args)))
 
     env = os.environ.copy()
     env["PARENT"] = "SL_Launcher" # suppresses warning about not running the viewer directly

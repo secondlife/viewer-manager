@@ -342,36 +342,3 @@ def put_marker_file(dir, ext):
         os.close(tempfile.mkstemp(suffix=ext, dir=dir)[0])
     except OSError:
         pass
-
-
-#struct used by update_manager and SL_Launcher to update the settings file
-#to skip benchmarking for HD graphics cards and passed to write_settings().
-skip_settings = {'SkipBenchmark':
-                 {'Comment':'Do not benchmark on viewer startup',
-                  'Type':'Boolean',
-                  'Value':1}}
-
-#same as above for cmd_line.xml
-#this tells command line parsers that ForceAddrSize has one argument
-skip_cmd = {'ForceAddrSize':
-            {'count':1,
-             'map-to':'CmdLineForceAddrSize'}}
-
-#utility method to write to the settings file
-#settings_object is a parsed/modified python object (dict)
-#settings_path is the location of the file to write to
-#  usually something like <userpath>/user_settings/settings.xml
-#  but left generic here so it can write to other places
-#note that format_pretty_xml does the right thing with an empty dict
-#caller responsible for catching exceptions and deciding what to do
-def write_settings(settings_object=None, settings_path=None):
-    #make sure the directory exists to write to
-    try:
-        os.makedirs(os.path.dirname(settings_path))
-    except OSError, ose:
-        if ose.errno == errno.EEXIST:
-            pass
-        else:
-            raise
-    with open(settings_path, 'wb') as f:
-        f.write(llsd.format_pretty_xml(settings_object))
