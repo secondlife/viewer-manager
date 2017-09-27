@@ -155,7 +155,7 @@ optionalWinFallback = {
     'version': '4.0.1.310054',
     'channel': 'Second Life Release',
     'more_info': 'https://wiki.secondlife.com/wiki/Release_Notes/Second_Life_Release/4.0.1.310054',
-    'platform': 'win64',
+    'platform': 'win',
     'url': 'http://download.cloud.secondlife.com/FALLBACK/Second_Life_4_0_1_310054_x86_64_Setup.exe',
     'hash': '08f65e80c15aa5dd9cacc1465000f64',
     'size': 52100064}
