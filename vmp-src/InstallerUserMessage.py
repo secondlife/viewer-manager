@@ -135,9 +135,7 @@ class InstallerUserMessage(tk.Tk):
         # Now initialize base class.
         tk.Tk.__init__(self)
         self.grid()
-        if not title:
-            title = Application.name()
-        self.title(title)
+        self.title(title or Application.name())
         self.choice = tk.BooleanVar()
         self.choice3 = tk.IntVar()
         # Use of StringVar allows us to dynamically change the displayed text.

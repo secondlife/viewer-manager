@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """\
-@file   test_update_manager_chose_result.py
+@file   test_update_manager_Windows10Video.py
 @author oz
 @date   2017-09-25
 
@@ -27,7 +27,7 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
-from nose.tools import assert_equal
+from nose.tools import assert_equal, assert_false
 
 import os
 import sys
@@ -54,7 +54,7 @@ class testWindows10Video(object):
                    'Name                    \r\r\n'
                    'NVIDIA GeForce GTS 450  \r\r\n'
                    '\r\r\n'):
-            assert_equal(update_manager.Windows10Video.isUnsupported(), False)
+            assert_false(update_manager.Windows10Video.isUnsupported())
 
     def testOneBadOneGood(self):
         with patch(update_manager, "wmic",
@@ -63,7 +63,7 @@ class testWindows10Video(object):
                        'Intel(R) HD Graphics    \r\r\n'
                        'NVIDIA GeForce GTS 450  \r\r\n'
                        '\r\r\n'):
-            assert_equal(update_manager.Windows10Video.isUnsupported(), False)
+            assert_false(update_manager.Windows10Video.isUnsupported())
 
     def testTwoBad(self):
         with patch(update_manager, "wmic", 
@@ -79,5 +79,5 @@ class testWindows10Video(object):
                        lambda *args: 
                        'Name                    \r\r\n' 
                        '\r\r\n'): 
-            assert_equal(update_manager.Windows10Video.isUnsupported(), False)
+            assert_false(update_manager.Windows10Video.isUnsupported())
 

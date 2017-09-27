@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """\
-@file   test_update_manager_chose_result.py
+@file   test_update_manager_choose_update.py
 @author oz
 @date   2017-09-25
 

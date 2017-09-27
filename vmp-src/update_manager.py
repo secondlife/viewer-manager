@@ -456,7 +456,7 @@ class Windows10Video(object):
                     log.warning("Found only graphics cards not supported in Windows 10: '%s'; should switch to the 32 bit build", "', '".join(wmic_list))
             else:
                 log.warning("wmic did not return any video cards")
-                Windows10Video.hasOnlyUnsupported = False
+                Windows10Video.hasOnlyUnsupported = False # we are probably hosed, but go ahead and try
 
         return Windows10Video.hasOnlyUnsupported
 
@@ -469,9 +469,9 @@ def choose_update(platform_key, settings, vvm_response):
     or, if no update is chosen, an empty dict
     """
     chosen_result = dict()
-    log = SL_Logging.getLogger('chose_update')
+    log = SL_Logging.getLogger('choose_update')
 
-    current_build = "%s%d" % (BuildData.get('Platform'), BuildData.get('Address Size'))
+    current_build = "%s%d" % (BuildData.get('Platform'), int(BuildData.get('Address Size')))
     target_platform = "%s%d" % (platform_key, getBitness(platform_key))
     log.debug("Current build is %s; tentative target is %s" % (current_build, target_platform))
 
@@ -481,21 +481,30 @@ def choose_update(platform_key, settings, vvm_response):
             log.info("This is a 64 bit build, but this system is 32 bit; looking for a 32 bit build")
 
         elif target_platform == 'win64' and onWindows10orHigher() and Windows10Video.isUnsupported():
+            log.warning("Your video card(s) are not supported on Windows 10; switching you to the 32bit build, which runs in a compatibility mode that works better")
             target_platform = 'win32'
 
     # We could have done this check earlier, but by waiting we can make the warnings more specific
     if 'ForceAddressSize' in settings:
-        forced_bitness = int(settings['ForceAddressSize'])
-        log.info("ForceAddressSize setting: %r" % forced_bitness)
-        if target_platform == 'win32' and forced_bitness == 64:
-            log.warning("The ForceAddressSize setting says 64; that may not work, but trying anyway...")
-            target_platform = 'win64'
+        try:
+            forced_bitness = int(settings['ForceAddressSize'])
+            log.info("ForceAddressSize setting: %r" % forced_bitness)
+            if target_platform == 'win32' and forced_bitness == 64:
+                log.warning("The ForceAddressSize setting says 64; that may not work, but trying anyway...")
+                target_platform = 'win64'
+
+        except ValueError:
+            log.warning("Invalid value %s for ForceAddressSize setting; disregarding it" % settings['ForceAddressSize'])
 
     # Ok... now we know what the target_platform is ...
 
     # Get all the VVM results that are not platform dependent
     for key in ['required', 'version', 'channel', 'more_info']:
-        chosen_result[key] = vvm_response[key]
+        try:
+            chosen_result[key] = vvm_response[key]
+        except KeyError:
+            log.error("Viewer Version Manager response is missing '%s'; not updating" % key)
+            return dict()
 
     if target_platform != current_build:
         log.info("Current build platform is '%s', but we need '%s', so update is required" % (current_build, target_platform))
@@ -513,9 +522,9 @@ def choose_update(platform_key, settings, vvm_response):
         target_result = vvm_response.get('platforms', {}).get(platform_key, {})
         if target_result:
             log.warning("No update result found for '%s' but found '%s', so updating to that" % (target_platform, platform_key))
-            chosen_result['platform'] = platform_key
+            target_platform = platform_key
         else:
-            log.warning("No update result found for '%s'" % target_platform)
+            log.warning("No update result found for '%s' or '%s'" % (target_platform, platform_key))
             chosen_result = dict()
 
     # add the target we picked
