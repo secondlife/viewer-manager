@@ -663,28 +663,17 @@ def _update_manager(viewer_binary, cli_overrides = {}):
 
     # cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments to 
     # comments that begin with ' ' are steps taken from the algorithm in the description of SL-323. 
-    #   Note that in the interest of efficiency, such as determining download success once at the top
-    #  The code does follow precisely the same order as the algorithm.
 
     #setup and getting initial parameters
     platform_key = Application.platform_key() # e.g. "mac"
     settings = get_settings(cli_overrides.get('settings') or Application.user_settings_path())
 
-    #  If a complete download of that update is found, check the update preference:
+    # If a complete download of that update is found, check the update preference:
     #settings['UpdaterServiceSetting'] =
     INSTALL_MODE_AUTO=3            # Install each update automatically
     INSTALL_MODE_PROMPT_OPTIONAL=1 # Ask me when an optional update is ready to install
     INSTALL_MODE_MANDATORY_ONLY=0  # Install only mandatory updates
     # (see panel_preferences_setup.xml)
-    # <key>UpdaterServiceSetting</key>
-    #     <map>
-    # <key>Comment</key>
-    #     <string>Configure updater service.</string>
-    # <key>Type</key>
-    #     <string>U32</string>
-    # <key>Value</key>
-    #     <string>0</string>
-    # </map>
 
     # If cli_overrides['set']['UpdaterServiceSetting'], use that;
     # else if settings['UpdaterServiceSetting']['Value'], use that;
