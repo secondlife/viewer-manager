@@ -36,6 +36,7 @@ Pushed up the manager directory to be multiplatform.
 
 import os
 import sys
+import platform
 import threading
 import time
 import Tkinter as tk
@@ -134,6 +135,8 @@ class InstallerUserMessage(tk.Tk):
         status_message(None)
         # Now initialize base class.
         tk.Tk.__init__(self)
+        if platform.system() == 'Windows':
+            self.call('wm', 'iconbitmap', self._w, '-default', 'secondlife.ico')
         self.grid()
         self.title(title or Application.name())
         self.choice = tk.BooleanVar()
