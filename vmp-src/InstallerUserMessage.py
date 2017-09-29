@@ -121,7 +121,7 @@ class InstallerUserMessage(tk.Tk):
     #Linden standard green color, from Marketing
     linden_green = "#487A7B"
 
-    def __init__(self, title=None, width=500, height=200,
+    def __init__(self, title=None, width=500, height=230,
                  icon_name = "head-sl-logo.gif", icon_path = None):
         # Before we even perform base-class initialization, suppress any
         # existing _status_frame. Deriving from tk.Tk (vs. tk.Frame) is great

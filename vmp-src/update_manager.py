@@ -485,16 +485,24 @@ def choose_update(platform_key, settings, vvm_response):
             target_platform = 'win32'
 
     # We could have done this check earlier, but by waiting we can make the warnings more specific
-    if 'ForceAddressSize' in settings:
-        try:
-            forced_bitness = int(settings['ForceAddressSize'])
-            log.info("ForceAddressSize setting: %r" % forced_bitness)
-            if target_platform == 'win32' and forced_bitness == 64:
-                log.warning("The ForceAddressSize setting says 64; that may not work, but trying anyway...")
-                target_platform = 'win64'
+    if settings.get('ForceAddressSize',None):
+        if platform_key == 'win':
+            try:
+                forced_bitness = int(settings['ForceAddressSize'])
+                log.info("ForceAddressSize setting: %d" % forced_bitness)
+                if target_platform == 'win32' and forced_bitness == 64:
+                    log.warning("The ForceAddressSize setting says 64; that may not work, but trying anyway...")
+                    target_platform = 'win64'
+                elif target_platform == 'win64' and forced_bitness == 32:
+                    log.warning("The ForceAddressSize setting says 32; your system may work with 64 - consider removing the setting")
+                    target_platform = 'win32'
+                else:
+                    log.info("target platform is %s, ForceAddressSize is %d; no effect" % (target_platform, forced_bitness))
 
-        except ValueError:
-            log.warning("Invalid value %s for ForceAddressSize setting; disregarding it" % settings['ForceAddressSize'])
+            except ValueError:
+                log.warning("Invalid value '%s' for ForceAddressSize setting; disregarding it" % settings['ForceAddressSize'])
+        else:
+            log.warning('The ForceAddressSize setting is used only on Windows; ignored')
 
     # Ok... now we know what the target_platform is ...
 
@@ -709,8 +717,6 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                  (default_channel, channel))
         BuildData.override('Channel', channel)
 
-    settings['ForceAddressSize'] = cli_overrides.get('forceaddresssize')
-
     #log.debug("Pre query settings:\n%s", pformat(settings)) # too big to leave this in all the time
 
     #  On launch, the Viewer Manager should query the Viewer Version Manager update api.
@@ -844,8 +850,8 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                 skip_frame = InstallerUserMessage.InstallerUserMessage(
                     title = BuildData.get('Channel Base')+" Installer")
                 skip_frame.trinary_choice_link_message(
-                    message = "Optional update %s is ready to install. Install this version?\n"
-                    "See Release Notes:\n" % chosen_result['version'], 
+                    message = "Update %s is ready to install.\n"
+                    "Release Notes:\n%s" % (chosen_result['version'],chosen_result['more_info']),
                     url = str(chosen_result['more_info']),
                     one = "Install", two = "Skip", three = "Not Now")
                 update_action = skip_frame.choice3.get()
