@@ -688,15 +688,17 @@ def _update_manager(viewer_binary, cli_overrides = {}):
 
     # If cli_overrides['set']['UpdaterServiceSetting'], use that;
     # else if settings['UpdaterServiceSetting']['Value'], use that;
-    # if none of the above, default to True.
-    #    (the 'int()' is because a cli override is a string value)
+    # if none of the above, or if value is not valid, default to INSTALL_MODE_AUTO.
     cli_settings = cli_overrides.get('set', {})
-    cli_updater_service_setting = cli_settings.get('UpdaterServiceSetting',None)
-    install_mode = int(cli_updater_service_setting if cli_updater_service_setting else settings.get('UpdaterServiceSetting', {}).get('Value', INSTALL_MODE_AUTO))
-    # validate the install_mode
-    if install_mode not in (INSTALL_MODE_AUTO, INSTALL_MODE_PROMPT_OPTIONAL, INSTALL_MODE_MANDATORY_ONLY):
-        log.error("Invalid setting value for UpdaterServiceSetting (%d); using automatic install (%d)" % (install_mode, INSTALL_MODE_AUTO))
+    install_mode_string=cli_settings.get('UpdaterServiceSetting',settings.get('UpdaterServiceSetting', {}).get('Value', INSTALL_MODE_AUTO))
+    try:
+        install_mode=int(install_mode_string)
+        if install_mode not in (INSTALL_MODE_AUTO, INSTALL_MODE_PROMPT_OPTIONAL, INSTALL_MODE_MANDATORY_ONLY):
+            raise ValueError
+    except ValueError:
+        log.error("Invalid setting value for UpdaterServiceSetting (%s); falling back to auto (%d)" % (install_mode_string, INSTALL_MODE_AUTO))
         install_mode = INSTALL_MODE_AUTO
+    log.info("Update mode (UpdaterServiceSetting) is %s (%d)" % (["Mandatory Only", "Prompt When Optional", "", "Automatic"][install_mode], install_mode))
 
     #use default chunk size if none is given, set UpdaterWillingToTest to None if not given
     #this is to prevent key errors on accessing keys that may or may not exist depending on cli options given
