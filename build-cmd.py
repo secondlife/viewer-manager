@@ -27,6 +27,8 @@ $/LicenseInfo$
 from shutil import copy, copytree, ignore_patterns, rmtree
 
 import cgitb
+import errno
+import glob
 import os
 import os.path
 import platform
@@ -78,8 +80,7 @@ def getPlatform():
     
 def main():
     print "Python version string: %s" % sys.version
-    python_native = os.environ.get('PYTHON_COMMAND_NATIVE')
-    print "Using python from: %s" % python_native
+    print "Using python from: %s" % sys.executable
     autobuild = os.environ.get('AUTOBUILD')
     platform = getPlatform()
 
@@ -87,14 +88,17 @@ def main():
     print "sys.argv: %r" % sys.argv
     top = os.path.dirname(os.path.realpath(sys.argv[0]))
     stage = os.path.join(top, 'stage')
+    stage_VMP = os.path.join(stage, "VMP")
     build = os.path.join(top, 'build')
     #if we decide we need to copy yet another directory tree, just add the source and dest to this dict
-    iter_paths = {'vmp': {'src': os.path.join(top, 'vmp-src'), 'dst': os.path.join(stage, "VMP")}, 
-                  'llb': {'src': llbasedir, 'dst': os.path.join(os.path.join(stage, "VMP"), 'llbase')}
+    # each value in iter_paths is a (src, dst) pair in that order
+    src, dst = range(2)
+    iter_paths = {'vmp': (os.path.join(top, 'vmp-src'), stage_VMP), 
+                  'llb': (llbasedir, 'dst': os.path.join(stage_VMP, 'llbase'))
     }
     print "iterpaths: %r" % iter_paths
-    icon = os.path.join(iter_paths['vmp']['src'], 'icons', 'secondlife.ico')
-    tests = os.path.join(iter_paths['vmp']['src'],'tests')
+    icon = os.path.join(iter_paths['vmp'][src], 'icons', 'secondlife.ico')
+    tests = os.path.join(iter_paths['vmp'][src],'tests')
     
     #We will ship a 32 bit VMP with 64 bit viewers
     if platform is None: 
@@ -105,15 +109,28 @@ def main():
         print >>sys.stderr, 'The Windows VMP must be built on a 32-bit python Windows host'   
     
     #run nosetests
-    if 'nosetests' in os.environ:
-        nosetest_cmd = os.environ['nosetests']
-    elif darwin.search(platform):
+    # hardcoded fallback path
+    if darwin.search(platform):
         nosetest_cmd = '/usr/local/bin/nosetests'
     elif linux.search(platform):
         nosetest_cmd = '/usr/bin/nosetests'
     else:
         nosetest_cmd = r"C:\Python27\Scripts\nosetests"
-        
+    # try various ways to find the command -- might just be on PATH
+    for nosetests in "nosetests", os.environ.get('nosetests'), nosetest_cmd:
+        # might not be a $nosetests environment variable
+        if nosetests:
+            try:
+                subprocess.check_output([nosetests, "--version"])
+            except OSError as err:
+                # it's okay at this point if we don't find it
+                if err.errno != errno.ENOENT:
+                    # anything else, not okay
+                    raise
+            else:
+                # yay, we succeeded in running nosetests, done searching
+                break
+
     nose_env = os.environ.copy()
     nose_env['PYTHONPATH'] = ':'.join(sys.path)
     #stupid windows limit:
@@ -125,23 +142,23 @@ def main():
         nose_env['PATH'] = llbasedir + ":" + nose_env['PATH']
         nose_env['PYTHONPATH'] = llbasedir
 
-    os.chdir(iter_paths['vmp']['src'])
     try:
-        print "About to call %s on %s from %s" % (nosetest_cmd, tests, iter_paths['vmp']['src'])
+        print "About to call %s on %s from %s" % (nosetests, tests, iter_paths['vmp'][src])
         #print "nose environment: %r" % nose_env
-        output = repr(subprocess.check_output([nosetest_cmd, tests], stderr=subprocess.STDOUT, env=nose_env))
-    except Exception as e:
+        output = repr(subprocess.check_output([nosetests, tests],
+                                              stderr=subprocess.STDOUT, env=nose_env,
+                                              cwd=iter_paths['vmp'][src]))
+    except subprocess.CalledProcessError as e:
         print repr(e)
-        try:
-            #these only exist if the exception is a CalledProcessError
-            print "returncode: %s" % e.returncode
-            print "command: %s" % e.cmd
-            print "output: %s" % e.output
-        except:
-            #more debug is best effort
-            pass
+        #these only exist if the exception is a CalledProcessError
+        print "returncode: %s" % e.returncode
+        print "command: %s" % e.cmd
+        print "output: %s" % e.output
         sys.exit(1)
-    
+    except Exception as e:
+        #more debug is best effort
+        sys.exit(repr(e))
+
     output = output.replace('\\n','$')
     output = output.replace('\'','')
     output_list = output.split('$')
@@ -151,7 +168,6 @@ def main():
             one_line =  one_line + " " + line
     print "Successful nosetest output:"
     print one_line
-    os.chdir(top)
            
     #the version file consists of one line with the version string in it
     sourceVersionFile = os.path.join(top, "VERSION.txt")
@@ -160,11 +176,11 @@ def main():
     packageVersionFile.write("%s.%s" % (sourceVersion, os.getenv('AUTOBUILD_BUILD_ID','0')))
 
     #copytree doesn't want the destination directory to pre-exist
-    for key in iter_paths.keys():
-        if os.path.exists(iter_paths[key]['dst']):
-            rmtree(iter_paths[key]['dst'], ignore_errors=True)
-        copytree(iter_paths[key]['src'], iter_paths[key]['dst'], ignore=ignore_patterns('*.pyc', '*tests*'))
-        print "copied %s to %s with contents %s" % (iter_paths[key]['src'], iter_paths[key]['dst'], repr(os.listdir(iter_paths[key]['dst'])))
+    for srcdir, dstdir in iter_paths.values():
+        if os.path.exists(dstdir):
+            rmtree(dstdir, ignore_errors=True)
+        copytree(srcdir, dstdir, ignore=ignore_patterns('*.pyc', '*tests*'))
+        print "copied %s to %s with contents %s" % (srcdir, dstdir, repr(os.listdir(dstdir)))
 
     sourceLicenseFile = os.path.join(top, "LICENSE")
     copy(sourceLicenseFile, stage)
@@ -177,52 +193,67 @@ def main():
         pass
     elif windows.search(platform):
         #to keep things as platform independent as possible, EXEs go into the same directory as .py files
-        p = re.compile(r"\.py$")
-        vmp_files = []
-        for f in os.listdir(iter_paths[key]['dst']):
-            if p.search(f):
-                vmp_files.append(str(os.path.join(iter_paths[key]['dst'], f)))
-        #the only non-py file to be compiled.
-        vmp_files.append(str(os.path.join(iter_paths[key]['dst'], 'SL_Launcher')))
+        dstdir = iter_paths['vmp'][dst]
+        # SL_Launcher is the main entry point for the VMP.
+        # download_update is run as a separate process for background
+        # downloads.
+        vmp_files = [os.path.join(dstdir, f)
+                     for f in ("SL_Launcher", "download_update.py")]
         print "Manifest of files to be compiled by pyinstaller: %s" % repr(vmp_files)
+
         #In a typical Windows install, pinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
-        #BUT that's not true of the virtualenv that autobuild runs in, so hard code the canonical location
-        pyinstaller_exe = [r'C:\Python27\Scripts\pyinstaller-script.py']
-        args = [ "-y", "-w", "-i", icon, "--clean", "--onefile", "--log-level", "DEBUG", "-p", iter_paths[key]['dst'], "--distpath", iter_paths[key]['dst']]
-        print "pyinstaller exists: %s" % os.path.exists(pyinstaller_exe[0])
-        if not os.path.exists(pyinstaller_exe[0]):
-            sys.exit(1)
+        #BUT that's not true of the virtualenv that autobuild runs in, so
+        #search.
+        pyinstaller = 'pyinstaller-script.py'
+        try:
+            # We want the FIRST path on $PATH containing pyinstaller. Before
+            # generator comprehensions, we'd have written a list comprehension
+            # and taken [0] of that -- but that would unconditionally check
+            # every directory on $PATH. Writing next(generator) stops at the
+            # first item to satisfy the filter, or raises StopIteration if no
+            # item satisfies.
+            pyinstaller_path = next(path for path in
+                                    (os.path.join(dir, pyinstaller)
+                                     for dir in os.environ["PATH"].split(os.pathsep))
+                                    if os.path.exists(path))
+        except StopIteration:
+            # not on $PATH, hmm, try hard coding the canonical location
+            pyinstaller_path = os.path.join(r'C:\Python27\Scripts', pyinstaller)
+            if not os.path.exists(pyinstaller_path):
+                sys.exit("pyinstaller not found")
+            else:
+                print "pyinstaller not on PATH, using hardcoded %r" % pyinstaller_path
+
+        args = [ "-y", "-w", "-i", icon, "--clean", "--onefile", "--log-level", "DEBUG", "-p", dstdir, "--distpath", dstdir]
         # The requests module invokes the certifi.where function we provide
         # at _load_ time; since that module looks in the application data
         # directory to find build_data.json, it needs to find one, so point
         # to it with this override variable. This has no effect at run time
         # because the variable won't be defined.
-        os.environ['APP_DATA_DIR'] = os.path.join(top,'vmp-src','tests')
+        os.environ['APP_DATA_DIR'] = os.path.join(iter_paths['vmp'][src],'tests')
         for f in vmp_files:
+            print "target %r exists: %s" % (f, os.path.exists(f))
+            command = [sys.executable, pyinstaller_path] + args + [f]
+            print "about to call %s " % command
+            sys.stdout.flush()
             try:
-                target = []
-                target.append(f)
-                print "target exists: %s" % os.path.exists(target[0])
-                print "about to call %s " % ([python_native] + pyinstaller_exe + args + target)
-                subprocess.check_output([python_native] + pyinstaller_exe + args + target)
-            except Exception as e:
+                subprocess.check_call(command)
+            except subprocess.CalledProcessError as e:
                 print "Pyinstaller failed"
                 print repr(e)
-                try:
-                    print "returncode: %s" % e.returncode
-                    print "command: %s" % e.cmd
-                    print "output: %s" % e.output
-                except:
-                    pass
+                print "returncode: %s" % e.returncode
+                print "command: %s" % e.cmd
+                print "output: %s" % e.output
                 sys.exit(1)
+            except Exception as e:
+                sys.exit(repr(e))
         #best effort cleanup after pyinstaller
         rmtree(build, ignore_errors=True)
-        for f in os.listdir(top):
-            if f.endswith('spec'):
-                try:
-                    os.remove(f)
-                except:
-                    pass
+        for f in glob.glob(os.path.join(top, "*.spec")):
+            try:
+                os.remove(f)
+            except:
+                pass
     print "Build Succeeded"
         
 if __name__ == '__main__':
