@@ -94,7 +94,7 @@ def main():
     # each value in iter_paths is a (src, dst) pair in that order
     src, dst = range(2)
     iter_paths = {'vmp': (os.path.join(top, 'vmp-src'), stage_VMP), 
-                  'llb': (llbasedir, 'dst': os.path.join(stage_VMP, 'llbase'))
+                  'llb': (llbasedir, os.path.join(stage_VMP, 'llbase'))
     }
     print "iterpaths: %r" % iter_paths
     icon = os.path.join(iter_paths['vmp'][src], 'icons', 'secondlife.ico')
