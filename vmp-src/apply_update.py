@@ -132,8 +132,8 @@ def try_dismount(installable = None, tmpdir = None):
             log.error("Could not umount dmg file %s.  Error messages: %s" % (installable, e.message))    
 
 def apply_update(download_dir = None, platform_key = None, in_place = True):
-    #returns path to newly installed viewer, or None ("don't launch")
-    #throws an exception on failure for all three
+    # returns path to newly installed viewer, or None ("don't launch")
+    # throws an exception on failure for all three
     installable = get_filename(download_dir)
     if not installable:
         #could not find the download
@@ -152,6 +152,7 @@ def apply_update(download_dir = None, platform_key = None, in_place = True):
     return installed
 
 def apply_linux_update(installable, in_place):
+    # UNTESTED
     log = SL_Logging.getLogger("SL_Apply_Update")
     IUM.status_message("Installing from tarball...")
     try:
@@ -285,12 +286,10 @@ def main():
     parser = argparse.ArgumentParser("Apply Downloaded Update")
     parser.add_argument('--dir', dest = 'download_dir', help = 'directory to find installable', required = True)
     parser.add_argument('--pkey', dest = 'platform_key', help =' OS: lnx|mac|win', required = True)
-    parser.add_argument('--in_place', action = 'store_false', help = 'This upgrade is for a different channel', default = True)
 
     args = parser.parse_args()
    
-    result = apply_update(download_dir = args.download_dir, platform_key = args.platform_key,
-                          in_place = args.in_place)
+    result = apply_update(download_dir = args.download_dir, platform_key = args.platform_key)
     
 if __name__ == "__main__":
     cgitb.enable(format='text')

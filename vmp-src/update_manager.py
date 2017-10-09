@@ -32,8 +32,7 @@ $/LicenseInfo$
 from copy import deepcopy
 from datetime import datetime   
 from logging import DEBUG
-from vmp_util import Application, BuildData, SL_Logging, subprocess_args, \
-     skip_settings, write_settings, put_marker_file
+from vmp_util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file
 from llbase import llsd
 from llbase import llrest
 
@@ -80,7 +79,7 @@ download_process = None
 #Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
 #so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
 #hence the strange equality test for 'Graphics' when we pop the last word off the string.
-mHD_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
+UnsupportedHD_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
 
 #this is to support pyinstaller, which uses sys._MEIPASS to point to the location
 #the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
@@ -290,65 +289,20 @@ def make_VVM_UUID_hash(platform_key):
         hash = hashlib.md5(str(uuid.uuid1())).hexdigest()
     return hash
 
-def getBitness(platform_key, settings):
+def getBitness(platform_key):
+    """Return the maximum possible address size for this system"""
     log=SL_Logging.getLogger('getBitness')
+    bits = 0
     # log.debug("getBitness called with: %r and %r" % (platform_key, settings))
     if platform_key in ['lnx', 'mac']:
-        log.info("%s is always 64bit" % platform_key)
-        return 64
+        bits = 64
     # always Windows from here down...
-
-    if 'PROGRAMFILES(X86)' not in os.environ:
-        log.info("'PROGRAMFILES(X86)' not found in environment; returning 32bit")
-        return 32
-
-    #see MAINT-6832, MAINT-7571 and IQA-4130
-    wmic_graphics = wmic('path','Win32_VideoController','get','NAME')
-    log.debug("result of subprocess call to get wmic graphics card info: %r" % wmic_graphics)
-    # first rstrip() every line, then discard any that are completely blank
-    # the first line of the response is always the string literal 'Name'
-    wmic_list = [line for line in (ln.rstrip() for ln in wmic_graphics.splitlines())
-                 if line][1:]
-    # The logic here is a little complicated:
-    # - If there's no bad card, we're good.
-    # - If there's a bad card AND some other card, still good.
-    # - If the only card(s) present are bad cards, not good.
-    good_cards = [line for line in wmic_list
-                  if not ("Intel(R) HD Graphics" in line and
-                          line.split()[-1] in mHD_GRAPHICS_LIST)]
-    #there's no order guarantee from wmic, this is to prevent an
-    #HD card discovered after a good card from overwriting the state variable
-    #by specification, a machine is bad iff ALL of the cards on the machine are bad ones
-    if good_cards:
-        log.debug("Found good graphics cards: %s", ", ".join(good_cards))
-        return 64
-
-    # The case in which wmic shows no cards at all comes here too... must we
-    # defend against that?!
-    log.debug("Found only bad graphics cards: %s", ", ".join(wmic_list))
-    addr = 32
-    if 'ForceAddressSize' in settings:
-        addr = settings['ForceAddressSize']
-        log.info("ForceAddressSize setting: %r" % addr)
-    if addr != '64':
-        return 32
-
-    log.info("Turning off benchmarking in viewer startup.")
-    #write to settings file, see MAINT-7571
-    settings_path = Application.user_settings_path()
-    settings = get_settings(settings_path)
-    #log.debug("Settings before skip benchmark modification:\n%s" % pformat(settings))
-
-    #overwrite settings file
-    settings.update(skip_settings)
-    #log.debug("Settings just before skip benchmark writing:\n%s" % pformat(settings))
-    try:
-        write_settings(settings_object=settings, settings_path=settings_path)
-    except Exception as e:
-        log.error("Failed to write to settings file %s: %r" % (settings_path, e))
-        return 32
+    elif 'PROGRAMFILES(X86)' not in os.environ:
+        bits = 32
     else:
-        return 64
+        bits = 64
+    log.debug("returning %d bit" % bits)
+    return bits
 
 def wmic(*args):
     """
@@ -369,60 +323,37 @@ def wmic(*args):
             log.error("No wmic command found - bad Windows install?")
         raise
 
-def isViewerMachineBitMatched(viewer_platform = None, platform_key = None, bitness = 64):
-    if not viewer_platform or not platform_key:
-        return False
-    #viewer_platform in (lnx, mac, win, win32)
-    #platform_key in (lnx, mac, win)
-    if (viewer_platform == 'lnx' and platform_key == 'lnx') or (viewer_platform == 'mac' and platform_key == 'mac'):
-        return True
-    #this happens if you try to install the viewer on the wrong OS: either lnx != lnx, mac != mac or win != either of those
-    if viewer_platform not in ['win', 'win32'] or platform_key != 'win':
-        return False
-    #default is to ship 64 bit
-    win_plat_key = 'win'
-    if bitness == 32:
-        win_plat_key = 'win32'
-    return (viewer_platform == win_plat_key)
-
 def query_vvm(platform_key = None, settings = {},
               UpdaterServiceURL = None, UpdaterWillingToTest = None):
+    """
+    Ask the viewer version manager what builds are available for me
+    given my platform and version.
+    Returns a map of all responses.
+    """
     result_data = None
 
-    VVM_platform = platform_key
     log=SL_Logging.getLogger('query_vvm')
+
+    # URI template /update/v1.2/channelname/version/platform/platformversion/willing-to-test/uniqueid
+    # https://lindenlab.atlassian.net/wiki/spaces/SLT/pages/71106564/Viewer+Version+Manager+REST+API
+    # See https://lindenlab.atlassian.net/wiki/spaces/SLT/pages/466081/Viewer+Version+Manager+in+AWS
+
+    VVM_platform = platform_key
 
     if not UpdaterServiceURL:
         UpdaterServiceURL=os.getenv('SL_UPDATE_SERVICE',
             BuildData.get('Update Service',
                           'https://update.secondlife.com/update'))
 
-    # To disambiguate, we have two sources of platform here
-    #   - platform_key is our platform name for the computer we are running on
-    #   - BuildData.get('Platform') is the platform for which we were packaged
-    # These are not always the same, in particular, for the first download of a VMP windows viewer which defaults to 64 bit
-    bitness = getBitness(platform_key, settings)
-    log.debug("Bitness determined to be %r" % bitness)
-    
-    try:
-        if not isViewerMachineBitMatched(BuildData.get('Platform'), platform_key, bitness):
-            #there are two cases:
-            # the expected case where we downloaded a 64 bit viewer to a 32 bit machine on spec
-            # the unexpected case where someone was running a 32 bit viewer on a 32 bit Windows box and upgraded their Windows to 64 bit
-            #either way, the Windows bitness is the right bitness
-            if bitness == 32:
-                VVM_platform = 'win32'
-    except Exception as e:
-        log.warning("Could not parse viewer bitness from build_data.json %r" % e)
-        #At these point, we have no idea what is really going on.  Since 32 installs on 64 and not vice-versa, fall back to safety
-        VVM_platform = 'win32'        
+    bitness = getBitness(platform_key)
 
-    # URI template /update/v1.2/channelname/version/platformkey/platformversion/willing-to-test/uniqueid
-    # https://wiki.lindenlab.com/wiki/Viewer_Version_Manager_REST_API#Viewer_Update_Query
-    # For valid hosts, see https://wiki.lindenlab.com/wiki/Update_Service#Clusters
+    # Ask the VVM with the most specific form of our platform (including bitness)
+    # so that if it can be configured with more specific rules
+    VVM_platform = "%s%d" % (platform_key, bitness)
+
     channelname = BuildData.get('Channel')
     version = BuildData.get('Version')
-    #we need to use the dotted versions of the platform versions in order to be compatible with VVM rules and arithmetic
+    # we need to use the dotted versions of the platform versions in order to be compatible with VVM rules and arithmetic
     if platform_key == 'win':
         platform_version = platform.win32_ver()[1]
     elif platform_key == 'mac':
@@ -448,10 +379,11 @@ def query_vvm(platform_key = None, settings = {},
     if UpdaterWillingToTest == 'testok':
         test_ok = 'testok'
     elif re.search('^%s Test' % Application.name(), channelname) is not None:
+        # if running a Second Life Test viewer, don't accept other test viewers
         test_ok = 'testno'
     else:
         test_ok = settings.get('test', {}).get('Value', 'testok')
-            
+
     #suppress warning we get in dev env for altname cert 
     if UpdaterServiceURL != 'https://update.secondlife.com/update':
         warnings.simplefilter('ignore', urllib3.exceptions.SecurityWarning)
@@ -467,6 +399,7 @@ def query_vvm(platform_key = None, settings = {},
     try:
         result_data = VVMService.get(update_urlpath, params=debug_param)
         log.debug("received result from VVM: %r" % result_data)
+        result_data.pop('explain', None) # logging the explanation above is enough, not needed elsewhere
     except llrest.RESTError as res:
         if res.status == 404: # 404 is how the Viewer Version Manager indicates that the channel is unmanaged
             log.info("Update service returned 'not found'; normally this means the channel is unmanaged (and allowed)")
@@ -474,62 +407,139 @@ def query_vvm(platform_key = None, settings = {},
             log.warning("Update service %s/%s failed: %s" % (UpdaterServiceURL, update_urlpath, res))
         result_data = None
 
-    #keep a copy for logging later
-    raw_result_data = result_data
-            
-    # As of VVM v1.2, the result_data object is now a bit more complicated.  The general information
-    # such as required, channel and so on are still at the top level, but url, hash and size are now returned 
-    # for all platforms at once, keyed by platform key.  So, the mac download url is result_data['platforms']['mac']['url']
-    # and similarly for the other values and platforms.  Platform key is still one of {lnx,mac,win,win32}
-    # Before this, the result_data had these three at the top level, which is what the caller expects.  We
-    # continue this contract by selecting the right values here where we know the correct bitness and this means
-    # the rest of the code does not need to be changed.
-    if result_data:
-        # no update or VVM doesn't know about this version.
-        # we only do an "cross-platform" update in the case where we have downloaded a win64 viewer on initial install
-        # to a win32 bit machine or when a 64 bit host has a win32 viewer.
-        #
-        # In these cases, we return a result that effectively says "required upgrade to win/win32".
-        # otherwise result == current means no update (and likely, a test viewer)
-        if VVM_platform != BuildData.get('Platform'):
-            #Don't care what the VVM says, sideways upgrades are ALWAYS mandatory
-            log.info('required platform (%s) does not match this build (%s); update is required' % (VVM_platform, BuildData.get('Platform')))
-            result_data['required'] = True
-        elif result_data.get('version') == version:
-            log.info("We have version %s for %s, which is current" % (version, VVM_platform))
-            return None # we have what we should have, both platform and version
-        else:
-            log.info("result version (%s) does not match current version (%s)" % (result_data['version'], version))
-
-        try:
-            result_data.update(result_data['platforms'][VVM_platform]) # promote the target platform results 
-            result_data['VVM_platform'] = VVM_platform
-        except KeyError as ke:
-            #this means we got a malformed response; either 'platforms' isn't in the results, or our platform is missing
-            if 'platforms' in result_data:
-                log.warning("Unexpected response - no data for platform '%s': %r" % (VVM_platform, raw_result_data))
-            else:
-                log.error("Received malformed results from vvm: %r" % result_data)
-            log.error("Error reading VVM response: %r" % ke)
-            result_data = None # we didn't get what we need, so clear result_data to allow failsafe check below
-        else:
-            # get() sets missing key results to None.
-            # If we are missing any data, set result_data to None to allow failsafe check below
-            if not ('hash' in result_data and 'size' in result_data and 'url' in result_data):
-                log.error("No update because response is missing url, size, or hash: %r" % raw_result_data)
-                result_data = None
-                
-    # failsafe to prevent 64 bit viewer crashing on startup on a 32 bit host.
-    if VVM_platform == 'win32' and result_data is None and BuildData.get('Platform') != 'win32':
-        log.error("Could not obtain 32 bit viewer download information")
-        InstallerUserMessage.basic_message(
-            "Failed to obtain a 32 bit viewer for your system. "
-            "Please download a viewer from http://secondlife.com/support/downloads/")
-        #we're toast.  We don't have a 32 bit viewer to update to and we can't launch a 64 bit viewer on a 32 bit host
-        #better to die gracefully than horribly
-        sys.exit(1) 
-                
     return result_data
+
+def onWindows10orHigher():
+    if platform.system() != 'Windows':
+        return False
+    log = SL_Logging.getLogger('onWindows10orHigher')
+    windowsVersion = platform.win32_ver()[1]
+    majorVersion=int(windowsVersion.split('.')[0])
+    log.debug("Windows version %s is %s10 or greater" % (windowsVersion, ("not " if majorVersion < 10 else "")))
+    return majorVersion >= 10
+
+class Windows10Video(object):
+    hasOnlyUnsupported = None # so that we only call wmic once
+
+    @staticmethod
+    def isUnsupported():
+        if Windows10Video.hasOnlyUnsupported is None:
+            log = SL_Logging.getLogger('windows_video')
+
+            # There are video cards that are not supported for the 64bit build on Windows 10,
+            # so find out what the video controller is
+            wmic_graphics = wmic('path','Win32_VideoController','get','NAME')
+            log.debug("wmic graphics card info: %r" % wmic_graphics)
+            # first rstrip() every line, then discard any that are completely blank
+            # the first line of the response is always the string literal 'Name'
+            wmic_list = [line for line in
+                             (ln.rstrip() for ln in wmic_graphics.splitlines())
+                             if line][1:]
+            if wmic_list:
+                # The logic here is a little complicated:
+                # - If there's no bad card, we're good.
+                # - If there's a bad card AND some other card, still good.
+                # - If the only card(s) present are bad cards, not good.
+                good_cards = [line for line in wmic_list
+                                  if not ("Intel(R) HD Graphics" in line and
+                                              line.split()[-1] in UnsupportedHD_GRAPHICS_LIST)]
+                # There's no order guarantee from wmic, this is to prevent an
+                # HD card discovered after a good card from overwriting the state variable
+                # by specification, a machine is bad iff ALL of the cards on the machine are bad ones
+                if good_cards:
+                    Windows10Video.hasOnlyUnsupported = False
+                    log.debug("Found at least one good graphics card: '%s'", "', '".join(good_cards))
+                    # so we can leave the target win64
+                else:
+                    # all we found were cards that are not supported in the Windows 64bit build
+                    Windows10Video.hasOnlyUnsupported = True
+                    log.warning("Found only graphics cards not supported in Windows 10: '%s'; should switch to the 32 bit build", "', '".join(wmic_list))
+            else:
+                log.warning("wmic did not return any video cards")
+                Windows10Video.hasOnlyUnsupported = False # we are probably hosed, but go ahead and try
+
+        return Windows10Video.hasOnlyUnsupported
+
+def choose_update(platform_key, settings, vvm_response):
+    """
+    This is where we do the hard stuff - picking which result applies to this system
+
+    Returns a chosen result dict with keys:
+       required, channel, version, url, size, hash, more_info, platform
+    or, if no update is chosen, an empty dict
+    """
+    chosen_result = dict()
+    log = SL_Logging.getLogger('choose_update')
+
+    current_build = "%s%d" % (BuildData.get('Platform'), int(BuildData.get('Address Size')))
+    target_platform = "%s%d" % (platform_key, getBitness(platform_key))
+    log.debug("Current build is %s; tentative target is %s" % (current_build, target_platform))
+
+    if platform_key == 'win':
+        # for Windows, there's more to it than that....
+        if current_build == 'win64' and target_platform == 'win32':
+            log.info("This is a 64 bit build, but this system is 32 bit; looking for a 32 bit build")
+
+        elif target_platform == 'win64' and onWindows10orHigher() and Windows10Video.isUnsupported():
+            log.warning("Your video card(s) are not supported on Windows 10; switching you to the 32bit build, which runs in a compatibility mode that works better")
+            target_platform = 'win32'
+
+    # We could have done this check earlier, but by waiting we can make the warnings more specific
+    if settings.get('ForceAddressSize',None):
+        if platform_key == 'win':
+            try:
+                forced_bitness = int(settings['ForceAddressSize'])
+                log.info("ForceAddressSize setting: %d" % forced_bitness)
+                if target_platform == 'win32' and forced_bitness == 64:
+                    log.warning("The ForceAddressSize setting says 64; that may not work, but trying anyway...")
+                    target_platform = 'win64'
+                elif target_platform == 'win64' and forced_bitness == 32:
+                    log.warning("The ForceAddressSize setting says 32; your system may work with 64 - consider removing the setting")
+                    target_platform = 'win32'
+                else:
+                    log.info("target platform is %s, ForceAddressSize is %d; no effect" % (target_platform, forced_bitness))
+
+            except ValueError:
+                log.warning("Invalid value '%s' for ForceAddressSize setting; disregarding it" % settings['ForceAddressSize'])
+        else:
+            log.warning('The ForceAddressSize setting is used only on Windows; ignored')
+
+    # Ok... now we know what the target_platform is ...
+
+    # Get all the VVM results that are not platform dependent
+    for key in ['required', 'version', 'channel', 'more_info']:
+        try:
+            chosen_result[key] = vvm_response[key]
+        except KeyError:
+            log.error("Viewer Version Manager response is missing '%s'; not updating" % key)
+            return dict()
+
+    if target_platform != current_build:
+        log.info("Current build platform is '%s', but we need '%s', so update is required" % (current_build, target_platform))
+        chosen_result['required'] = True
+
+    elif vvm_response['version'] == BuildData.get('Version'):
+        log.info("Current version and platform matches this build; no update")
+        return dict()
+
+    # We believe we have at least an optional update, so fill in the rest of chosen_result
+    # See if the VVM gave us a result for the target_platform
+    target_result = vvm_response.get('platforms', {}).get(target_platform, {})
+    if not target_result:
+        # check to see if a result not qualified by address_size is in the results
+        target_result = vvm_response.get('platforms', {}).get(platform_key, {})
+        if target_result:
+            log.warning("No update result found for '%s' but found '%s', so updating to that" % (target_platform, platform_key))
+            target_platform = platform_key
+        else:
+            log.warning("No update result found for '%s' or '%s'" % (target_platform, platform_key))
+            chosen_result = dict()
+
+    # add the target we picked
+    chosen_result['platform'] = target_platform
+    chosen_result.update(target_result)
+
+    return chosen_result
 
 def download(url = None, version = None, download_dir = None, size = 0, hash = None, background = False, chunk_size = None):
     log=SL_Logging.getLogger('download')
@@ -606,13 +616,13 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
     for filename in glob.glob(os.path.join(download_dir, '*.next')):
         os.remove(filename)
 
-def install(platform_key = None, download_dir = None, in_place = None):
+def install(platform_key = None, download_dir = None):
     log=SL_Logging.getLogger('install')
     InstallerUserMessage.status_message("New version downloaded.\n"
                                         "Installing now, please wait.")
     version = os.path.basename(download_dir)
     try:
-        next_executable = apply_update.apply_update(download_dir, platform_key, in_place)
+        next_executable = apply_update.apply_update(download_dir, platform_key)
     except apply_update.ApplyError as err:
         InstallerUserMessage.basic_message("Failed to apply " + version)
         log.warning("Failed to update viewer to " + version)
@@ -653,40 +663,31 @@ def _update_manager(viewer_binary, cli_overrides = {}):
 
     # cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments to 
     # comments that begin with ' ' are steps taken from the algorithm in the description of SL-323. 
-    #   Note that in the interest of efficiency, such as determining download success once at the top
-    #  The code does follow precisely the same order as the algorithm.
 
     #setup and getting initial parameters
     platform_key = Application.platform_key() # e.g. "mac"
     settings = get_settings(cli_overrides.get('settings') or Application.user_settings_path())
 
-    #  If a complete download of that update is found, check the update preference:
+    # If a complete download of that update is found, check the update preference:
     #settings['UpdaterServiceSetting'] =
     INSTALL_MODE_AUTO=3            # Install each update automatically
     INSTALL_MODE_PROMPT_OPTIONAL=1 # Ask me when an optional update is ready to install
     INSTALL_MODE_MANDATORY_ONLY=0  # Install only mandatory updates
     # (see panel_preferences_setup.xml)
-    # <key>UpdaterServiceSetting</key>
-    #     <map>
-    # <key>Comment</key>
-    #     <string>Configure updater service.</string>
-    # <key>Type</key>
-    #     <string>U32</string>
-    # <key>Value</key>
-    #     <string>0</string>
-    # </map>
 
     # If cli_overrides['set']['UpdaterServiceSetting'], use that;
     # else if settings['UpdaterServiceSetting']['Value'], use that;
-    # if none of the above, default to True.
-    #    (the 'int()' is because a cli override is a string value)
+    # if none of the above, or if value is not valid, default to INSTALL_MODE_AUTO.
     cli_settings = cli_overrides.get('set', {})
-    cli_updater_service_setting = cli_settings.get('UpdaterServiceSetting',None)
-    install_mode = int(cli_updater_service_setting if cli_updater_service_setting else settings.get('UpdaterServiceSetting', {}).get('Value', INSTALL_MODE_AUTO))
-    # validate the install_mode
-    if install_mode not in (INSTALL_MODE_AUTO, INSTALL_MODE_PROMPT_OPTIONAL, INSTALL_MODE_MANDATORY_ONLY):
-        log.error("Invalid setting value for UpdaterServiceSetting (%d); using automatic install (%d)" % (install_mode, INSTALL_MODE_AUTO))
+    install_mode_string=cli_settings.get('UpdaterServiceSetting',settings.get('UpdaterServiceSetting', {}).get('Value', INSTALL_MODE_AUTO))
+    try:
+        install_mode=int(install_mode_string)
+        if install_mode not in (INSTALL_MODE_AUTO, INSTALL_MODE_PROMPT_OPTIONAL, INSTALL_MODE_MANDATORY_ONLY):
+            raise ValueError
+    except ValueError:
+        log.error("Invalid setting value for UpdaterServiceSetting (%s); falling back to auto (%d)" % (install_mode_string, INSTALL_MODE_AUTO))
         install_mode = INSTALL_MODE_AUTO
+    log.info("Update mode (UpdaterServiceSetting) is %s (%d)" % (["Mandatory Only", "Prompt When Optional", "", "Automatic"][install_mode], install_mode))
 
     #use default chunk size if none is given, set UpdaterWillingToTest to None if not given
     #this is to prevent key errors on accessing keys that may or may not exist depending on cli options given
@@ -707,21 +708,19 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                  (default_channel, channel))
         BuildData.override('Channel', channel)
 
-    settings['ForceAddressSize'] = cli_overrides.get('forceaddresssize')
-
-    #log.debug("Pre query settings:\n%s", pformat(settings))
+    #log.debug("Pre query settings:\n%s", pformat(settings)) # too big to leave this in all the time
 
     #  On launch, the Viewer Manager should query the Viewer Version Manager update api.
     result_data = query_vvm(platform_key=platform_key,
                             settings=settings,
                             UpdaterServiceURL=UpdaterServiceURL,
                             UpdaterWillingToTest=UpdaterWillingToTest)
-    log.debug("result_data received from query_vvm: %r", result_data) # wrap result_data in pformat() for readability, but don't commit that way
 
     #nothing to do or error
     if not result_data:
         log.info("No update.")
-        #clean up any previous download dir on windows, see apply_update.apply_update()
+
+        # clean up any previous download dir on windows, see apply_update.apply_update()
         try:
             if platform_key == 'win':
                 past_download_dir = make_download_dir(BuildData.get('Version'))
@@ -737,22 +736,21 @@ def _update_manager(viewer_binary, cli_overrides = {}):
             #cleanup is best effort
             log.error("Caught exception cleaning up download dir '%r'; skipping" % e)
             pass
+
         # run already-installed viewer
         return viewer_binary
 
-    #Don't do sideways upgrades more than once.  See MAINT-7513
-    #Get version and platform from build_data (source of truth for local
-    #install) and VVM query result and if they pairwise equal return no
-    #update, e.g., we are running a 32 bit viewer on a 32 bit host.
-    if (BuildData.get('Platform', None), BuildData.get('Version', None)) \
-    == (result_data['VVM_platform'], result_data['version']):
-        #no sideways upgrade required
+    chosen_result = choose_update(platform_key, settings, result_data)
+    if not chosen_result:
+        # We didn't find anything better than what we've got, so run that
         return viewer_binary
 
-    #Here we believe we need an update.
-    #check to see if user has install rights
-    #get the owner of the install and the current user
-    #none of this is supported by Python on Windows
+    log.debug("Chosen result %r" % chosen_result)
+
+    # Here we believe we need an update.
+    # check to see if user has install rights
+    # get the owner of the install and the current user
+    # none of this is supported by Python on Windows
     try:
         script_owner_id = os.stat(os.path.realpath(__file__)).st_uid
         user_id = os.getuid()
@@ -776,38 +774,30 @@ def _update_manager(viewer_binary, cli_overrides = {}):
 
     #get download directory, if there are perm issues or similar problems, give up
     try:
-        download_dir = make_download_dir(result_data['version'])
+        download_dir = make_download_dir(chosen_result['version'])
     except Exception as e:
-        log.error("Caught exception making download dir %r" % e)
+        log.error("Error trying to make download dir %r" % e)
         return viewer_binary
     
-    #if the channel name of the response is the same as the channel we are
-    #launched from, the update is "in place" and launcher will launch the
-    #viewer in this install location. Otherwise, it will launch the Launcher
-    #from the new location and kill itself.
-    in_place = (default_channel == result_data['channel']) # TBD?
-    log.debug("In place determination: in place %r build_data %r result_data %r" %
-              (in_place, BuildData.get('Channel'), result_data['channel']))
-
-    #determine if we've tried this download before
-    downloaded = check_for_completed_download(download_dir, result_data['size'])
+    # determine if we've tried this download before
+    downloaded = check_for_completed_download(download_dir, chosen_result['size'])
 
     #  If the response indicates that there is a required update: 
-    if result_data['required']:
-        log.info("Required update to version %s" % result_data['version'])
+    if chosen_result['required']:
+        log.info("Required update to %s version %s" % (chosen_result['platform'], chosen_result['version']))
         #  Check for a completed download of the required update; if found, display an alert, install the required update, and launch the newly installed viewer.
         #  If [optional download and] Install Automatically: display an alert, install the update and launch updated viewer.
         if downloaded is None:
             # start the download, exception if we fail
-            download(url = result_data['url'],
-                     version = result_data['version'],
+            download(url = chosen_result['url'],
+                     version = chosen_result['version'],
                      download_dir = download_dir,
-                     hash = result_data['hash'],
-                     size = result_data['size'],
+                     hash = chosen_result['hash'],
+                     size = chosen_result['size'],
                      background = False,
                      chunk_size = chunk_size)
-        #do the install
-        return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
+        # Do the install
+        return install(platform_key = platform_key, download_dir = download_dir)
     else:
         # If the update response indicates that there is an optional update: 
         # Check to see if the optional update has already been downloaded.
@@ -830,11 +820,11 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                     raise
                 
             log.info("Found optional update. Downloading in background to: " + download_dir)
-            download(url = result_data['url'],
-                     version = result_data['version'],
+            download(url = chosen_result['url'],
+                     version = chosen_result['version'],
                      download_dir = download_dir,
-                     hash = result_data['hash'],
-                     size = result_data['size'],
+                     hash = chosen_result['hash'],
+                     size = chosen_result['size'],
                      background = True)
             # run the previously-installed viewer
             return viewer_binary
@@ -843,7 +833,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
 
             if INSTALL_MODE_AUTO == install_mode:
                 log.info("updating automatically")
-                return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
+                return install(platform_key = platform_key, download_dir = download_dir)
 
             elif INSTALL_MODE_PROMPT_OPTIONAL == install_mode:
                 # ask the user what to do with the optional update
@@ -851,14 +841,14 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                 skip_frame = InstallerUserMessage.InstallerUserMessage(
                     title = BuildData.get('Channel Base')+" Installer")
                 skip_frame.trinary_choice_link_message(
-                    message = "Optional update %s is ready to install. Install this version?\n"
-                    "See Release Notes:\n" % result_data['version'], 
-                    url = str(result_data['more_info']),
+                    message = "Update %s is ready to install.\n"
+                    "Release Notes:\n%s" % (chosen_result['version'],chosen_result['more_info']),
+                    url = str(chosen_result['more_info']),
                     one = "Install", two = "Skip", three = "Not Now")
                 update_action = skip_frame.choice3.get()
                 if update_action == 1:
                     log.info("User chose 'Install'")
-                    return install(platform_key = platform_key, download_dir = download_dir, in_place = in_place)
+                    return install(platform_key = platform_key, download_dir = download_dir)
                 elif update_action == 2:
                     log.info("User chose 'Skip'")
                     put_marker_file(download_dir, ".skip")
@@ -883,7 +873,6 @@ def _update_manager(viewer_binary, cli_overrides = {}):
             log.error("Found nonempty download dir but no flag file. Check returned: %r" %
                         downloaded)
             return viewer_binary
-
 
 if __name__ == '__main__':
     #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname

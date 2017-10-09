@@ -113,30 +113,31 @@ def get_cmd_line(cmd_settings_file = None):
             cmd_settings_file = None
 
     try:
+        log.debug("reading command line rules from '%s'" % cmd_settings_file)
         cmd_line = llsd.parse((open(cmd_settings_file)).read())
     except:
-        log.warning("Could not parse settings file %s" % cmd_settings_file)
+        log.warning("Could not parse settings file '%s'" % cmd_settings_file)
         cmd_line = None
 
     return cmd_line
 
 def capture_vmp_args(arg_list = None, cmd_line = None):
-    #expected input format: arg_list = ['--set', 'foo', 'bar', '-X', '-Y', 'qux']
-    #take a copy of the viewer parameters that are of interest to VMP.
-    #the regex for a parameter is --<param> {opt1} {opt2}
+    # expected input format: arg_list = ['--set', 'foo', 'bar', '-X', '-Y', 'qux']
+    # take a copy of the viewer parameters that are of interest to VMP.
+    # the regex for a parameter is --<param> {opt1} {opt2}
     log=SL_Logging.getLogger('capture_vmp_args')
     cli_overrides = {}   
     if not cmd_line:
         cmd_line = get_cmd_line()
 
-    vmp_params = {'--channel':'channel', '--settings':'settings', '--set':'set', '--ForceAddressSize':'forceaddresssize'}
-    #the settings set with --set.  All such settings have only one argument.
-    vmp_setters = ('UpdaterMaximumBandwidth', 'UpdaterServiceSetting', 'UpdaterServiceURL', 'UpdaterWillingToTest')   
+    vmp_params = {'--channel':'channel', '--settings':'settings', '--set':'set'}
+    # the settings set with --set.  All such settings have only one argument.
+    vmp_setters = ('UpdaterMaximumBandwidth', 'UpdaterServiceSetting', 'UpdaterServiceURL', 'UpdaterWillingToTest', 'ForceAddressSize')   
 
-    #Here turn the list into a queue, popping off the left as we go. Note that deque() makes a copy by value, not by reference
-    #Because of the complexity introduced by the uncertainty of how many options a parameter can take, this is far less complicated code than the more
-    #pythonic (x,y) = <some generator> since we will sometimes have (x), sometimes (x,y) and sometimes (x,y,z)
-    #also, because the pop is destructive, we prevent ourselves from iterating back over list elements that iterator methods would peek ahead at
+    # Here turn the list into a queue, popping off the left as we go. Note that deque() makes a copy by value, not by reference
+    # Because of the complexity introduced by the uncertainty of how many options a parameter can take, this is far less complicated code than the more
+    # pythonic (x,y) = <some generator> since we will sometimes have (x), sometimes (x,y) and sometimes (x,y,z)
+    # also, because the pop is destructive, we prevent ourselves from iterating back over list elements that iterator methods would peek ahead at
     if arg_list is not None:
         log.info("Parsing passed arguments: %r" % arg_list)
         vmp_queue = collections.deque(arg_list)
@@ -144,36 +145,24 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
         while (len(vmp_queue)):
             param = vmp_queue.popleft()
             #if it is not one of ours, pop through args until we get to the next parameter
-            if param in vmp_params.keys():
+            if param in vmp_params:
                 if param == '--set':
                     setting_name = vmp_queue.popleft()
                     setting_value = vmp_queue.popleft()
                     if setting_name in vmp_setters:
                         cli_overrides[vmp_params[param]].update({setting_name:setting_value})
                 else:
-                    #find out how many args this parameter has
+                    # just skip this one and keep looking for the next known option
+                    # yes, this will break if someone tries to pass one of our options
+                    # as the argument to some other option ... they deserve whatever they get
                     no_dashes = vmp_params[param]
-                    #special case for ForceAddressSize, since it is not in cmd_line.xml
-                    if param != "--ForceAddressSize":
-                        count = cmd_line[no_dashes]['count']
-                        param_args = []
-                        if count > 1:
-                            for argh in range(0,count):
-                                param_args.append(vmp_queue.popleft())
-                        elif count == 1:
-                            param_args = vmp_queue.popleft()
-                    else:  
-                        if no_dashes == 'forceaddresssize':
-                            #guard against missing argument
-                            try:
-                                #peek ahead at the head of the queue, it could be a legit arg, an empty deque or some other param starting
-                                if vmp_queue[0] in ['32', '64']:
-                                    param_args = vmp_queue.popleft()
-                            except IndexError, ie:
-                                log.info('ForceAddressSize passed without a parameter, ignoring')
-                                log.debug('Exception: %r' % ie)
-                                #set to default
-                                param_args = '32'
+                    count = cmd_line[no_dashes]['count']
+                    param_args = []
+                    if count > 1:
+                        for argh in range(0,count):
+                            param_args.append(vmp_queue.popleft())
+                    elif count == 1:
+                        param_args = vmp_queue.popleft()
                     
                     #the parameter name is the key, the (possibly empty) list of args is the value
                     cli_overrides[vmp_params[param]] = param_args
@@ -203,7 +192,7 @@ def main():
     args, args_list_to_pass = parser.parse_known_args()
 
     version=BuildData.get('Version')
-    address_size=BuildData.get('Address Size')
+    address_size=int(BuildData.get('Address Size'))
     log.info("Viewer version %s (%d bit)" % (version, address_size))
 
     executable_name = Application.name()
@@ -220,17 +209,6 @@ def main():
     #make a copy by value, not by reference
     command = list(args_list_to_pass)
        
-    #consume ForceAddressSize since the viewer doesn't know about it.  Guard against no argument provided.
-    try:
-        param_index_to_remove = command.index('--ForceAddressSize')
-    except ValueError:
-        #failed to remove something that wasn't there, shrug and keep going
-        pass   
-    else:
-        # remove both the switch and its argument
-        del command[param_index_to_remove:param_index_to_remove+2]
-
-    log.debug("Calling update manager with %r" % vmp_args)
     try:
         # update_manager() returns the viewer to launch, or None if no launch
         # is desired -- or raises UpdateError.
@@ -264,8 +242,13 @@ def launch_as_child(viewer, command_args):
 
     If it succeeds, return the subprocess.Popen object.
     """
-    log.info("Launching current viewer '%s' '%s'" % (viewer, "' '".join(command_args)))
+    if update_manager.onWindows10orHigher() \
+      and int(BuildData.get('Address Size')) == 64 \
+      and update_manager.Windows10Video.isUnsupported():
+        command_args = command_args + ['--set', 'SkipBenchmark', '1']
+        
     command = [viewer] + command_args
+    log.info("Launching current viewer '%s' '%s'" % (viewer, "' '".join(command_args)))
 
     env = os.environ.copy()
     env["PARENT"] = "SL_Launcher" # suppresses warning about not running the viewer directly
@@ -275,8 +258,7 @@ def launch_as_child(viewer, command_args):
     except Exception as e:
         log.error("Failed to launch %s. Error messages as follows:\n%r" % (viewer, e))
         message = "Failed to launch %s, see log for details" % viewer
-        frame = InstallerUserMessage.InstallerUserMessage()
-        frame.basic_message(message)
+        InstallerUserMessage.basic_message(message)
         sys.exit(-1)
 
     log.info("Successfully launched %s" % command)
@@ -287,34 +269,48 @@ def launch_as_replacement(next_executable):
     Run next_executable as a replacement for the current process.
     Depending on the platform, the executable may be an installer or the next viewer.
     """
-    exec_args=[]
-    if sys.platform.startswith('darwin'):
-        executable = '/usr/bin/open' # we can't just exec the .app
-        exec_args.insert(0, next_executable)
+    if sys.platform.startswith('win') or sys.platform == 'cygwin':
+        # MAINT-7831: Windows doesn't have a native execv(), and it's not
+        # clear that Python's os.execv() emulation is working for us. Use
+        # subprocess.Popen in this scenario too.
+        command = [next_executable]
+        log.info("Running %s", command)
+        try:
+            subprocess.Popen(command)
+        except Exception as err:
+            log.error("Failed to launch %s: %s", command, err)
+            InstallerUserMessage.basic_message(
+                "Failed to launch %r, see log for details" % command[0])
+            sys.exit(-1)
+        else:
+            # If we succeeded, terminate immediately so installer can replace
+            # this running executable.
+            sys.exit()
 
-    elif sys.platform.startswith('win') or sys.platform == 'cygwin':
-        executable = next_executable
+    else:                               # any platform other than Windows
+        # In this case os.execv() should actually replace this process, just
+        # as we want.
+        if sys.platform.startswith('darwin'):
+            # we can't just exec the .app
+            exec_args = ['/usr/bin/open', next_executable]
 
-    else:
-        executable = next_executable
+        else:
+            exec_args = [next_executable]
 
-    exec_args.insert(0, os.path.basename(executable))
+        log.info("Executing %s", exec_args)
 
-    log.info("Executing %s as '%s'" % (executable, "' '".join(exec_args)))
-    
-    # ensure that logs are closed and flushed before execing
-    logging.shutdown()
-    try:
-        os.execv(executable, exec_args)
-        # if that worked, we're gone...
+        # ensure that logs are closed and flushed before execing
+        logging.shutdown()
+        try:
+            os.execv(exec_args[0], exec_args)
+            # if that worked, we're gone...
 
-    except Exception as err:
-        # logging is gone, can't do that, so put up a dialog
-        message = "Launch failed\n%s" % err
-        frame = InstallerUserMessage.InstallerUserMessage()
-        frame.basic_message(message)
-        sys.exit(-1)
-    # process has been replaced or killed - does not return
+        except Exception as err:
+            # logging is gone, can't do that, so put up a dialog
+            message = "Failed to launch %r\n%s" % (exec_args, err)
+            InstallerUserMessage.basic_message(message)
+            sys.exit(-1)
+        # process has been replaced or killed - does not return
 
 if __name__ == "__main__":
     # Initialize the python logging system to SL Logging format and destination

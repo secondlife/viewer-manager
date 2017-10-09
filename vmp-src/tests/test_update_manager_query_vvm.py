@@ -46,15 +46,36 @@ os.environ['APP_DATA_DIR'] = os.path.dirname(__file__)
 BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
 
 golden_string = """
-<?xml version="1.0" ?><llsd><map><key>platforms</key><map><key>win</key>
-<map><key>url</key><string>http://download.cloud.secondlife.com/Viewer_4/Second_Life_4_0_1_310054_i686_Setup.exe</string>
-<key>hash</key><string>08f65e80c15aa5dd9cacc1465840fd38</string><key>size</key><integer>52191576</integer></map><key>mac</key>
-<map><key>url</key><string>http://download.cloud.secondlife.com/Viewer_4/Second_Life_4_0_1_310054_i386.dmg</string>
-<key>hash</key><string>7f4fa9ff0ea20b0f6b4c907247d866b2</string><key>size</key><integer>78364790</integer></map><key>lnx</key>
-<map><key>url</key><string>http://download.cloud.secondlife.com/Viewer_4/Second_Life_4_0_1_310054_i686.tar.bz2</string>
-<key>hash</key><string>5c4108145f344b0cbe922182241005ed</string><key>size</key><integer>41938388</integer></map></map>
-<key>required</key><boolean>false</boolean><key>version</key><string>4.0.1.310054</string>
-<key>channel</key><string>SecondLifeRelease</string><key>more_info</key><string>https://wiki.secondlife.com/wiki/Release_Notes/Second_Life_Release/4.0.1.310054</string></map></llsd>
+<?xml version="1.0"?>
+<llsd>
+  <map>
+    <key>platforms</key>
+    <map>
+      <key>win</key>
+      <map>
+        <key>url</key>   <string>http://download.cloud.secondlife.com/Viewer_4/Second_Life_4_0_1_310054_i686_Setup.exe</string>
+        <key>hash</key>  <string>08f65e80c15aa5dd9cacc1465840fd38</string>
+        <key>size</key>  <integer>52191576</integer>
+      </map>
+      <key>mac</key>
+      <map>
+        <key>url</key>   <string>http://download.cloud.secondlife.com/Viewer_4/Second_Life_4_0_1_310054_i386.dmg</string>
+        <key>hash</key>  <string>7f4fa9ff0ea20b0f6b4c907247d866b2</string>
+        <key>size</key>  <integer>78364790</integer>
+      </map>
+      <key>lnx</key>
+      <map>
+        <key>url</key>   <string>http://download.cloud.secondlife.com/Viewer_4/Second_Life_4_0_1_310054_i686.tar.bz2</string>
+        <key>hash</key>  <string>5c4108145f344b0cbe922182241005ed</string>
+        <key>size</key>  <integer>41938388</integer>
+      </map>
+    </map>
+    <key>required</key>  <boolean>false</boolean>
+    <key>version</key>   <string>4.0.1.310054</string>
+    <key>channel</key>   <string>SecondLifeRelease</string>
+    <key>more_info</key> <string>https://wiki.secondlife.com/wiki/Release_Notes/Second_Life_Release/4.0.1.310054</string>
+  </map>
+</llsd>
 """
 
 def test_query_vvm():
@@ -105,9 +126,13 @@ def test_query_vvm():
     results = update_manager.query_vvm(platform_key=Application.platform_key(), settings={}, UpdaterServiceURL='http://localhost:'+str(port)+'/update')
 
     assert results
-    assert channel_pattern.search(results['channel']), "Bad results returned %s" % str(results)
-    assert url_pattern.search(results['url']), "Bad results returned %s" % str(results)
-    
+    assert channel_pattern.search(results['channel']), "Incorrect channel %r" % results
+    assert 'platforms' in results, "No platforms in results %r" % results
+    for platform in ['win', 'mac', 'lnx']:
+        assert platform in results['platforms'], "No %s in platforms" % platform
+        for key in ['url', 'hash', 'size']:
+            assert key in results['platforms'][platform], "No %s in platforms[%s]" % key
+
 def vvm_daemon(webserver):
     log=SL_Logging.getLogger('vvm_daemon', verbosity='DEBUG')
     log.info("Daemon webserver starting")

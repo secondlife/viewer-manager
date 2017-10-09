@@ -5,5 +5,6 @@
     "Channel Base":"Second Life",
     "Executable":"SecondLifeViewer.exe",
     "Update Service":"https://update.secondlife.com/update",
-    "platform":"win"
+    "Platform":"win",
+    "Address Size":64
 }
