@@ -135,8 +135,6 @@ class InstallerUserMessage(tk.Tk):
         status_message(None)
         # Now initialize base class.
         tk.Tk.__init__(self)
-        if platform.system() == 'Windows':
-            self.call('wm', 'iconbitmap', self._w, '-default', 'secondlife.ico')
         self.grid()
         self.title(title or Application.name())
         self.choice = tk.BooleanVar()
@@ -170,6 +168,9 @@ class InstallerUserMessage(tk.Tk):
         if not os.path.exists(self.icon_dir):
             #not mac, so icons are not in ../Resources, but in a subdir of the app dir
             self.icon_dir = os.path.join(os.path.dirname(sys.executable), 'vmp_icons')
+        if platform.system() == 'Windows':
+            self.call('wm', 'iconbitmap', self._w, '-default',
+                      os.path.join(self.icon_dir, 'secondlife.ico'))
 
         #finds the icon and creates the widget
         self.find_icon(icon_path, icon_name)

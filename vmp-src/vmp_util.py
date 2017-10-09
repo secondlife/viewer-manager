@@ -14,6 +14,9 @@ from llbase import llsd
 #Because of the evolution over time of the specification of VMP, some methods were added "in place", in particular various getter methods in update manager, which should someday be refactored into this
 #utility class.  
 
+class Error(Exception):
+    pass
+
 class SL_Logging(object):
     """
     This is a wrapper for the python standard 'logging' class that provides for
@@ -173,7 +176,7 @@ class Application(object):
             executable_name = ''.join(channel_base.split()) # remove all whitespace
         else:
             #SL doesn't run on VMS or punch cards
-            raise Exception("Unsupported platform '%s'" % running_on)
+            raise Error("Unsupported platform '%s'" % running_on)
         return executable_name
 
     @staticmethod

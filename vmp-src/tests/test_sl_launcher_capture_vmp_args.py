@@ -70,7 +70,7 @@ def test_capture_vmp_args_empty():
     cmd_settings_file = SLL.get_cmd_line(test_file)
     overrides = SLL.capture_vmp_args(None, cmd_settings_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
-    assert_equal(overrides['channel'], None)
+    assert_equal(overrides.get('channel'), None)
 
 @with_setup_args.with_setup_args(capture_vmp_args_setup, capture_vmp_args_teardown)
 def test_capture_vmp_args_simple():

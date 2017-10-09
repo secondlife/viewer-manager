@@ -661,8 +661,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
     InstallerUserMessage.status_message("Checking for updates\n"
                                         "This may take a few moments...")
 
-    # cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments to 
-    # comments that begin with ' ' are steps taken from the algorithm in the description of SL-323. 
+    # cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments
 
     #setup and getting initial parameters
     platform_key = Application.platform_key() # e.g. "mac"

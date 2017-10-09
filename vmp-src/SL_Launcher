@@ -101,23 +101,31 @@ def get_cmd_line(cmd_settings_file = None):
     log=SL_Logging.getLogger('get_cmd_line')
     if cmd_settings_file is None:
         platform_name = platform.system()
-    #find the parent of the logs and user_settings directories
+        #find the parent of the logs and user_settings directories
         if (platform_name == 'Darwin'):
-            cmd_settings_file = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'Resources/app_settings/cmd_line.xml')
-        elif (platform_name == 'Linux'): 
-            cmd_settings_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'app_settings/cmd_line.xml')
-    #using list format of join is important here because the Windows pathsep in a string escapes the next char
+            # Contents/MacOS/__file__ => Contents/Resources
+            cmd_settings_file = os.path.join(os.path.dirname(__file__), os.pardir, 'Resources')
+        elif (platform_name == 'Linux'):
+            # app_settings in same directory as __file__
+            cmd_settings_file = os.path.dirname(__file__)
         elif (platform_name == 'Windows'):
-            cmd_settings_file = os.path.join(os.path.dirname(os.path.realpath(sys.executable)), 'app_settings', 'cmd_line.xml')
+            # app_settings in same directory as this executable
+            cmd_settings_file = os.path.dirname(sys.executable)
         else:
-            cmd_settings_file = None
+            # unsupported platform
+            cmd_settings_file = os.path.dirname(__file__)
+            log.warning("Unsupported platform %s, guessing app_settings in %s",
+                        platform_name, cmd_settings.file)
 
+        # now that we've got the platform-dependent part...
+        cmd_settings_file = os.path.join(cmd_settings_file, 'app_settings', 'cmd_line.xml')
+
+    log.debug("reading command line rules from '%s'" % cmd_settings_file)
     try:
-        log.debug("reading command line rules from '%s'" % cmd_settings_file)
-        cmd_line = llsd.parse((open(cmd_settings_file)).read())
-    except:
-        log.warning("Could not parse settings file '%s'" % cmd_settings_file)
-        cmd_line = None
+        cmd_line = llsd.parse(open(cmd_settings_file).read())
+    except (IOError, OSError, llsd.LLSDParseError) as err:
+        log.warning("Could not parse settings file %r: %r", cmd_settings_file, err)
+        cmd_line = {}
 
     return cmd_line
 
@@ -127,7 +135,7 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
     # the regex for a parameter is --<param> {opt1} {opt2}
     log=SL_Logging.getLogger('capture_vmp_args')
     cli_overrides = {}   
-    if not cmd_line:
+    if cmd_line is None:
         cmd_line = get_cmd_line()
 
     vmp_params = {'--channel':'channel', '--settings':'settings', '--set':'set'}
@@ -142,48 +150,42 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
         log.info("Parsing passed arguments: %r" % arg_list)
         vmp_queue = collections.deque(arg_list)
         cli_overrides[vmp_params['--set']] = {}
-        while (len(vmp_queue)):
+        while vmp_queue:
             param = vmp_queue.popleft()
             #if it is not one of ours, pop through args until we get to the next parameter
-            if param in vmp_params:
-                if param == '--set':
-                    setting_name = vmp_queue.popleft()
-                    setting_value = vmp_queue.popleft()
-                    if setting_name in vmp_setters:
-                        cli_overrides[vmp_params[param]].update({setting_name:setting_value})
-                else:
-                    # just skip this one and keep looking for the next known option
-                    # yes, this will break if someone tries to pass one of our options
-                    # as the argument to some other option ... they deserve whatever they get
-                    no_dashes = vmp_params[param]
-                    count = cmd_line[no_dashes]['count']
-                    param_args = []
-                    if count > 1:
-                        for argh in range(0,count):
-                            param_args.append(vmp_queue.popleft())
-                    elif count == 1:
-                        param_args = vmp_queue.popleft()
-                    
-                    #the parameter name is the key, the (possibly empty) list of args is the value
-                    cli_overrides[vmp_params[param]] = param_args
-
-    #to prevent KeyErrors on missing keys, set the remainder to None
-    try:
-        cli_overrides['set']
-    except KeyError:
-        cli_overrides['set'] = {}
-    for key in vmp_params:
-        if key != '--set':
             try:
-                cli_overrides[vmp_params[key]]
+                vmp_param = vmp_params[param]
             except KeyError:
-                cli_overrides[vmp_params[key]] = None
-        else:
-            for arg in vmp_setters:
+                # param is not one we care about
+                continue
+
+            if param == '--set':
+                setting_name = vmp_queue.popleft()
+                setting_value = vmp_queue.popleft()
+                if setting_name in vmp_setters:
+                    cli_overrides[vmp_param][setting_name] = setting_value
+            else:
+                # just skip this one and keep looking for the next known option
+                # yes, this will break if someone tries to pass one of our options
+                # as the argument to some other option ... they deserve whatever they get
                 try:
-                    cli_overrides[vmp_params[key]][arg]
+                    count = cmd_line[vmp_param]['count']
                 except KeyError:
-                    cli_overrides[vmp_params[key]][arg] = None
+                    # cmd_line.xml has no entry for vmp_param, or entry has no
+                    # count field
+                    log.warning("Command line switch %r not defined in cmd_line.xml", param)
+                    # pretend count is 0; don't eat any subsequent args
+                    count = 0
+
+                # pop as many additional args as indicated by count
+                param_args = [vmp_queue.popleft() for argh in range(count)]
+                if count == 1:
+                    # in the special case of one arg, store scalar instead of list
+                    param_args = param_args[0]
+
+                #the parameter name is the key, the (possibly empty) list of args is the value
+                cli_overrides[vmp_param] = param_args
+
     return cli_overrides
 
 def main():

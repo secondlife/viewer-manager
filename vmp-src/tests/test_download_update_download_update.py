@@ -70,6 +70,8 @@ def download_update_setup():
     BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
     # must override BuildData above before initializing log
     log=SL_Logging.getLogger('test_download', verbosity='DEBUG')
+    # DO NOT try to download via a proxy!
+    os.environ.pop("http_proxy", None)
     tmpdir1 = tempfile.mkdtemp(prefix = 'test1')   
     return [tmpdir1], {}
 
