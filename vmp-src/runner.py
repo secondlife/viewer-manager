@@ -17,8 +17,7 @@ import subprocess
 import sys
 
 import InstallerUserMessage
-import update_manager
-from vmp_util import SL_Logging, BuildData
+from vmp_util import SL_Logging
 
 class Runner(object):
     def __init__(self, *command):
