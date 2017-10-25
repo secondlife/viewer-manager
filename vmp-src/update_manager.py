@@ -799,6 +799,13 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                      chunk_size = chunk_size)
         # Do the install
         return install(platform_key = platform_key, download_dir = download_dir)
+    elif INSTALL_MODE_MANDATORY_ONLY == install_mode:
+        # The user has chosen to install only required updates, and this one is optional,
+        # so just run the already-installed viewer. We don't even download the optional
+        # viewer, so chances are they will have to wait for the download if it eventually
+        # becomes mandatory
+        log.info("not installing optional update per UpdaterServiceSetting")
+        return viewer_binary
     else:
         # If the update response indicates that there is an optional update: 
         # Check to see if the optional update has already been downloaded.
@@ -836,7 +843,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                 log.info("updating automatically")
                 return install(platform_key = platform_key, download_dir = download_dir)
 
-            elif INSTALL_MODE_PROMPT_OPTIONAL == install_mode:
+            else: # INSTALL_MODE_PROMPT_OPTIONAL
                 # ask the user what to do with the optional update
                 log.info("asking the user what to do with the update")
                 skip_frame = InstallerUserMessage.InstallerUserMessage(
@@ -860,9 +867,6 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                     put_marker_file(download_dir, ".next")
                     # run previously-installed viewer
                     return viewer_binary
-            else: # INSTALL_MODE_MANDATORY_ONLY
-               log.info("not installing optional update per UpdaterServiceSetting")
-               return viewer_binary
 
         elif downloaded == 'skip':
             log.info("Skipping this update per previous choice.  "
