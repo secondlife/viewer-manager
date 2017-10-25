@@ -238,6 +238,11 @@ def get_settings(settings_file):
         settings = llsd.parse(open(settings_file).read())
     except llsd.LLSDParseError as lpe:
         log.warning("Could not parse settings file %s: %s" % (os.path.abspath(settings_file), lpe))
+    except OSError as err:
+        if err.errno == errno.ENOENT:
+            log.info("No settings file at %s" % os.path.abspath(settings_file))
+        else:
+            log.warning("OS error reading settings file %s: %s" % (os.path.abspath(settings_file), e))
     except Exception as e:
         log.warning("Could not read settings file %s: %s" % (os.path.abspath(settings_file), e))
     return settings
