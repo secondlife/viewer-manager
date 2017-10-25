@@ -207,7 +207,6 @@ def main():
     #defaults to make sure the right thing happens if called with no args
     args = ""
     vmp_args = capture_vmp_args(args_list_to_pass)
-    log.debug("Captured VMP args: %r" % vmp_args)
     #make a copy by value, not by reference
     command = list(args_list_to_pass)
        
