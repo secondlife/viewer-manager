@@ -318,9 +318,11 @@ def wmic(*args):
             wmic_cmd,
             **subprocess_args(include_stdout=False,
                               log_stream=SL_Logging.stream_from_process(wmic_cmd)))
+    except WindowsError as winerr:
+        raise UpdateError("wmic command failed; error %s %s" % (winerr.winerror, winerr.strerror))
     except OSError as err:
         if err.errno == errno.ENOENT:
-            log.error("No wmic command found - bad Windows install?")
+            raise UpdateError("No wmic command found - bad Windows install?")
         raise
 
 def query_vvm(platform_key = None, settings = {},
