@@ -49,6 +49,7 @@ import os.path
 from pprint import pformat
 import re
 import platform
+from runner import PopenRunner
 import shutil
 import subprocess
 import sys
@@ -616,13 +617,13 @@ def download(url = None, version = None, download_dir = None, size = 0, hash = N
     for filename in glob.glob(os.path.join(download_dir, '*.next')):
         os.remove(filename)
 
-def install(platform_key = None, download_dir = None):
+def install(command, platform_key, download_dir):
     log=SL_Logging.getLogger('install')
     InstallerUserMessage.status_message("New version downloaded.\n"
                                         "Installing now, please wait.")
     version = os.path.basename(download_dir)
     try:
-        next_executable = apply_update.apply_update(download_dir, platform_key)
+        runner = apply_update.apply_update(command, download_dir, platform_key)
     except apply_update.ApplyError as err:
         InstallerUserMessage.basic_message("Failed to apply " + version)
         log.warning("Failed to update viewer to " + version)
@@ -633,7 +634,7 @@ def install(platform_key = None, download_dir = None):
     if platform_key != 'win':
         shutil.rmtree(download_dir)
     #this is the path to the new install
-    return next_executable
+    return runner
 
 def update_manager(*args, **kwds):
     """wrapper that logs entry/exit"""
@@ -645,21 +646,35 @@ def update_manager(*args, **kwds):
     log.debug("update_manager() => %r" % result)
     return result
 
-def _update_manager(viewer_binary, cli_overrides = {}):
+def _update_manager(command, cli_overrides = {}):
     """
     Pass:
-    viewer_binary: string pathname of the existing viewer executable, the one
-                   installed along with this SL_Launcher instance
-    cli_overrides: a dict containing command-line switches
+    command:       list starting with pathname of the existing viewer
+                   executable, the one installed along with this SL_Launcher
+                   instance, followed by command-line arguments
+    cli_overrides: a dict containing VMP-relevant command-line switches
 
     Return:
-    - string pathname of the executable to launch
+    - Runner instance whose run() method will launch the viewer (or its
+      installer)
 
     Raises UpdateError in various failure cases.
     """
     log = SL_Logging.getLogger('update_manager')
     InstallerUserMessage.status_message("Checking for updates\n"
                                         "This may take a few moments...")
+
+    # It is reported that on Windows 10, some graphics cards cannot deal with
+    # our viewer's video benchmarking -- but that if we skip it, things run
+    # okay. Test this now because we prepare a default PopenRunner for the
+    # various cases in which we decide to launch the existing viewer.
+    if onWindows10orHigher() \
+      and int(BuildData.get('Address Size')) == 64 \
+      and Windows10Video.isUnsupported():
+        command = command + ['--set', 'SkipBenchmark', '1']
+
+    # we end up running the existing viewer in many cases
+    existing_viewer = PopenRunner(*command)
 
     # cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments
 
@@ -737,12 +752,12 @@ def _update_manager(viewer_binary, cli_overrides = {}):
             pass
 
         # run already-installed viewer
-        return viewer_binary
+        return existing_viewer
 
     chosen_result = choose_update(platform_key, settings, result_data)
     if not chosen_result:
         # We didn't find anything better than what we've got, so run that
-        return viewer_binary
+        return existing_viewer
 
     log.debug("Chosen result %r" % chosen_result)
 
@@ -765,7 +780,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                 log.info("Upgrade attempt declined by user " + username)
                 InstallerUserMessage.basic_message(
                     "Please find a system admin to upgrade Second Life")
-                return viewer_binary
+                return existing_viewer
     except (AttributeError, ImportError):
         #Windows throws AttributeError on getuid() and ImportError on pwd
         #Just ignore it and consider the ID check as passed.
@@ -776,7 +791,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
         download_dir = make_download_dir(chosen_result['version'])
     except Exception as e:
         log.error("Error trying to make download dir %r" % e)
-        return viewer_binary
+        return existing_viewer
     
     # determine if we've tried this download before
     downloaded = check_for_completed_download(download_dir, chosen_result['size'])
@@ -826,7 +841,7 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                      size = chosen_result['size'],
                      background = True)
             # run the previously-installed viewer
-            return viewer_binary
+            return existing_viewer
         elif downloaded == 'done' or downloaded == 'next':
             log.info("Found previously downloaded update in: " + download_dir)
 
@@ -852,26 +867,26 @@ def _update_manager(viewer_binary, cli_overrides = {}):
                     log.info("User chose 'Skip'")
                     put_marker_file(download_dir, ".skip")
                     # run previously-installed viewer
-                    return viewer_binary
+                    return existing_viewer
                 else:                       # Not Now
                     log.info("User chose 'Not Now'")
                     put_marker_file(download_dir, ".next")
                     # run previously-installed viewer
-                    return viewer_binary
+                    return existing_viewer
             else: # INSTALL_MODE_MANDATORY_ONLY
                log.info("not installing optional update per UpdaterServiceSetting")
-               return viewer_binary
+               return existing_viewer
 
         elif downloaded == 'skip':
             log.info("Skipping this update per previous choice.  "
                      "Delete the .skip file in " + download_dir + " to change this.")
             # run previously-installed viewer
-            return viewer_binary
+            return existing_viewer
         else:
             #shouldn't be here
             log.error("Found nonempty download dir but no flag file. Check returned: %r" %
                         downloaded)
-            return viewer_binary
+            return existing_viewer
 
 if __name__ == '__main__':
     #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
