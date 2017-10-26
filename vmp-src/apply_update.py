@@ -34,12 +34,11 @@ Applies an already downloaded update.
 """
 
 from datetime import datetime
-from vmp_util import subprocess_args, SL_Logging, BuildData, put_marker_file
+from vmp_util import subprocess_args, SL_Logging, BuildData
 
 import distutils
 from distutils import dir_util
 
-import argparse
 import cgitb
 import ctypes
 import errno
@@ -51,6 +50,7 @@ import os
 import os.path
 import plistlib
 import re
+from runner import ExecRunner
 import shutil
 import subprocess
 import sys
@@ -91,7 +91,7 @@ def get_filename(download_dir):
     #someone gave us a bad directory
     return None  
           
-def try_dismount(installable = None, tmpdir = None):
+def try_dismount(installable, tmpdir):
     log = SL_Logging.getLogger("SL_Apply_Update")
     #best effort cleanup try to dismount the dmg file if we have mounted one
     #the French judge gave it a 5.8
@@ -131,8 +131,8 @@ def try_dismount(installable = None, tmpdir = None):
         except Exception, e:
             log.error("Could not umount dmg file %s.  Error messages: %s" % (installable, e.message))    
 
-def apply_update(download_dir = None, platform_key = None, in_place = True):
-    # returns path to newly installed viewer, or None ("don't launch")
+def apply_update(command, download_dir, platform_key):
+    # returns Runner instance for newly installed viewer
     # throws an exception on failure for all three
     installable = get_filename(download_dir)
     if not installable:
@@ -141,17 +141,17 @@ def apply_update(download_dir = None, platform_key = None, in_place = True):
     
     #apply update using the platform specific tools
     if platform_key == 'lnx':
-        installed = apply_linux_update(installable, in_place)
+        installed = apply_linux_update(command, installable)
     elif platform_key == 'mac':
-        installed = apply_mac_update(installable)
+        installed = apply_mac_update(command, installable)
     elif platform_key == 'win':
-        installed = apply_windows_update(installable)
+        installed = apply_windows_update(command, installable)
     else:
         raise ValueError("Unknown Platform: " + platform_key)
         
     return installed
 
-def apply_linux_update(installable, in_place):
+def apply_linux_update(command, installable):
     # UNTESTED
     log = SL_Logging.getLogger("SL_Apply_Update")
     IUM.status_message("Installing from tarball...")
@@ -160,9 +160,8 @@ def apply_linux_update(installable, in_place):
         tmpdir = tempfile.mkdtemp()
         tar = tarfile.open(name = installable, mode="r:bz2")
         tar.extractall(path = tmpdir)
-        if in_place:
-            #rename current install dir
-            shutil.move(INSTALL_DIR,install_dir + ".bak")
+        #rename current install dir
+        shutil.move(INSTALL_DIR,INSTALL_DIR + ".bak")
         #mv new to current
         shutil.move(tmpdir, INSTALL_DIR)
         #delete tarball on success
@@ -170,9 +169,11 @@ def apply_linux_update(installable, in_place):
     except Exception as e:
         raise ApplyError("Can't install %s: %r" % (installable, e))
 
-    return os.path.join(INSTALL_DIR, "SL_Launcher")
+    # replace the original executable in the command, but pass through all
+    # remaining command-line arguments
+    return ExecRunner(os.path.join(INSTALL_DIR, "SL_Launcher"), *command[1:])
 
-def apply_mac_update(installable):
+def apply_mac_update(command, installable):
     log = SL_Logging.getLogger("SL_Apply_Update")
 
     #verify dmg file
@@ -185,80 +186,94 @@ def apply_mac_update(installable):
         log.info("result of subprocess call to verify dmg file: %r" % output)
         log.info("dmg verification succeeded")
     except Exception as e:
-        raise ApplyError("Could not verify dmg file %s.  Error messages: %s" % (installable, e))
+        raise ApplyError("Could not verify dmg file %s.  Error messages: %r" % (installable, e))
     #make temp dir and mount & attach dmg
     tmpdir = tempfile.mkdtemp()
-    IUM.status_message("Mounting installer image...")
-    try:
-        hdiutil_cmd=["hdiutil", "attach", installable, "-mountroot", tmpdir]
-        output = subprocess.check_output(hdiutil_cmd,
-                                         **subprocess_args(include_stdout=False,
-                                                           log_stream=SL_Logging.stream_from_process(hdiutil_cmd)))
-        log.info("result of subprocess call to attach dmg to mount point: %r" % output)
-        log.info("hdiutil attach succeeded")
-    except Exception as e:
-        raise ApplyError("Could not attach dmg file %s.  Error messages: %s" %
-                         (installable, e))
 
-    # Now that we've successfully mounted the .dmg, from now on any exit from
-    # this function should unmount it.
+    # Now that we've created the mount-point directory, from now on any exit
+    # from this function should remove it.
     try:
 
-        #verify plist
-        mounted_appdir = None
-        for appdir in glob.glob(os.path.join(tmpdir, '*', MAC_APP_GLOB)):
-            try:
-                plist = os.path.join(appdir, "Contents", "Info.plist")
-                CFBundleIdentifier = plistlib.readPlist(plist)["CFBundleIdentifier"]
-                mounted_appdir = appdir
-                break
-            except:
-                #there is no except for this try because there are multiple directories that legimately don't have what we are looking for
-                pass
-        else:
-            raise ApplyError("Could not find app bundle in dmg %s." % (installable,))
-
-        bundle_id = BuildData.get('Bundle Id')
-        if CFBundleIdentifier != bundle_id:
-            raise ApplyError("Wrong bundle identifier for dmg %s.  "
-                             "Bundle identifier: %s, expecting %s" %
-                             (installable, CFBundleIdentifier, bundle_id))
-        log.debug("Found application directory at %r" % mounted_appdir)
-
-        #do the install, finally       
-        #copy over the new bits    
-        IUM.status_message("Copying updated viewer...")
+        IUM.status_message("Mounting installer image...")
         try:
-            # in the future, we may want to make this $HOME/Applications ...
-            deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
-            log.debug("deploy target path: %r" % deploy_path)
-            try:
-                shutil.rmtree(deploy_path)
-            except OSError as e:
-                #if we fail to delete something that isn't there, that's okay
-                if e.errno == errno.ENOENT:
-                    pass
-                else:
-                    raise ApplyError("failed to remove existing install %s: %r" % (deploy_path, e))
-
-            output = distutils.dir_util.copy_tree(mounted_appdir,
-                                                  deploy_path,
-                                                  preserve_mode=1,
-                                                  preserve_symlinks=1,
-                                                  preserve_times=1)
-            #This creates a huge amount of output.  Left as comment for future dev debug, but 
-            #should not be in normal use.
-            #log.debug("Distutils output: %r" % output)
-            # 'output' is a list of copied files, which is why it's reasonable
-            # to report len(output)
-            log.info("Copied %r files from installer." % len(output))
+            hdiutil_cmd=["hdiutil", "attach", installable, "-mountroot", tmpdir]
+            output = subprocess.check_output(hdiutil_cmd,
+                                             **subprocess_args(include_stdout=False,
+                                                               log_stream=SL_Logging.stream_from_process(hdiutil_cmd)))
+            log.info("result of subprocess call to attach dmg to mount point: %r" % output)
+            log.info("hdiutil attach succeeded")
         except Exception as e:
-            raise ApplyError("installation from %s to %s failed: %r" %
-                             (installable, deploy_path, e))
+            raise ApplyError("Could not attach dmg file %s.  Error messages: %s" %
+                             (installable, e))
+
+        # Now that we've successfully mounted the .dmg, from now on any exit from
+        # this function should unmount it.
+        try:
+
+            #verify plist
+            mounted_appdir = None
+            for appdir in glob.glob(os.path.join(tmpdir, '*', MAC_APP_GLOB)):
+                try:
+                    plist = os.path.join(appdir, "Contents", "Info.plist")
+                    CFBundleIdentifier = plistlib.readPlist(plist)["CFBundleIdentifier"]
+                    mounted_appdir = appdir
+                    break
+                except:
+                    #there is no except for this try because there are multiple directories that legimately don't have what we are looking for
+                    pass
+            else:
+                raise ApplyError("Could not find app bundle in dmg %s." % (installable,))
+
+            bundle_id = BuildData.get('Bundle Id')
+            if CFBundleIdentifier != bundle_id:
+                raise ApplyError("Wrong bundle identifier for dmg %s.  "
+                                 "Bundle identifier: %s, expecting %s" %
+                                 (installable, CFBundleIdentifier, bundle_id))
+            log.debug("Found application directory at %r" % mounted_appdir)
+
+            #do the install, finally       
+            #copy over the new bits    
+            IUM.status_message("Copying updated viewer...")
+            try:
+                # in the future, we may want to make this $HOME/Applications ...
+                deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
+                log.debug("deploy target path: %r" % deploy_path)
+                try:
+                    shutil.rmtree(deploy_path)
+                except OSError as e:
+                    #if we fail to delete something that isn't there, that's okay
+                    if e.errno == errno.ENOENT:
+                        pass
+                    else:
+                        raise ApplyError("failed to remove existing install %s: %r" % (deploy_path, e))
+
+                output = distutils.dir_util.copy_tree(mounted_appdir,
+                                                      deploy_path,
+                                                      preserve_mode=1,
+                                                      preserve_symlinks=1,
+                                                      preserve_times=1)
+                #This creates a huge amount of output.  Left as comment for future dev debug, but 
+                #should not be in normal use.
+                #log.debug("Distutils output: %r" % output)
+                # 'output' is a list of copied files, which is why it's reasonable
+                # to report len(output)
+                log.info("Copied %r files from installer." % len(output))
+            except Exception as e:
+                raise ApplyError("installation from %s to %s failed: %r" %
+                                 (installable, deploy_path, e))
+
+        finally:
+            # okay, done with mounted .dmg, try to unmount
+            try_dismount(installable, tmpdir)
 
     finally:
-        # okay, done with mounted .dmg, try to unmount
-        try_dismount(installable, tmpdir)
+        # done with temporary mount-point directory
+        try:
+            os.rmdir(tmpdir)
+        except OSError as e:
+            log.warning("failed to clean up temporary mount point %r: %r", tmpdir, e)
+            # but carry on: we may be in the middle of processing some OTHER
+            # exception; don't let this one discard that one
 
     try:
         # Clean up viewer saved state 
@@ -274,22 +289,33 @@ def apply_mac_update(installable):
             raise
     
     os.remove(installable)
-    # return the .app to be launched
-    return deploy_path
-    
-def apply_windows_update(installable):
+    # replace the original executable in the command, but pass through all
+    # remaining command-line arguments
+    # we can't just exec the .app
+    return ExecRunner('/usr/bin/open', deploy_path, *command[1:])
+    # Alternatively:
+    # return ExecRunner(os.path.join(deploy_path, "Contents", "MacOS", "SL_Launcher"),
+    #                   *command[1:])
+
+def apply_windows_update(command, installable):
     IUM.status_message("Launching installer...")
-    # pass back the installer; SL_Launcher will exec it and replace this process
-    return installable
+    # Pass back the installer; SL_Launcher will exec it and replace this process.
+    # Ignore all command-line arguments; we can't pass them through the NSIS
+    # installer to the next viewer anyway. If they're arguments we injected,
+    # it's okay because the installer will launch (the new) SL_Launcher.
+    # Direct the NSIS installer to create a marker file for cleanup next run.
+    return ExecRunner(installable, "/marker")
 
 def main():
+    import argparse
     parser = argparse.ArgumentParser("Apply Downloaded Update")
     parser.add_argument('--dir', dest = 'download_dir', help = 'directory to find installable', required = True)
     parser.add_argument('--pkey', dest = 'platform_key', help =' OS: lnx|mac|win', required = True)
 
     args = parser.parse_args()
    
-    result = apply_update(download_dir = args.download_dir, platform_key = args.platform_key)
+    result = apply_update(["ignored"], download_dir = args.download_dir,
+                          platform_key = args.platform_key)
     
 if __name__ == "__main__":
     cgitb.enable(format='text')

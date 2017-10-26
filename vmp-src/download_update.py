@@ -34,7 +34,6 @@ Performs a download of an update.  In a separate script from update_manager so t
 call it with subprocess.
 """
 import os
-import argparse
 import cgitb
 from datetime import datetime
 import fnmatch
@@ -124,6 +123,7 @@ class ThreadedDownload(threading.Thread):
         tempfile.mkstemp(suffix=".done", dir=download_dir)    
 
 def main():
+    import argparse
     parser = argparse.ArgumentParser("Download URI to directory")
     parser.add_argument('--url', dest='url', help='URL of file to be downloaded', required=True)
     parser.add_argument('--dir', dest='download_dir', help='directory to be downloaded to', required=True)

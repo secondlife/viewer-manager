@@ -30,7 +30,7 @@ $/LicenseInfo$
 
 from nose.tools import *
 
-import fnmatch
+import glob
 import os
 import os.path
 import platform
@@ -103,10 +103,4 @@ def test_download_update_correct_url(tmpdir1):
     else:
         #if behaving correctly, the downloader should leave a tmpfile with the
         #.done extension in the download directory (tmpdir1)
-        flag = False
-        for filename in os.listdir(tmpdir1):
-            if fnmatch.fnmatch(filename, marker_regex):
-                flag = True
-        assert flag
-
-
+        assert glob.glob(os.path.join(tmpdir1, marker_regex))
