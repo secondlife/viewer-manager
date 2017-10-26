@@ -540,7 +540,7 @@ def choose_update(platform_key, settings, vvm_response):
             target_platform = platform_key
         else:
             log.warning("No update result found for '%s' or '%s'" % (target_platform, platform_key))
-            chosen_result = dict()
+            return dict()
 
     # add the target we picked
     chosen_result['platform'] = target_platform
