@@ -818,7 +818,7 @@ def _update_manager(command, cli_overrides = {}):
                      background = False,
                      chunk_size = chunk_size)
         # Do the install
-        return install(platform_key = platform_key, download_dir = download_dir)
+        return install(command, platform_key = platform_key, download_dir = download_dir)
     elif INSTALL_MODE_MANDATORY_ONLY == install_mode:
         # The user has chosen to install only required updates, and this one is optional,
         # so just run the already-installed viewer. We don't even download the optional
@@ -861,7 +861,7 @@ def _update_manager(command, cli_overrides = {}):
 
             if INSTALL_MODE_AUTO == install_mode:
                 log.info("updating automatically")
-                return install(platform_key = platform_key, download_dir = download_dir)
+                return install(command, platform_key = platform_key, download_dir = download_dir)
 
             else: # INSTALL_MODE_PROMPT_OPTIONAL
                 # ask the user what to do with the optional update
@@ -876,7 +876,7 @@ def _update_manager(command, cli_overrides = {}):
                 update_action = skip_frame.choice3.get()
                 if update_action == 1:
                     log.info("User chose 'Install'")
-                    return install(platform_key = platform_key, download_dir = download_dir)
+                    return install(command, platform_key = platform_key, download_dir = download_dir)
                 elif update_action == 2:
                     log.info("User chose 'Skip'")
                     put_marker_file(download_dir, ".skip")
