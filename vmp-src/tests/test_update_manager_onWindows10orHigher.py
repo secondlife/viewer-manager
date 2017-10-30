@@ -27,7 +27,7 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
-from nose.tools import assert_, assert_false
+from nose.tools import assert_true, assert_false
 
 import os
 import sys
@@ -74,7 +74,7 @@ class testOnWindows10orHigher(object):
     def test_onWindows8(self):
         with patch(platform, "system", onWindows), \
              patch(platform, "win32_ver", windows81version):
-            assert_(update_manager.onNo64Windows())
+            assert_true(update_manager.onNo64Windows())
         with patch(platform, "system", onWindows), \
              patch(platform, "win32_ver", windows80version):
             assert_false(update_manager.onNo64Windows())
@@ -87,7 +87,7 @@ class testOnWindows10orHigher(object):
     def test_onWindows10(self):
         with patch(platform, "system", onWindows), \
              patch(platform, "win32_ver", windows10version):
-            assert_(update_manager.onNo64Windows())
+            assert_true(update_manager.onNo64Windows())
 
     def test_onOther(self):
         with patch(platform, "system", onOther):
