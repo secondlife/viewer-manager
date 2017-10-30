@@ -40,10 +40,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import update_manager
 
-class testWindows10Video(object):
+class testWindowsVideo(object):
 
     def setup(self):
-        update_manager.Windows10Video.hasOnlyUnsupported = None # defeat caching so each test rechecks
+        update_manager.WindowsVideo.hasOnlyUnsupported = None # defeat caching so each test rechecks
         os.environ['APP_DATA_DIR'] = os.path.dirname(os.path.abspath(__file__))
 
     def testOnlyOneGoodCard(self):
@@ -54,7 +54,7 @@ class testWindows10Video(object):
                    'Name                    \r\r\n'
                    'NVIDIA GeForce GTS 450  \r\r\n'
                    '\r\r\n'):
-            assert_false(update_manager.Windows10Video.isUnsupported())
+            assert_false(update_manager.WindowsVideo.isUnsupported())
 
     def testOneBadOneGood(self):
         with patch(update_manager, "wmic",
@@ -63,7 +63,7 @@ class testWindows10Video(object):
                        'Intel(R) HD Graphics    \r\r\n'
                        'NVIDIA GeForce GTS 450  \r\r\n'
                        '\r\r\n'):
-            assert_false(update_manager.Windows10Video.isUnsupported())
+            assert_false(update_manager.WindowsVideo.isUnsupported())
 
     def testTwoBad(self):
         with patch(update_manager, "wmic", 
@@ -72,12 +72,12 @@ class testWindows10Video(object):
                        'Intel(R) HD Graphics 3000 \r\r\n' 
                        'Intel(R) HD Graphics 4000 \r\r\n'
                        '\r\r\n'): 
-            assert_equal(update_manager.Windows10Video.isUnsupported(), True)
+            assert_equal(update_manager.WindowsVideo.isUnsupported(), True)
 
     def testNoCards(self):
         with patch(update_manager, "wmic", 
                        lambda *args: 
                        'Name                    \r\r\n' 
                        '\r\r\n'): 
-            assert_false(update_manager.Windows10Video.isUnsupported())
+            assert_false(update_manager.WindowsVideo.isUnsupported())
 

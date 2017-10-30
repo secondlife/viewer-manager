@@ -64,14 +64,14 @@ class testOnWindows10orHigher(object):
     def test_onWindows8(self):
         with patch(platform, "system", onWindows), \
              patch(platform, "win32_ver", windows8version):
-            assert_equal(update_manager.onWindows10orHigher(), False)
+            assert_equal(update_manager.onNo64Windows(), False)
 
     def test_onWindows10(self):
         with patch(platform, "system", onWindows), \
              patch(platform, "win32_ver", windows10version):
-            assert_equal(update_manager.onWindows10orHigher(), True)
+            assert_equal(update_manager.onNo64Windows(), True)
 
     def test_onOther(self):
         with patch(platform, "system", onOther):
-            assert_equal(update_manager.onWindows10orHigher(), False)
+            assert_equal(update_manager.onNo64Windows(), False)
 
