@@ -740,29 +740,13 @@ def _update_manager(command, cli_overrides = {}):
     #nothing to do or error
     if not result_data:
         log.info("No update.")
-
-        # clean up any previous download dir on windows, see apply_update.apply_update()
-        try:
-            if platform_key == 'win':
-                past_download_dir = make_download_dir(BuildData.get('Version'))
-                #call make to convert our version into a previous download dir path
-                #call check to see if the winstall file is there
-                installed = check_for_completed_download(past_download_dir)
-                log.debug("Checked for previous Windows install in %s with result %s." %
-                          (past_download_dir, installed))
-                if installed == 'winstall':
-                    log.info("Cleaning up past download directory '%s'" % past_download_dir)
-                    shutil.rmtree(past_download_dir)
-        except Exception as e:
-            #cleanup is best effort
-            log.error("Caught exception cleaning up download dir '%r'; skipping" % e)
-            pass
-
+        cleanup_previous_download(platform_key)
         # run already-installed viewer
         return existing_viewer
 
     chosen_result = choose_update(platform_key, settings, result_data)
     if not chosen_result:
+        cleanup_previous_download(platform_key)
         # We didn't find anything better than what we've got, so run that
         return existing_viewer
 
@@ -898,6 +882,24 @@ def _update_manager(command, cli_overrides = {}):
             log.error("Found nonempty download dir but no flag file. Check returned: %r" %
                         downloaded)
             return existing_viewer
+
+def cleanup_previous_download(platform_key):
+    # clean up any previous download dir on windows, see apply_update.apply_update()
+    if platform_key == 'win':
+        try:
+            past_download_dir = make_download_dir(BuildData.get('Version'))
+            #call make to convert our version into a previous download dir path
+            #call check to see if the winstall file is there
+            installed = check_for_completed_download(past_download_dir)
+            log.debug("Checked for previous Windows install in %s with result %s." %
+                      (past_download_dir, installed))
+            if installed == 'winstall':
+                log.info("Cleaning up past download directory %r" % past_download_dir)
+                shutil.rmtree(past_download_dir)
+        except Exception as e:
+            #cleanup is best effort
+            log.error("Caught exception cleaning up download dir %r: %s: %s; skipping",
+                      past_download_dir, e.__class__.__name__, e)
 
 if __name__ == '__main__':
     #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
