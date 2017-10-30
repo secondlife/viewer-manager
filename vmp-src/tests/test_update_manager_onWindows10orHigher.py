@@ -27,7 +27,7 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
-from nose.tools import assert_equal
+from nose.tools import assert_, assert_false
 
 import os
 import sys
@@ -40,9 +40,19 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import update_manager
 
-def windows8version():
+# fake version numbers derived from this page:
+# https://msdn.microsoft.com/en-us/library/windows/desktop/ms724832(v=vs.85).aspx
+def windows81version():
     """for patching platform.win32_ver"""
-    return ("Windows 8", "8.3.4", "1", "Free")
+    return ("Windows 8.1", "6.3.4", "1", "Free")
+
+def windows80version():
+    """for patching platform.win32_ver"""
+    return ("Windows 8.0", "6.2.1", "1", "Free")
+
+def windows7version():
+    """for patching platform.win32_ver"""
+    return ("Windows 7", "6.1", "1", "Free")
 
 def windows10version():
     """for patching platform.win32_ver"""
@@ -63,15 +73,23 @@ class testOnWindows10orHigher(object):
 
     def test_onWindows8(self):
         with patch(platform, "system", onWindows), \
-             patch(platform, "win32_ver", windows8version):
-            assert_equal(update_manager.onNo64Windows(), False)
+             patch(platform, "win32_ver", windows81version):
+            assert_(update_manager.onNo64Windows())
+        with patch(platform, "system", onWindows), \
+             patch(platform, "win32_ver", windows80version):
+            assert_false(update_manager.onNo64Windows())
+
+    def test_onWindows7(self):
+        with patch(platform, "system", onWindows), \
+             patch(platform, "win32_ver", windows7version):
+            assert_false(update_manager.onNo64Windows())
 
     def test_onWindows10(self):
         with patch(platform, "system", onWindows), \
              patch(platform, "win32_ver", windows10version):
-            assert_equal(update_manager.onNo64Windows(), True)
+            assert_(update_manager.onNo64Windows())
 
     def test_onOther(self):
         with patch(platform, "system", onOther):
-            assert_equal(update_manager.onNo64Windows(), False)
+            assert_false(update_manager.onNo64Windows())
 
