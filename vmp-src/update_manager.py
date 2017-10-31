@@ -750,13 +750,13 @@ def _update_manager(command, cli_overrides = {}):
     #nothing to do or error
     if not result_data:
         log.info("No update.")
-        cleanup_previous_download(platform_key)
+        cleanup_previous_download(log, platform_key)
         # run already-installed viewer
         return existing_viewer
 
     chosen_result = choose_update(platform_key, settings, result_data)
     if not chosen_result:
-        cleanup_previous_download(platform_key)
+        cleanup_previous_download(log, platform_key)
         # We didn't find anything better than what we've got, so run that
         return existing_viewer
 
@@ -893,7 +893,7 @@ def _update_manager(command, cli_overrides = {}):
                         downloaded)
             return existing_viewer
 
-def cleanup_previous_download(platform_key):
+def cleanup_previous_download(log, platform_key):
     # clean up any previous download dir on windows, see apply_update.apply_update()
     if platform_key == 'win':
         try:
