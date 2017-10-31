@@ -200,7 +200,7 @@ def check_for_completed_download(download_dir, expected_size = 0):
 
     # No markers, unfinished download, not currently downloading
     log.debug('download_dir %s has partial installer %s (%s, expecting %s), deleting',
-              download_dir, installer, second_sample, expected_size)
+              download_dir, installer, samples[1], expected_size)
     shutil.rmtree(download_dir)
     return None
 
