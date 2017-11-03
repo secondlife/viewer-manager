@@ -63,6 +63,7 @@ import download_update
 # doesn't really matter which viewer, the downloader just needs a file of sufficient length to test the chunking
 # we allegedly never purge S3, so this should always be there
 URL = "http://automated-builds-secondlife-com.s3.amazonaws.com/hg/repo/viewer-lynx/rev/323027/arch/Darwin/installer/Second_Life_5_0_1_323027_i386.dmg"
+URL_len = 92657704
 marker_regex = '*' + '.done'
 
 def download_update_setup():
@@ -84,23 +85,18 @@ def test_download_update_null_url(tmpdir1):
         download_update.download_update(url=None, download_dir=tmpdir1, size=None, progressbar=False, chunk_size=1024)
     #this is the expected error when d_u tries to apply split() to None
     except AttributeError, e:
-        assert True
+        pass
     #something else bad happened
     except Exception, e:
-        print "download_update threw an exception on null URL: %s" % repr(e)
-        assert False
+        # preserve the original exception and its traceback
+        raise
     #we failed to fail
     else:
-        assert False
+        raise AssertionError("download_update() failed to raise exception for url=None")
         
 @with_setup_args.with_setup_args(download_update_setup, download_update_teardown)
 def test_download_update_correct_url(tmpdir1):
-    try:
-        download_update.download_update(url=URL, download_dir=tmpdir1, size=None, progressbar=False, chunk_size=1024)
-    except Exception, e:
-        print "download_update threw an exception on a correct URL: %s" % repr(e)
-        assert False
-    else:
-        #if behaving correctly, the downloader should leave a tmpfile with the
-        #.done extension in the download directory (tmpdir1)
-        assert glob.glob(os.path.join(tmpdir1, marker_regex))
+    download_update.download_update(url=URL, download_dir=tmpdir1, size=URL_len, progressbar=False, chunk_size=1024)
+    #if behaving correctly, the downloader should leave a tmpfile with the
+    #.done extension in the download directory (tmpdir1)
+    assert glob.glob(os.path.join(tmpdir1, marker_regex))
