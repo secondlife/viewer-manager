@@ -242,14 +242,16 @@ def get_settings(settings_file):
     try:
         settings = llsd.parse(open(settings_file).read())
     except llsd.LLSDParseError as lpe:
-        log.warning("Could not parse settings file %s: %s" % (os.path.abspath(settings_file), lpe))
+        log.warning("Could not parse settings file %r: %s", os.path.abspath(settings_file), lpe)
     except OSError as err:
         if err.errno == errno.ENOENT:
-            log.info("No settings file at %s" % os.path.abspath(settings_file))
+            log.info("No settings file at %r", os.path.abspath(settings_file))
         else:
-            log.warning("OS error reading settings file %s: %s" % (os.path.abspath(settings_file), e))
+            log.warning("OS error reading settings file %r: %s" % (os.path.abspath(settings_file), e))
     except Exception as e:
-        log.warning("Could not read settings file %s: %s" % (os.path.abspath(settings_file), e))
+        log.warning("Could not read settings file %r: %s", os.path.abspath(settings_file), e)
+    else:
+        log.debug("Loaded viewer settings from %r", os.path.abspath(settings_file))
     return settings
 
 def make_VVM_UUID_hash(platform_key):
@@ -377,24 +379,45 @@ def query_vvm(platform_key = None, settings = {},
     #note that this will not normally be in a settings.xml file and is only here for test builds.
     #for test builds, add this key to the ../user_settings/settings.xml
     """
-        <key>test</key>
-        <map>
-        <key>Comment</key>
-            <string>Tell update manager you aren't willing to test.</string>
-        <key>Type</key>
-            <string>String</string>
-        <key>Value</key>
-            <integer>testno</integer>
-        </map>
+    <key>UpdaterWillingToTest</key>
+    <map>
+    <key>Comment</key>
+        <string>Whether or not the updater should offer test candidate upgrades.</string>
+    <key>Type</key>
+        <string>Boolean</string>
+    <key>Value</key>
+        <integer>0</integer>
     </map>
     """
-    if UpdaterWillingToTest == 'testok':
-        test_ok = 'testok'
-    elif re.search('^%s Test' % Application.name(), channelname) is not None:
+    if UpdaterWillingToTest is not None:
+        # user provided command-line override
+        try:
+            # convert "0" or "1" to corresponding integer
+            UpdaterWillingToTest = int(UpdaterWillingToTest)
+        except ValueError:
+            try:
+                # special form permitted only on command line
+                UpdaterWillingToTest = dict(testok=1, testno=0)[UpdaterWillingToTest]
+            except KeyError:
+                bad = UpdaterWillingToTest
+                UpdaterWillingToTest = 1
+                log.error("Invalid value for UpdaterWillingToTest, assuming %s: %r",
+                          UpdaterWillingToTest, bad)
+        log.debug("command-line override for UpdaterWillingToTest treated as %r",
+                  UpdaterWillingToTest)
+    elif re.match('%s Test$' % Application.name(), channelname) is not None:
         # if running a Second Life Test viewer, don't accept other test viewers
-        test_ok = 'testno'
+        UpdaterWillingToTest = 0
+        log.debug("%s viewer forces UpdaterWillingToTest to %r",
+                  channelname, UpdaterWillingToTest)
     else:
-        test_ok = settings.get('test', {}).get('Value', 'testok')
+        # no override and not test viewer -- read from user settings file
+        UpdaterWillingToTest = int(settings.get('UpdaterWillingToTest', {}).get('Value', 1))
+        log.debug("UpdaterWillingToTest from settings file: %r",
+                  UpdaterWillingToTest)
+
+    # now that we have UpdaterWillingToTest either 0 or 1...
+    test_ok = 'testok' if UpdaterWillingToTest else 'testno'
 
     #suppress warning we get in dev env for altname cert 
     if UpdaterServiceURL != 'https://update.secondlife.com/update':
