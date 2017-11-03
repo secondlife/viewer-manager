@@ -74,22 +74,22 @@ class testOnWindows10orHigher(object):
     def test_onWindows8(self):
         with patch(platform, "system", onWindows), \
              patch(platform, "win32_ver", windows81version):
-            assert_true(update_manager.onNo64Windows())
+            assert_true(update_manager.WindowsVideo.onWin10orGreater())
         with patch(platform, "system", onWindows), \
              patch(platform, "win32_ver", windows80version):
-            assert_false(update_manager.onNo64Windows())
+            assert_false(update_manager.WindowsVideo.onWin10orGreater())
 
     def test_onWindows7(self):
         with patch(platform, "system", onWindows), \
              patch(platform, "win32_ver", windows7version):
-            assert_false(update_manager.onNo64Windows())
+            assert_false(update_manager.WindowsVideo.onWin10orGreater())
 
     def test_onWindows10(self):
         with patch(platform, "system", onWindows), \
              patch(platform, "win32_ver", windows10version):
-            assert_true(update_manager.onNo64Windows())
+            assert_true(update_manager.WindowsVideo.onWin10orGreater())
 
     def test_onOther(self):
         with patch(platform, "system", onOther):
-            assert_false(update_manager.onNo64Windows())
+            assert_false(update_manager.WindowsVideo.onWin10orGreater())
 
