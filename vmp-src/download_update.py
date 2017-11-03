@@ -110,16 +110,24 @@ def download_update(url = None, download_dir = None, size = None, progressbar = 
                 now = time.time()
                 if now >= log_next:
                     log_next = now + log_interval
-                    elapsed = now - start
-                    # completed/size predicts elapsed/totaltime
-                    # totaltime * (completed/size) = elapsed
-                    # totaltime = elapsed / (completed / size)
-                    # totaltime = elapsed * size / completed
-                    totaltime = elapsed * float(size) / completed
-                    eta = start + totaltime
+                    if completed == 0:
+                        # still nothing?! no prediction possible
+                        eta = "---"
+                    else:
+                        # once we've downloaded even the first chunk, we can
+                        # start to make wild guesses about completion
+                        elapsed = now - start
+                        # completed/size predicts elapsed/totaltime
+                        # totaltime * (completed/size) = elapsed
+                        # totaltime = elapsed / (completed / size)
+                        # totaltime = elapsed * size / completed
+                        totaltime = elapsed * float(size) / completed
+                        eta = start + totaltime
+                        # use gmtime and the same time format as
+                        # SL_Logging.Formatter.sl_format
+                        eta = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(eta))
                     log.info("downloaded %s bytes; %s%% complete; ETA %s",
-                             completed, int(100*float(completed)/size),
-                             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(eta)))
+                             completed, int(100*float(completed)/size), eta)
     finally:
         frame.destroy()
 
