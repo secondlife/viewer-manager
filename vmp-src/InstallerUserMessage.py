@@ -37,7 +37,6 @@ Pushed up the manager directory to be multiplatform.
 import os
 import sys
 import platform
-import threading
 import time
 import Tkinter as tk
 import ttk
@@ -336,50 +335,20 @@ class InstallerUserMessage(tk.Tk):
     def link_callback(self, event):
         webbrowser.open_new(self.url)   
 
-    def progress_bar(self, message = None, size = 0, interval = 100, pb_queue = None):
+    def progress_bar(self, message, size):
         #Best effort attempt at a real progress bar
         #  This is what Tk calls "determinate mode" rather than "indeterminate mode"
         #size: denominator of percent complete
-        #interval: frequency, in ms, of how often to poll the file for progress
-        #pb_queue: queue object used to send updates to the bar
-        self.interval = interval
         self.set_message(message)
         self.image_label.grid(row = 1, column = 1, sticky = 'NSEW')
         self.place_message(row = 2, column = 1, sticky = 'NSEW')
         self.progress = ttk.Progressbar(self, style = 'black.Horizontal.TProgressbar', orient="horizontal", length=100, mode="determinate")
         self.progress.grid(row = 3, column = 1, sticky = 'NSEW', pady = 25)
-        self.value = 0
         self.progress["maximum"] = size
         self.auto_resize(row_count = 1, column_count = 3)
-        self.queue = pb_queue
-        self.check_scheduler()
 
-    def check_scheduler(self):
-        try:
-            if self.value < self.progress["maximum"]:
-                self.check_queue()            
-                self.id = self.after(self.interval, self.check_scheduler)
-            else:
-                #prevent a race condition between polling and the widget destruction
-                self.after_cancel(self.id)
-        except tk.TclError:
-            #we're already dead, just die quietly
-            pass
-
-    def check_queue(self):
-        while self.queue.qsize():
-            try:
-                msg = float(self.queue.get(0))
-                #custom signal, time to tear down
-                if msg == -1:
-                    self.choice.set(True)
-                    self.destroy()
-                else:
-                    self.progress.step(msg)
-                    self.value = msg
-            except Queue.Empty:
-                #nothing to do
-                return
+    def step(self, value):
+        self.progress.step(value)
 
 # ****************************************************************************
 #   StatusMessage
@@ -404,72 +373,47 @@ class StatusMessage(InstallerUserMessage):
 # ****************************************************************************
 #   Testing
 # ****************************************************************************
-class ThreadedClient(threading.Thread):
-    #for test only, not part of the functional code
-    def __init__(self, queue):
-        threading.Thread.__init__(self)
-        self.queue = queue
-
-    def run(self):
-        for x in range(1, 90, 10):
-            time.sleep(1)
-            print "run " + str(x)
-            self.queue.put(10)
-        #tkk progress bars wrap at exactly 100 percent, look full at 99%
-        print "leftovers"
-        self.queue.put(9)
-        time.sleep(5)
-        # -1 is a custom signal to the progress_bar to quit
-        self.queue.put(-1)
-
 if __name__ == "__main__":
     #When run as a script, just test the InstallUserMessage.  
     #To proceed with the test, close the first window, select on the second and fourth.  The third will close by itself.
-    import sys
-    import tempfile
-
-    def set_and_check(frame, value):
-        print "value: " + str(value)
-        frame.progress.step(value)
-        if frame.progress["value"] < frame.progress["maximum"]:
-            print "In Progress"
-        else:
-            print "Over now"
 
     #basic message window test
-    frame2 = InstallerUserMessage(text = "Something in the way she moves....", title = "Beatles Quotes for 100")
+    frame2 = InstallerUserMessage(title = "Beatles Quotes for 100")
     frame2.basic_message(message = "...attracts me like no other.")
     print "Destroyed!"
     sys.stdout.flush()
 
     #binary choice test.  User destroys window when they select.
-    frame3 = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 200")
+    frame3 = InstallerUserMessage(title = "Beatles Quotes for 200")
     frame3.binary_choice_message(message = "And all I have to do is think of her.", 
         true = "Don't want to leave her now", false = 'You know I believe and how')
     print frame3.choice.get()
     sys.stdout.flush()
     
     #trinary choice test.  User destroys window when they select.
-    frame3a = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 400")
+    frame3a = InstallerUserMessage(title = "Beatles Quotes for 400")
     frame3a.trinary_choice_message(message = "And all I have to do is think of her.", 
         one = "Don't want to leave her now", two = 'You know I believe and how', three = 'John is Dead')
     print frame3a.choice3.get()
     sys.stdout.flush()
     
     #trinary link choice test. Click on message text to go to URL. User destroys window when they select.
-    frame3b = InstallerUserMessage(text = "Come together....", title = "Beatles Quotes for 500")
+    frame3b = InstallerUserMessage(title = "Beatles Quotes for 500")
     frame3b.trinary_choice_link_message(message = "Got to be good looking,\n'Cause he so hard to see", url = "http://www.ucla.edu", 
             one = "He bag production.", two = 'He got walrus gumboot.', three = 'He got Ono sideboard.')    
     print frame3b.choice3.get()
     sys.stdout.flush()    
 
     #progress bar
-    queue = Queue.Queue()
-    thread = ThreadedClient(queue)
-    thread.start()
-    print "thread started"
-
-    frame4 = InstallerUserMessage(text = "Something in the way she knows....", title = "Beatles Quotes for 300")
-    frame4.progress_bar(message = "You're asking me will my love grow", size = 100, pb_queue = queue)
+    frame4 = InstallerUserMessage(title = "Beatles Quotes for 300")
+    frame4.progress_bar(message = "You're asking me will my love grow", size = 100)
     print "frame defined"
-    frame4.mainloop()
+    for x in range(1, 90, 10):
+        time.sleep(1)
+        print "run " + str(x)
+        frame4.step(10)
+    #tkk progress bars wrap at exactly 100 percent, look full at 99%
+    print "leftovers"
+    frame4.step(9)
+    time.sleep(5)
+    frame4.destroy()

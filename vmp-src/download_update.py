@@ -36,10 +36,10 @@ call it with subprocess.
 import os
 import cgitb
 from datetime import datetime
-import fnmatch
+import errno
+import glob
 import InstallerUserMessage as IUM
 import os.path
-import Queue
 import requests
 import sys
 #silences InsecurePlatformWarning
@@ -47,12 +47,19 @@ import sys
 import requests.packages.urllib3
 requests.packages.urllib3.disable_warnings()
 import tempfile
-import threading
+import time
 import update_manager
 from vmp_util import SL_Logging, Application
 
 #module default
 CHUNK_SIZE = 1024
+
+class DummyProgressBar(object):
+    def step(self, value):
+        pass
+
+    def destroy(self):
+        pass
 
 #Note: No exception handling here! Response to exceptions is the responsibility of the caller
 def download_update(url = None, download_dir = None, size = None, progressbar = False, chunk_size = CHUNK_SIZE):
@@ -65,62 +72,66 @@ def download_update(url = None, download_dir = None, size = None, progressbar = 
     log=SL_Logging.getLogger('download_update')
     log.info("Downloading new viewer from %r to %r" % (url, download_dir))
     log.debug(" url %s, download_dir %s, size %s, progressbar %s, chunk_size %s" % (url, download_dir, size, progressbar, chunk_size))
-    queue = Queue.Queue()
-    if not os.path.exists(download_dir):
+    try:
         os.makedirs(download_dir)
+    except OSError as err:
+        # fine if it already exists, other errors not fine
+        if err.errno != errno.EEXIST:
+            raise
     #the url split provides the basename of the filename
     filename = os.path.join(download_dir, url.split('/')[-1])
     log.info("downloading to: %s" % filename)
     req = requests.get(url, stream=True)
-    down_thread = ThreadedDownload(req, filename, chunk_size, progressbar, queue)
-    down_thread.start()
-    log.debug("Started download thread.")
 
     if progressbar:
         frame = IUM.InstallerUserMessage(title = Application.name()+" Downloader")
-        frame.progress_bar(message = "Download Progress", size = size, pb_queue = queue)
-        frame.mainloop()
+        frame.progress_bar(message = "Download Progress", size = size)
     else:
-        #nothing for the main thread to do
-        down_thread.join()
+        frame = DummyProgressBar()
 
-class ThreadedDownload(threading.Thread):
-    def __init__(self, req, filename, chunk_size, progressbar, in_queue):
-        #req is a python request object
-        #target filename to download to
-        #chunk_size is in bytes, amount to download at once
-        #progressbar: whether to display one (not used for background downloads)
-        #in_queue mediates communication between this thread and the progressbar
-        threading.Thread.__init__(self)
-        self.req = req
-        self.filename = filename
-        self.chunk_size = int(chunk_size)
-        self.progressbar = progressbar
-        self.in_queue = in_queue
-        self.log = SL_Logging.getLogger('SL_Updater')
-        
-    def run(self):
-        self.log.debug("Download thread running.")
-        with open(self.filename, 'wb') as fd:
-            #keep downloading until we run out of chunks, then download the last bit
-            for chunk in self.req.iter_content(self.chunk_size):
+    # ensure that we clean up the progress bar frame, no matter how we leave
+    try:
+        start = time.time()
+        completed = 0
+        log_interval = 60
+        log_next = start + log_interval
+        with open(filename, 'wb') as fd:
+            #keep downloading until we run out of chunks
+            for chunk in req.iter_content(chunk_size):
                 fd.write(chunk)
-                if self.progressbar:
-                    #this will increment the progress bar by len(chunk)/size units
-                    self.in_queue.put(len(chunk))  
-            #signal value saying to the progress bar that it is done and can destroy itself
-            #if len(chunk) is ever -1, we get to file a bug against Python
-            self.in_queue.put(-1)
-            self.cleanup()
-            self.log.debug("Download thread finished.")
-            
-    def cleanup(self):
-        #on success remove .next file if any and mark done
-        download_dir = os.path.dirname(self.filename)
-        for fname in os.listdir(download_dir):
-            if fnmatch.fnmatch(fname, "*" + '.next'):
-                os.remove(os.path.join(download_dir, fname))
-        tempfile.mkstemp(suffix=".done", dir=download_dir)    
+                completed += len(chunk)
+                #this will increment the progress bar by len(chunk)/size units
+                frame.step(len(chunk))
+
+                # Add periodic download log messages. When we start a background
+                # download on a separate thread, the main thread might complete --
+                # and produce log output to that effect -- yet the process lives
+                # on. Occasional log messages help the curious user remember that.
+                now = time.time()
+                if now >= log_next:
+                    log_next = now + log_interval
+                    elapsed = now - start
+                    # completed/size predicts elapsed/totaltime
+                    # totaltime * (completed/size) = elapsed
+                    # totaltime = elapsed / (completed / size)
+                    # totaltime = elapsed * size / completed
+                    totaltime = elapsed * float(size) / completed
+                    eta = start + totaltime
+                    log.info("downloaded %s bytes; %s%% complete; ETA %s",
+                             completed, int(100*float(completed)/size),
+                             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(eta)))
+    finally:
+        frame.destroy()
+
+    #on success remove .next file if any
+    for fname in glob.glob(os.path.join(download_dir, "*" + '.next')):
+        os.remove(fname)
+    # and mark done
+    # mkstemp() returns (OS file handle, absolute pathname)
+    os.close(tempfile.mkstemp(suffix=".done", dir=download_dir)[0])
+    log.info("Download finished.")
+    # show caller the pathname of the file we downloaded
+    return filename
 
 def main():
     import argparse

@@ -54,6 +54,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 # specifically import the sleep() function for testability
 from time import sleep
 #for the quote method
@@ -559,80 +560,49 @@ def choose_update(platform_key, settings, vvm_response):
 
     return chosen_result
 
-def download(url = None, version = None, download_dir = None, size = 0, hash = None, background = False, chunk_size = None):
+def download(url, version, download_dir, size, hash, background, chunk_size = 5*1024):
     log=SL_Logging.getLogger('download')
-    download_tries = 0
-    download_success = False
-    download_process = None
-    if not chunk_size:
-        chunk_size = 5*1024
-    #for background execution
-    if Application.platform_key() == 'win':
-        path_to_downloader = os.path.join(os.path.dirname(os.path.realpath(sys.executable)), "download_update.exe")
-    else:
-        path_to_downloader = os.path.join(os.path.dirname(os.path.realpath(__file__)), "download_update.py")
+
+    ground = "background" if background else "foreground"
 
     #three strikes and you're out
-    log.info("Preparing to download new version " + version + " destination " + download_dir + ".")
-    while download_tries < 3 and not download_success:
-        #  Check for a partial update of the required update; in either event, display an alert that a download is required, initiate the download, and then install and launch
-        if not background:
-            log.debug("foreground downloader args: %r" % ["--url", url, "--dir", download_dir, 
-                            "--size", str(size), "--chunk_size", str(chunk_size)])
-            if download_tries == 0:
-                InstallerUserMessage.status_message("Downloading new version " + version +
-                                                    " Please wait.")
-            else:
-                InstallerUserMessage.status_message("Trying again to download new version " +
-                                                    version + " Please wait.")
-            try:
-                download_update.download_update(url = url, download_dir = download_dir, size = size, progressbar = True, chunk_size = chunk_size)
-                download_success = True
-            except Exception as e:
-                download_tries += 1    
-                log.warning("Failed to download new version " + version + " in foreground downloader. Trying again.")
-                log.error("Logging download exception: %r" % e)
-            #check to make sure the downloaded file is correct
-            filename = os.path.join(download_dir, url.split('/')[-1])
-            down_hash = md5file(filename)
-            if down_hash != hash:
-                #try again
-                download_tries += 1
-                download_success = False
-                log.warning("Hash mismatch: Expected: %s Received: %s" % (hash, down_hash))
+    log.info("Preparing to download new version %s to %s in %s",
+             version, download_dir, ground)
+    for download_tries in xrange(3):
+        download_args = dict(url = url, download_dir = download_dir, size = size,
+                             progressbar = (not background), chunk_size = chunk_size)
+        log.debug("%s%s downloader args: %r",
+                  ("trying again -- " if download_tries else ""),
+                  ground, download_args)
+        # If (not background), we're asking download_update() to put up a
+        # progress bar. Don't also put up a status message; it would only
+        # flicker briefly before the progress bar frame is displayed.
+        try:
+            filename = download_update.download_update(**download_args)
+        except Exception as e:
+            log.warning("Failed to download new version %s in %s downloader.",
+                        version, ground)
+            log.error("%s download exception: %r", ground, e)
         else:
-            try:
-                #Python does not have a facility to multithread a method, so we make the method a standalone script
-                #and subprocess that.  The business with the file descriptors is how to tell subprocess not to wait.
-                #since we are using Popen and not check_output, subprocess_args isn't needed
-                #arguments to execv() via popen() can only be strings, hence str(int)
-                downloader_cmd = [path_to_downloader,
-                                  "--url", url,
-                                  "--dir", download_dir, 
-                                  "--size", str(size),
-                                  "--chunk_size", str(chunk_size)]
-                download_process = subprocess.Popen(downloader_cmd,
-                                                    **subprocess_args(include_stdout=True,
-                                                                      log_stream=SL_Logging.stream_from_process(downloader_cmd, streams="stdout and stderr")))
-                log.debug("Download of new version " + version + " spawned.")
-                download_success = True
-            except  Exception, e:
-                download_tries += 1
-                download_success = False
-                log.debug("Logging download exception: %r, subprocess returned: %r" % (e, download_process))
-                log.warning("Failed to download new version in background downloader " + version + ". Trying again.")
+            #check to make sure the downloaded file is correct
+            down_hash = md5file(filename)
+            if down_hash == hash:
+                # once we succeed, stop (re)trying
+                break
+            #try again
+            log.warning("Hash mismatch: Expected: %s Received: %s" % (hash, down_hash))
 
-    if not download_success:
+    else:
+        # we got through the whole for loop without once succeeding
         message = "Failed to download new version %s from %s. Please check connectivity." % \
                   (version, url)
         log.warning(message)
         if not background:
             InstallerUserMessage.basic_message(message)
-        raise UpdateError(message)
-    
-    #cleanup, so that we don't download twice
-    for filename in glob.glob(os.path.join(download_dir, '*.next')):
-        os.remove(filename)
+            # We only raise this exception for foreground processing because
+            # on a background thread, what good would it do us? We'd only have
+            # to inject a top-level thread function to eat the exception.
+            raise UpdateError(message)
 
 def install(command, platform_key, download_dir):
     log=SL_Logging.getLogger('install')
@@ -842,12 +812,19 @@ def _update_manager(command, cli_overrides = {}):
                     raise
                 
             log.info("Found optional update. Downloading in background to: " + download_dir)
-            download(url = chosen_result['url'],
-                     version = chosen_result['version'],
-                     download_dir = download_dir,
-                     hash = chosen_result['hash'],
-                     size = chosen_result['size'],
-                     background = True)
+            # Create and launch a background thread. Because we do NOT set
+            # this thread as daemon, the process won't terminate until the
+            # thread completes.
+            background = threading.Thread(
+                name="downloader",
+                target=download,
+                kwargs=dict(url = chosen_result['url'],
+                            version = chosen_result['version'],
+                            download_dir = download_dir,
+                            hash = chosen_result['hash'],
+                            size = chosen_result['size'],
+                            background = True))
+            background.start()
             # run the previously-installed viewer
             return existing_viewer
         elif downloaded == 'done' or downloaded == 'next':
