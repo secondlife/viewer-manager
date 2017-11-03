@@ -42,6 +42,8 @@ import logging
 from vmp_util import SL_Logging, Application, BuildData
 from argparse import Namespace
 import with_setup_args
+import requests
+from patch import patch
 
 #cygwin artifact: the installed llbase is in a cygwin directory but we
 #use system python and it doesn't know from cygpaths, so the import misses
@@ -64,6 +66,16 @@ import download_update
 # we allegedly never purge S3, so this should always be there
 URL = "http://automated-builds-secondlife-com.s3.amazonaws.com/hg/repo/viewer-lynx/rev/323027/arch/Darwin/installer/Second_Life_5_0_1_323027_i386.dmg"
 marker_regex = '*' + '.done'
+
+# Mock the requests get module and its response object so that we don't need a real request
+class DummyResponse(object):
+    def iter_content(self, chunk_size=1, decode_unicode=False):
+        return ['a', 'b', 'c']
+    
+def dummy_get(url, stream=None): # mock for request.get
+    if url != URL:
+        raise ValueError("Incorrect URL passed")
+    return DummyResponse()
 
 def download_update_setup():
     global log
@@ -95,12 +107,9 @@ def test_download_update_null_url(tmpdir1):
         
 @with_setup_args.with_setup_args(download_update_setup, download_update_teardown)
 def test_download_update_correct_url(tmpdir1):
-    try:
+    with patch(requests, "get", dummy_get):
         download_update.download_update(url=URL, download_dir=tmpdir1, size=None, progressbar=False, chunk_size=1024)
-    except Exception, e:
-        print "download_update threw an exception on a correct URL: %s" % repr(e)
-        assert False
-    else:
-        #if behaving correctly, the downloader should leave a tmpfile with the
-        #.done extension in the download directory (tmpdir1)
-        assert glob.glob(os.path.join(tmpdir1, marker_regex))
+
+    #if behaving correctly, the downloader should leave a tmpfile with the
+    #.done extension in the download directory (tmpdir1)
+    assert glob.glob(os.path.join(tmpdir1, marker_regex))
