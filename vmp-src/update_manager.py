@@ -74,17 +74,6 @@ class UpdateErrorIn(UpdateError):
 
 #module globals
 
-# Empirically, we find that the 64-bit viewer will not run on certain versions
-# of Windows with certain graphics cards. This module contains logic to detect
-# those situations and specifically run the 32-bit viewer.
-#This is an exclusion list created by experimental techniques
-#and research that is extrinsic to VMP.  64bit viewer does not run on these.
-#
-#Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
-#so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
-#hence the strange equality test for 'Graphics' when we pop the last word off the string.
-NO64_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
-
 #this is to support pyinstaller, which uses sys._MEIPASS to point to the location
 #the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
 #normal Python environment.
@@ -420,24 +409,36 @@ def query_vvm(platform_key = None, settings = {},
 
     return result_data
 
-def onNo64Windows():
-    if platform.system() != 'Windows':
-        return False
-    log = SL_Logging.getLogger('onNo64Windows')
-    windowsVersion = platform.win32_ver()[1]
-    versionPair = [int(field) for field in windowsVersion.split('.')[:2]]
-    # As far as we know, Intel doesn't have (working) drivers for the cards in
-    # NO64_GRAPHICS_LIST specifically on Windows 10 and Windows 8.1. According
-    # to this page:
-    # https://msdn.microsoft.com/en-us/library/windows/desktop/ms724832(v=vs.85).aspx
-    # that would be every version >= [6, 3].
-    no64 = (versionPair >= [6, 3])
-    log.debug("Windows version %s should%s be okay", windowsVersion,
-              (" not" if no64 else ""))
-    return no64
-
 class WindowsVideo(object):
     hasOnlyUnsupported = None # so that we only call wmic once
+
+    # Empirically, we find that the 64-bit viewer will not run on certain versions
+    # of Windows with certain graphics cards. This module contains logic to detect
+    # those situations and specifically run the 32-bit viewer.
+    #This is an exclusion list created by experimental techniques
+    #and research that is extrinsic to VMP.  64bit viewer does not run on these.
+    #
+    #Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
+    #so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
+    #hence the strange equality test for 'Graphics' when we pop the last word off the string.
+    NO64_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
+
+    @staticmethod
+    def onWin10orGreater():
+        if platform.system() != 'Windows':
+            return False
+        log = SL_Logging.getLogger('onWin10orGreater')
+        windowsVersion = platform.win32_ver()[1]
+        versionPair = [int(field) for field in windowsVersion.split('.')[:2]]
+        # As far as we know, Intel doesn't have (working) drivers for the cards in
+        # NO64_GRAPHICS_LIST specifically on Windows 10 and Windows 8.1. According
+        # to this page:
+        # https://msdn.microsoft.com/en-us/library/windows/desktop/ms724832(v=vs.85).aspx
+        # that would be every version >= [6, 3].
+        is10orBetter = (versionPair >= [6, 3])
+        log.debug("Windows version %s should%s be okay", windowsVersion,
+                  (" not" if is10orBetter else ""))
+        return is10orBetter
 
     @staticmethod
     def isUnsupported():
@@ -460,7 +461,7 @@ class WindowsVideo(object):
                 # - If the only card(s) present are bad cards, not good.
                 good_cards = [line for line in wmic_list
                               if not ("Intel(R) HD Graphics" in line and
-                                      line.split()[-1] in NO64_GRAPHICS_LIST)]
+                                      line.split()[-1] in WindowsVideo.NO64_GRAPHICS_LIST)]
                 # There's no order guarantee from wmic, this is to prevent an
                 # HD card discovered after a good card from overwriting the state variable
                 # by specification, a machine is bad iff ALL of the cards on the machine are bad ones
@@ -498,7 +499,7 @@ def choose_update(platform_key, settings, vvm_response):
         if current_build == 'win64' and target_platform == 'win32':
             log.info("This is a 64 bit build, but this system is 32 bit; looking for a 32 bit build")
 
-        elif target_platform == 'win64' and onNo64Windows() and WindowsVideo.isUnsupported():
+        elif target_platform == 'win64' and WindowsVideo.onWin10orGreater() and WindowsVideo.isUnsupported():
             log.warning("Your video card(s) are not supported on Windows 10; switching you to the 32bit build, which runs in a compatibility mode that works better")
             target_platform = 'win32'
 
@@ -685,9 +686,10 @@ def _update_manager(command, cli_overrides = {}):
     # our viewer's video benchmarking -- but that if we skip it, things run
     # okay. Test this now because we prepare a default PopenRunner for the
     # various cases in which we decide to launch the existing viewer.
-    if onNo64Windows() \
+    if WindowsVideo.onWin10orGreater() \
       and int(BuildData.get('Address Size')) == 64 \
       and WindowsVideo.isUnsupported():
+        log.info("Windows 10 does not support the video card; setting option to skip video benchmarking")
         command = command + ['--set', 'SkipBenchmark', '1']
 
     # we end up running the existing viewer in many cases
