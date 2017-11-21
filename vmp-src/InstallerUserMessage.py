@@ -346,9 +346,11 @@ class InstallerUserMessage(tk.Tk):
         self.progress.grid(row = 3, column = 1, sticky = 'NSEW', pady = 25)
         self.progress["maximum"] = size
         self.auto_resize(row_count = 1, column_count = 3)
+        self.update()
 
     def step(self, value):
         self.progress.step(value)
+        self.update()
 
 # ****************************************************************************
 #   StatusMessage
