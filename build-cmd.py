@@ -195,10 +195,8 @@ def main():
         #to keep things as platform independent as possible, EXEs go into the same directory as .py files
         dstdir = iter_paths['vmp'][dst]
         # SL_Launcher is the main entry point for the VMP.
-        # download_update is run as a separate process for background
-        # downloads.
         vmp_files = [os.path.join(dstdir, f)
-                     for f in ("SL_Launcher", "download_update.py")]
+                     for f in ("SL_Launcher",)]
         print "Manifest of files to be compiled by pyinstaller: %s" % repr(vmp_files)
 
         #In a typical Windows install, pinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
