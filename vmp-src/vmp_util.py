@@ -1,4 +1,5 @@
 import errno
+import glob
 import json
 import logging
 import os
@@ -168,7 +169,12 @@ class Application(object):
         channel_base = BuildData.get('Channel Base')
         running_on = platform.system()
         if running_on == 'Darwin':
-            executable_name = channel_base
+            # the viewer executable is found inside the companion bundled
+            # Viewer.app/Contents/MacOS; we want to return a relative path
+            executable_name = os.path.relpath(
+                os.path.join(Application._darwin_viewer_app_contents_path(),
+                             "MacOS", channel_base),
+                os.path.dirname(__file__))
         elif running_on == 'Windows':
             # MAINT-7292: do not infer name from directory; read it from build_data.json as produced by the build
             executable_name = BuildData.get('Executable')
@@ -188,10 +194,44 @@ class Application(object):
             pass
         # this is the normal case in the installed app
         if (platform.system() == 'Darwin'):
-            app_data_dir = os.path.join(os.path.dirname(__file__), "../Resources")
+            # On macOS, we're running in the bundled Launcher.app. Find its
+            # sibling Viewer.app and point to its Resources directory.
+            app_data_dir = os.path.join(
+                Application._darwin_viewer_app_contents_path(), "Resources")
         else:
-            app_data_dir = os.path.dirname(str(sys.executable))
+            # Everywhere else, just look in the application directory.
+            app_data_dir = os.path.dirname(sys.executable)
         return os.path.abspath(app_data_dir)
+
+    @staticmethod
+    def _darwin_viewer_app_contents_path():
+        # This is a little tricky because on macOS, we're running in one of
+        # two separate app bundles nested under the top-level
+        # Second Life.app/Contents/Resources directory. Because the name of
+        # each nested app bundle determines the flyover text for its Dock
+        # icon, we want Product to be able to change those names -- but we
+        # don't want to have to come back here to tweak this logic whenever
+        # they do! Most likely we'll forget, and Bad Things will happen. So
+        # instead, rely on our knowledge that we're one of the two .app
+        # bundles under a common parent -- and we're trying to find the other.
+        # This file lives under $myapp/Contents/MacOS. dirname(__file__) is
+        # MacOS; realpath(MacOS/../..) should get us myapp.
+        parent, myapp = \
+            os.path.split(os.path.realpath(os.path.join(os.path.dirname(__file__),
+                                                        os.pardir,
+                                                        os.pardir)))
+        # find all the app bundles under parent, keeping only basenames
+        bundles = set(os.path.basename(f)
+                      for f in glob.glob(os.path.join(parent, "*.app")))
+        # cancel out our own
+        bundles.discard(myapp)
+        # there had better be exactly one other one!
+        if len(bundles) != 1:
+            raise Error("%s viewer .app under %r: found %s" %
+                        (("Ambiguous" if bundles else "Missing"),
+                         parent, bundles))
+        # pop the other and return it
+        return os.path.join(parent, bundles.pop(), "Contents")
 
     @staticmethod
     def userpath():
