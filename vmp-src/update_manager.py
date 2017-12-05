@@ -918,7 +918,7 @@ if __name__ == '__main__':
     # Initialize the python logging system to SL Logging format and destination
     log = SL_Logging.getLogger('SL_Updater')
     try:
-        viewer_binary = os.path.join(os.path.dirname(sys.executable), Application.name())
+        viewer_binary = Application.executable()
         update_manager(viewer_binary)
     except Exception:
         log.exception("Unhandled exception")

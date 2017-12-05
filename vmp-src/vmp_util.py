@@ -164,26 +164,34 @@ class SL_Logging(object):
 class Application(object):
 
     @staticmethod
+    def executable():
+        """Return the pathname of the application executable"""
+        if platform.system() == "Darwin":
+            # the viewer executable is found inside the companion bundled
+            # Viewer.app/Contents/MacOS
+            return os.path.join(Application._darwin_viewer_app_contents_path(),
+                                "MacOS", Application.name())
+        else:
+            # On other platforms, the executable is found in the same
+            # directory as this script
+            return os.path.join(os.path.dirname(__file__), Application.name())
+
+    @staticmethod
     def name():
         """Return the conventional application name"""
         channel_base = BuildData.get('Channel Base')
         running_on = platform.system()
         if running_on == 'Darwin':
-            # the viewer executable is found inside the companion bundled
-            # Viewer.app/Contents/MacOS; we want to return a relative path
-            executable_name = os.path.relpath(
-                os.path.join(Application._darwin_viewer_app_contents_path(),
-                             "MacOS", channel_base),
-                os.path.dirname(__file__))
+            name = channel_base
         elif running_on == 'Windows':
             # MAINT-7292: do not infer name from directory; read it from build_data.json as produced by the build
-            executable_name = BuildData.get('Executable')
+            name = BuildData.get('Executable')
         elif running_on == 'Linux':
-            executable_name = ''.join(channel_base.split()) # remove all whitespace
+            name = ''.join(channel_base.split()) # remove all whitespace
         else:
             #SL doesn't run on VMS or punch cards
             raise Error("Unsupported platform '%s'" % running_on)
-        return executable_name
+        return name
 
     @staticmethod
     def app_data_path():
