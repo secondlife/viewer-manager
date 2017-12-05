@@ -33,6 +33,15 @@ from copy import deepcopy
 from datetime import datetime   
 from logging import DEBUG
 from vmp_util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file
+# -------------------------------- temporary ---------------------------------
+import os, sys
+print >>sys.stderr, 72*'-'
+from pprint import pprint
+print >>sys.stderr, "APP_DATA_DIR = %r" % os.environ['APP_DATA_DIR']
+print >>sys.stderr, "sys.path:"
+pprint(sys.path, sys.stderr)
+print >>sys.stderr, 72*'-'
+# ----------------------------------------------------------------------------
 from llbase import llsd
 from llbase import llrest
 

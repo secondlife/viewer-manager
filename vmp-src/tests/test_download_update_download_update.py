@@ -53,6 +53,14 @@ if windows.search(sys.platform.lower()):
     os.environ['PYTHONPATH'] = local_llbase
     sys.path.insert(0, local_llbase)
 os.environ['APP_DATA_DIR'] = os.path.dirname(__file__)
+# -------------------------------- temporary ---------------------------------
+print >>sys.stderr, 72*'-'
+from pprint import pprint
+print >>sys.stderr, "APP_DATA_DIR = %r" % os.environ['APP_DATA_DIR']
+print >>sys.stderr, "sys.path:"
+pprint(sys.path, sys.stderr)
+print >>sys.stderr, 72*'-'
+# ----------------------------------------------------------------------------
 from llbase import llsd
 from llbase import llrest    
 import download_update
