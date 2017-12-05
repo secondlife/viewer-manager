@@ -53,7 +53,7 @@ if windows.search(sys.platform.lower()):
     os.environ['PYTHONPATH'] = local_llbase
     sys.path.insert(0, local_llbase)
 os.environ['APP_DATA_DIR'] = os.path.dirname(__file__)
-from llbase_importer import llsd, llrest
+from llbase import llsd, llrest
 import download_update
 
 #Nota Bene: testing Tkinter UI elements should be done by a QA engineer as we don't have test infrastructure

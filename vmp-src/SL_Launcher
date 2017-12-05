@@ -96,25 +96,8 @@ if getattr(sys, 'frozen', False):
 def get_cmd_line(cmd_settings_file = None):
     log=SL_Logging.getLogger('get_cmd_line')
     if cmd_settings_file is None:
-        platform_name = platform.system()
-        #find the parent of the logs and user_settings directories
-        if (platform_name == 'Darwin'):
-            # Contents/MacOS/__file__ => Contents/Resources
-            cmd_settings_file = os.path.join(os.path.dirname(__file__), os.pardir, 'Resources')
-        elif (platform_name == 'Linux'):
-            # app_settings in same directory as __file__
-            cmd_settings_file = os.path.dirname(__file__)
-        elif (platform_name == 'Windows'):
-            # app_settings in same directory as this executable
-            cmd_settings_file = os.path.dirname(sys.executable)
-        else:
-            # unsupported platform
-            cmd_settings_file = os.path.dirname(__file__)
-            log.warning("Unsupported platform %s, guessing app_settings in %s",
-                        platform_name, cmd_settings.file)
-
-        # now that we've got the platform-dependent part...
-        cmd_settings_file = os.path.join(cmd_settings_file, 'app_settings', 'cmd_line.xml')
+        cmd_settings_file = os.path.join(Application.app_data_path(),
+                                         'app_settings', 'cmd_line.xml')
 
     log.debug("reading command line rules from '%s'" % cmd_settings_file)
     try:

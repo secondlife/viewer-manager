@@ -33,7 +33,7 @@ from copy import deepcopy
 from datetime import datetime   
 from logging import DEBUG
 from vmp_util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file
-from llbase_importer import llsd, llrest
+from llbase import llsd, llrest
 
 import apply_update
 import download_update
