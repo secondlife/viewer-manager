@@ -33,8 +33,7 @@ from copy import deepcopy
 from datetime import datetime   
 from logging import DEBUG
 from vmp_util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file
-from llbase import llsd
-from llbase import llrest
+from llbase_importer import llsd, llrest
 
 import apply_update
 import download_update
@@ -919,7 +918,7 @@ if __name__ == '__main__':
     # Initialize the python logging system to SL Logging format and destination
     log = SL_Logging.getLogger('SL_Updater')
     try:
-        viewer_binary = os.path.join(os.path.dirname(sys.executable), Application.name())
+        viewer_binary = Application.executable()
         update_manager(viewer_binary)
     except Exception:
         log.exception("Unhandled exception")
