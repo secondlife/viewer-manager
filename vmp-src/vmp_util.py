@@ -171,6 +171,10 @@ class Application(object):
             # Viewer.app/Contents/MacOS
             return os.path.join(Application._darwin_viewer_app_contents_path(),
                                 "MacOS", Application.name())
+        elif platform.system() == "Windows":
+            # On Windows, the executable is in the same directory as the
+            # running SL_Launcher.exe -- but it's a little weird to locate that
+            return os.path.join(os.path.dirname(sys.executable), Application.name())
         else:
             # On other platforms, the executable is found in the same
             # directory as this script
