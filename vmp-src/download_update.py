@@ -48,11 +48,12 @@ import requests.packages.urllib3
 requests.packages.urllib3.disable_warnings()
 import tempfile
 import time
-import update_manager
 from vmp_util import SL_Logging, Application
 
 #module default
-CHUNK_SIZE = 1024
+# MAINT-8082: empirically, if this isn't big enough, it can actually slow
+# downloads on the Mac
+CHUNK_SIZE = 1024*1024
 
 class DummyProgressBar(object):
     def step(self, value):
@@ -62,7 +63,7 @@ class DummyProgressBar(object):
         pass
 
 #Note: No exception handling here! Response to exceptions is the responsibility of the caller
-def download_update(url = None, download_dir = None, size = None, progressbar = False, chunk_size = CHUNK_SIZE):
+def download_update(url, download_dir, size, progressbar = False, chunk_size = CHUNK_SIZE):
     #url to download from
     #download_dir to download to
     #total size (for progressbar) of download
@@ -71,7 +72,8 @@ def download_update(url = None, download_dir = None, size = None, progressbar = 
 
     log=SL_Logging.getLogger('download_update')
     log.info("Downloading new viewer from %r to %r" % (url, download_dir))
-    log.debug(" url %s, download_dir %s, size %s, progressbar %s, chunk_size %s" % (url, download_dir, size, progressbar, chunk_size))
+    log.debug(" url %s, download_dir %s, size %s, progressbar %s, chunk_size %s",
+              url, download_dir, size, progressbar, chunk_size)
     try:
         os.makedirs(download_dir)
     except OSError as err:

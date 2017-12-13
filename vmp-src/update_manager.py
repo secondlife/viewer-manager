@@ -91,20 +91,17 @@ NO64_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
 if getattr(sys, 'frozen', False):
     __file__ = sys._MEIPASS
 
-def md5file(fname=None, handle=None):
+def md5file(fname):
+    with open(fname, "rb") as f:
+        return md5handle(f)
+
+def md5handle(handle):
     #utility method to compute the checksum of the contents of a file
     hash_md5 = hashlib.md5()
-    if fname is not None:
-        with open(fname, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_md5.update(chunk)
     #unit tests use tempfile temporary files which return handles to files that vanish if you
     #close the handle while Windows will say permission denied to a second handle.
-    elif handle is not None:
-        for chunk in iter(lambda: handle.read(4096), b""):
-            hash_md5.update(chunk)
-    else:
-        return None
+    for chunk in iter(lambda: handle.read(4096), b""):
+        hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
 def convert_version_file_style(version):
@@ -582,7 +579,7 @@ def choose_update(platform_key, settings, vvm_response):
 
     return chosen_result
 
-def download(url, version, download_dir, size, hash, background, chunk_size = 5*1024):
+def download(url, version, download_dir, size, hash, background):
     log=SL_Logging.getLogger('download')
 
     ground = "background" if background else "foreground"
@@ -592,7 +589,7 @@ def download(url, version, download_dir, size, hash, background, chunk_size = 5*
              version, download_dir, ground)
     for download_tries in xrange(3):
         download_args = dict(url = url, download_dir = download_dir, size = size,
-                             progressbar = (not background), chunk_size = chunk_size)
+                             progressbar = (not background))
         log.debug("%s%s downloader args: %r",
                   ("trying again -- " if download_tries else ""),
                   ground, download_args)
@@ -712,11 +709,7 @@ def _update_manager(command, cli_overrides = {}):
         install_mode = INSTALL_MODE_AUTO
     log.info("Update mode (UpdaterServiceSetting) is %s (%d)" % (["Mandatory Only", "Prompt When Optional", "", "Automatic"][install_mode], install_mode))
 
-    #use default chunk size if none is given, set UpdaterWillingToTest to None if not given
-    #this is to prevent key errors on accessing keys that may or may not exist depending on cli options given
-    # "chunk_size" ? "UpdaterMaximumBandwidth" ? Are these the same thing?
-    cli_chunk_size_setting = cli_settings.get('UpdaterMaximumBandwidth', None)
-    chunk_size = int(cli_chunk_size_setting if cli_chunk_size_setting else 1024 * 10)
+    #set UpdaterWillingToTest to None if not given
     UpdaterWillingToTest = cli_settings.get('UpdaterWillingToTest')
     UpdaterServiceURL = cli_settings.get('UpdaterServiceURL')
 
@@ -801,8 +794,7 @@ def _update_manager(command, cli_overrides = {}):
                      download_dir = download_dir,
                      hash = chosen_result['hash'],
                      size = chosen_result['size'],
-                     background = False,
-                     chunk_size = chunk_size)
+                     background = False)
         # Do the install
         return install(command, platform_key = platform_key, download_dir = download_dir)
     elif INSTALL_MODE_MANDATORY_ONLY == install_mode:

@@ -67,18 +67,14 @@ $/LicenseInfo$
 
 def test_empty_md5file():
     empty_handle = tempfile.TemporaryFile('r')
-    assert_equal(update_manager.md5file(None, empty_handle), 'd41d8cd98f00b204e9800998ecf8427e'), "md5sum of empty file did not match"
+    assert_equal(update_manager.md5handle(empty_handle), 'd41d8cd98f00b204e9800998ecf8427e'), "md5sum of empty file did not match"
 
 def test_license_md5file():
-    license_handle = tempfile.NamedTemporaryFile(mode = 'w', bufsize = 0, delete = False)
-    license_handle.write(license_string)
-    license_handle.close()
-    plat = Application.platform_key()
-    if plat == 'mac':
+    license_handle = tempfile.NamedTemporaryFile(mode = 'wb', bufsize = 0, delete = False)
+    try:
+        license_handle.write(license_string)
+        license_handle.close()
+        plat = Application.platform_key()
         assert_equal(update_manager.md5file(license_handle.name), '3e2f43ec1b5b84c0a2370e772fbe0ea2'), "md5sum of ASCII text file did not match"
-    elif plat == 'win':
-        assert_equal(update_manager.md5file(license_handle.name), 'b385c4eb96984648bfbd596f48319e3d'), "md5sum of ASCII text file did not match"
-    else:
-        #no linux machine to get golden value from atm, if it works on mac and win, it will likely work correctly on lnx
-        assert True
-    os.remove(license_handle.name)
+    finally:
+        os.remove(license_handle.name)

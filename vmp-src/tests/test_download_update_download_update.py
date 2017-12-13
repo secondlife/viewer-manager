@@ -95,7 +95,7 @@ def test_download_update_null_url(tmpdir1):
         
 @with_setup_args.with_setup_args(download_update_setup, download_update_teardown)
 def test_download_update_correct_url(tmpdir1):
-    download_update.download_update(url=URL, download_dir=tmpdir1, size=URL_len, progressbar=False, chunk_size=1024)
+    download_update.download_update(url=URL, download_dir=tmpdir1, size=URL_len, progressbar=False)
     #if behaving correctly, the downloader should leave a tmpfile with the
     #.done extension in the download directory (tmpdir1)
     assert glob.glob(os.path.join(tmpdir1, marker_regex))
