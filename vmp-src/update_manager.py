@@ -101,7 +101,7 @@ class MergedSettings(object):
     def __init__(self, settings):
         """pass settings as the contents of a settings.xml file"""
         # We only care about settings entries that have a 'Value' sub-key.
-        self.settings = {key: entry['Value'] for key, entry in settings.items
+        self.settings = {key: entry['Value'] for key, entry in settings.items()
                          if 'Value' in entry}
         # May or may not be set later; see override_with().
         self.overrides = {}
@@ -109,6 +109,10 @@ class MergedSettings(object):
     def override_with(self, overrides):
         """pass overrides as a plain dict mapping keys to actual values"""
         self.overrides = overrides
+
+    def __nonzero__(self):
+        # not empty if either settings or overrides is non-empty
+        return bool(self.overrides) or bool(self.settings)
 
     def __getitem__(self, key):
         """operator[] method"""
