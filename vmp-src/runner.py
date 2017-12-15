@@ -13,6 +13,7 @@ $/LicenseInfo$
 from contextlib import contextmanager
 import logging
 import os
+import platform
 import subprocess
 import sys
 
@@ -59,6 +60,46 @@ class Runner(object):
             InstallerUserMessage.basic_message(message)
             sys.exit(-1)
 
+    def Popen(self, command, **kwds):
+        """
+        This Popen() method is intended as a plug-compatible wrapper for
+        subprocess.Popen().
+
+        On Windows, with Python 2, passing a Unicode command pathname fails
+        due to encoding issues. What works is to split() the pathname, change
+        to the containing directory and then execute the filename.
+        """
+        if platform.system() != "Windows":
+            return subprocess.Popen(command, **kwds)
+
+        # On Windows, use MAINT-8087 workaround.
+        # Get command as a list.
+        if isinstance(command, basestring):
+            command = [command]
+        else:
+            command = list(command)
+
+        # DON'T pass subprocess the whole pathname, just the unqualified
+        # program name. (We assume a command[0]. If you pass an empty list,
+        # you get what you deserve.)
+        progdir, prog = os.path.split(command[0])
+        command[0] = prog
+
+        # change to the program's directory
+        olddir = os.getcwd()
+        os.chdir(progdir)
+        try:
+            return subprocess.Popen(command, **kwds)
+        finally:
+            # try to restore previous directory
+            try:
+                os.chdir(olddir)
+            except OSError:
+                # restoring the previous directory is best effort (because in
+                # the non-ASCII case, we might get an unusable path back from
+                # getcwd()), but frankly we don't much care
+                pass        
+
 class PopenRunner(Runner):
     def run(self):
         """
@@ -70,13 +111,13 @@ class PopenRunner(Runner):
         If it succeeds, return the subprocess.Popen object.
         """
         log=SL_Logging.getLogger('PopenRunner')
-        log.info("Launching %s", (self.command,))
+        log.info("Launching %s", self.command)
 
         env = os.environ.copy()
         env["PARENT"] = "SL_Launcher" # suppresses warning about not running the viewer directly
 
         with self.error_trap(log):
-            viewer_process = subprocess.Popen(self.command, env=env)
+            viewer_process = self.Popen(self.command, env=env)
 
         log.info("Successfully launched %s", (self.command,))
         return viewer_process
@@ -95,9 +136,9 @@ class ExecRunner(Runner):
             # MAINT-7831: Windows doesn't have a native execv(), and it's not
             # clear that Python's os.execv() emulation is working for us. Use
             # subprocess.Popen in this scenario too.
-            log.info("Running %s", (self.command,))
+            log.info("Running %s", self.command)
             with self.error_trap(log):
-                subprocess.Popen(self.command)
+                self.Popen(self.command)
 
             # If we succeeded, terminate immediately so installer can replace
             # this running executable.
