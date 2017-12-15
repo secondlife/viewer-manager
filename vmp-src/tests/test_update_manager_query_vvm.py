@@ -123,7 +123,9 @@ def test_query_vvm():
 
     # This test CANNOT succeed with $http_proxy in the environment.
     os.environ.pop("http_proxy", None)
-    results = update_manager.query_vvm(platform_key=Application.platform_key(), settings={}, UpdaterServiceURL='http://localhost:'+str(port)+'/update')
+    results = update_manager.query_vvm(
+        platform_key=Application.platform_key(),
+        settings=dict(UpdaterServiceURL='http://localhost:%s/update' % port))
 
     assert results
     assert channel_pattern.search(results['channel']), "Incorrect channel %r" % results

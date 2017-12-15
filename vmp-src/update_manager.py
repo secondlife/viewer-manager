@@ -62,6 +62,7 @@ import urllib
 import urllib3
 import warnings
 
+DEFAULT_UPDATE_SERVICE = 'https://update.secondlife.com/update'
 
 class UpdateError(Exception):
     pass
@@ -90,6 +91,45 @@ NO64_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
 #normal Python environment.
 if getattr(sys, 'frozen', False):
     __file__ = sys._MEIPASS
+
+class MergedSettings(object):
+    """
+    This class unifies settings from the settings.xml file (in which each key
+    maps to a subdict that has (or should have) a 'Value' key) and a plain
+    dict corresponding to command-line --set overrides.
+    """
+    def __init__(self, settings):
+        """pass settings as the contents of a settings.xml file"""
+        # We only care about settings entries that have a 'Value' sub-key.
+        self.settings = {key: entry['Value'] for key, entry in settings.items()
+                         if 'Value' in entry}
+        # May or may not be set later; see override_with().
+        self.overrides = {}
+
+    def override_with(self, overrides):
+        """pass overrides as a plain dict mapping keys to actual values"""
+        self.overrides = overrides
+
+    def __nonzero__(self):
+        # not empty if either settings or overrides is non-empty
+        return bool(self.overrides) or bool(self.settings)
+
+    def __getitem__(self, key):
+        """operator[] method"""
+        try:
+            # if the key exists in overrides, look no further
+            return self.overrides[key]
+        except KeyError:
+            # okay, look further
+            return self.settings[key]
+
+    def get(self, key, default=None):
+        try:
+            # if the key exists in overrides, look no further
+            return self.overrides[key]
+        except KeyError:
+            # okay, look further
+            return self.settings.get(key, default)
 
 def md5file(fname):
     with open(fname, "rb") as f:
@@ -231,7 +271,7 @@ def sleep_between(iterable, message, duration):
         yield item
 
 def get_settings(settings_file):
-    #return the settings file parsed into a dict
+    #return the settings file parsed into a MergedSettings object
     settings={}
     log=SL_Logging.getLogger('get_settings')
 
@@ -248,7 +288,7 @@ def get_settings(settings_file):
         log.warning("Could not read settings file %r: %s", os.path.abspath(settings_file), e)
     else:
         log.debug("Loaded viewer settings from %r", os.path.abspath(settings_file))
-    return settings
+    return MergedSettings(settings)
 
 def make_VVM_UUID_hash(platform_key):
     log = SL_Logging.getLogger('make_VVM_UUID_hash')
@@ -333,8 +373,7 @@ def wmic(*args):
             raise UpdateError("No wmic command found - bad Windows install?")
         raise
 
-def query_vvm(platform_key = None, settings = {},
-              UpdaterServiceURL = None, UpdaterWillingToTest = None):
+def query_vvm(platform_key, settings):
     """
     Ask the viewer version manager what builds are available for me
     given my platform and version.
@@ -348,12 +387,45 @@ def query_vvm(platform_key = None, settings = {},
     # https://lindenlab.atlassian.net/wiki/spaces/SLT/pages/71106564/Viewer+Version+Manager+REST+API
     # See https://lindenlab.atlassian.net/wiki/spaces/SLT/pages/466081/Viewer+Version+Manager+in+AWS
 
-    VVM_platform = platform_key
+    version = BuildData.get('Version')
+    channelname = BuildData.get('Channel')
+    if channelname.endswith(" Test"):
+        # The priority order is:
+        # 1. If the user specified --set UpdaterWillingToTest, that rules.
+        # 2. If the user didn't override, but it's a Second Life Test build,
+        #    not willing to test.
+        # 3. Consult settings.xml.
+        # The tricky part is priority 2: 1 and 3 are implicitly handled by
+        # MergedSettings. Use overrides.setdefault(). Then if the user
+        # specified --set UpdaterWillingToTest, setdefault() leaves it alone.
+        # Otherwise it sets overrides['UpdaterWillingToTest']=0, which takes
+        # priority over anything from settings.xml.
+        settings.overrides.setdefault('UpdaterWillingToTest', 0)
+    UpdaterWillingToTest = settings.get('UpdaterWillingToTest', 1)
+    try:
+        # convert "0" or "1" to corresponding integer
+        UpdaterWillingToTest = int(UpdaterWillingToTest)
+    except ValueError:
+        try:
+            # special form permitted only on command line
+            UpdaterWillingToTest = dict(testok=1, testno=0)[UpdaterWillingToTest]
+        except KeyError:
+            bad = UpdaterWillingToTest
+            UpdaterWillingToTest = 1
+            log.error("Invalid value for UpdaterWillingToTest, assuming %s: %r",
+                      UpdaterWillingToTest, bad)
+    # now that we have UpdaterWillingToTest either 0 or 1...
+    test_ok = 'testok' if UpdaterWillingToTest else 'testno'
+    log.debug("UpdaterWillingToTest = %r, test_ok = %r", UpdaterWillingToTest, test_ok)
 
+    UpdaterServiceURL = settings.get('UpdaterServiceURL')
     if not UpdaterServiceURL:
         UpdaterServiceURL=os.getenv('SL_UPDATE_SERVICE',
-            BuildData.get('Update Service',
-                          'https://update.secondlife.com/update'))
+            BuildData.get('Update Service', DEFAULT_UPDATE_SERVICE))
+
+    #suppress warning we get in dev env for altname cert 
+    if UpdaterServiceURL != DEFAULT_UPDATE_SERVICE:
+        warnings.simplefilter('ignore', urllib3.exceptions.SecurityWarning)
 
     bitness = getBitness(platform_key)
 
@@ -361,8 +433,6 @@ def query_vvm(platform_key = None, settings = {},
     # so that if it can be configured with more specific rules
     VVM_platform = "%s%d" % (platform_key, bitness)
 
-    channelname = BuildData.get('Channel')
-    version = BuildData.get('Version')
     # we need to use the dotted versions of the platform versions in order to be compatible with VVM rules and arithmetic
     if platform_key == 'win':
         platform_version = platform.win32_ver()[1]
@@ -372,59 +442,14 @@ def query_vvm(platform_key = None, settings = {},
         platform_version = platform.release()
     #this will always return something usable, error handling in method
     UUID = str(make_VVM_UUID_hash(platform_key))
-    #note that this will not normally be in a settings.xml file and is only here for test builds.
-    #for test builds, add this key to the ../user_settings/settings.xml
-    """
-    <key>UpdaterWillingToTest</key>
-    <map>
-    <key>Comment</key>
-        <string>Whether or not the updater should offer test candidate upgrades.</string>
-    <key>Type</key>
-        <string>Boolean</string>
-    <key>Value</key>
-        <integer>0</integer>
-    </map>
-    """
-    if UpdaterWillingToTest is not None:
-        # user provided command-line override
-        try:
-            # convert "0" or "1" to corresponding integer
-            UpdaterWillingToTest = int(UpdaterWillingToTest)
-        except ValueError:
-            try:
-                # special form permitted only on command line
-                UpdaterWillingToTest = dict(testok=1, testno=0)[UpdaterWillingToTest]
-            except KeyError:
-                bad = UpdaterWillingToTest
-                UpdaterWillingToTest = 1
-                log.error("Invalid value for UpdaterWillingToTest, assuming %s: %r",
-                          UpdaterWillingToTest, bad)
-        log.debug("command-line override for UpdaterWillingToTest treated as %r",
-                  UpdaterWillingToTest)
-    elif re.match('%s Test$' % Application.name(), channelname) is not None:
-        # if running a Second Life Test viewer, don't accept other test viewers
-        UpdaterWillingToTest = 0
-        log.debug("%s viewer forces UpdaterWillingToTest to %r",
-                  channelname, UpdaterWillingToTest)
-    else:
-        # no override and not test viewer -- read from user settings file
-        UpdaterWillingToTest = int(settings.get('UpdaterWillingToTest', {}).get('Value', 1))
-        log.debug("UpdaterWillingToTest from settings file: %r",
-                  UpdaterWillingToTest)
-
-    # now that we have UpdaterWillingToTest either 0 or 1...
-    test_ok = 'testok' if UpdaterWillingToTest else 'testno'
-
-    #suppress warning we get in dev env for altname cert 
-    if UpdaterServiceURL != 'https://update.secondlife.com/update':
-        warnings.simplefilter('ignore', urllib3.exceptions.SecurityWarning)
     
-    #channelname is a list because although it is only one string, it is a kind of argument and viewer args can take multiple keywords.
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
-             (str(channelname), version, VVM_platform, platform_version, test_ok, UUID))
-    update_urlpath =  urllib.quote('/'.join(['v1.2', str(channelname), version, VVM_platform, platform_version, test_ok, UUID]))
-    debug_param= {'explain': 1} if log.isEnabledFor(DEBUG) else {}; # if debugging, ask the VVM to say how it got the response 
-    log.debug("Sending query to VVM: query %s/%s%s" % (UpdaterServiceURL, update_urlpath, (" with explain requested" if debug_param else "")))
+             (channelname, version, VVM_platform, platform_version, test_ok, UUID))
+    update_urlpath =  urllib.quote('/'.join(['v1.2', channelname, version, VVM_platform, platform_version, test_ok, UUID]))
+    debug_param= {'explain': 1} if log.isEnabledFor(DEBUG) else {} # if debugging, ask the VVM to say how it got the response 
+    log.debug("Sending query to VVM: query %s/%s%s",
+              UpdaterServiceURL, update_urlpath,
+              (" with explain requested" if debug_param else ""))
     VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
     
     try:
@@ -523,24 +548,24 @@ def choose_update(platform_key, settings, vvm_response):
             target_platform = 'win32'
 
     # We could have done this check earlier, but by waiting we can make the warnings more specific
-    if settings.get('ForceAddressSize',None):
-        if platform_key == 'win':
-            try:
-                forced_bitness = int(settings['ForceAddressSize'])
-                log.info("ForceAddressSize setting: %d" % forced_bitness)
-                if target_platform == 'win32' and forced_bitness == 64:
-                    log.warning("The ForceAddressSize setting says 64; that may not work, but trying anyway...")
-                    target_platform = 'win64'
-                elif target_platform == 'win64' and forced_bitness == 32:
-                    log.warning("The ForceAddressSize setting says 32; your system may work with 64 - consider removing the setting")
-                    target_platform = 'win32'
-                else:
-                    log.info("target platform is %s, ForceAddressSize is %d; no effect" % (target_platform, forced_bitness))
-
-            except ValueError:
-                log.warning("Invalid value '%s' for ForceAddressSize setting; disregarding it" % settings['ForceAddressSize'])
+    ForceAddressSize = settings.get('ForceAddressSize')
+    if ForceAddressSize:
+        try:
+            forced_bitness = int(ForceAddressSize)
+        except ValueError:
+            log.warning("Invalid value %r for ForceAddressSize setting; disregarding",
+                        ForceAddressSize)
         else:
-            log.warning('The ForceAddressSize setting is used only on Windows; ignored')
+            log.debug("ForceAddressSize setting: %d", forced_bitness)
+            if target_platform == 'win32' and forced_bitness == 64:
+                log.warning("ForceAddressSize 64 may not work, but trying anyway...")
+                target_platform = 'win64'
+            elif target_platform == 'win64' and forced_bitness == 32:
+                log.warning("ForceAddressSize 32: your system may work with 64 - consider omitting")
+                target_platform = 'win32'
+            else:
+                log.info("target platform is %s, ForceAddressSize is %d; no effect",
+                         target_platform, forced_bitness)
 
     # Ok... now we know what the target_platform is ...
 
@@ -688,6 +713,9 @@ def _update_manager(command, cli_overrides = {}):
     platform_key = Application.platform_key() # e.g. "mac"
     settings = get_settings(cli_overrides.get('settings') or Application.user_settings_path())
 
+    # 'settings' is from the settings file. Now apply command-line overrides.
+    settings.override_with(cli_overrides.get('set', {}))
+
     # If a complete download of that update is found, check the update preference:
     #settings['UpdaterServiceSetting'] =
     INSTALL_MODE_AUTO=3            # Install each update automatically
@@ -695,29 +723,29 @@ def _update_manager(command, cli_overrides = {}):
     INSTALL_MODE_MANDATORY_ONLY=0  # Install only mandatory updates
     # (see panel_preferences_setup.xml)
 
+    install_modes = {
+        INSTALL_MODE_AUTO:            "Automatic",
+        INSTALL_MODE_PROMPT_OPTIONAL: "Prompt When Optional",
+        INSTALL_MODE_MANDATORY_ONLY:  "Mandatory Only",
+        }
+
     # If cli_overrides['set']['UpdaterServiceSetting'], use that;
     # else if settings['UpdaterServiceSetting']['Value'], use that;
     # if none of the above, or if value is not valid, default to INSTALL_MODE_AUTO.
-    cli_settings = cli_overrides.get('set', {})
-    install_mode_string=cli_settings.get('UpdaterServiceSetting',settings.get('UpdaterServiceSetting', {}).get('Value', INSTALL_MODE_AUTO))
+    install_mode_string = settings.get('UpdaterServiceSetting', INSTALL_MODE_AUTO)
     try:
         install_mode=int(install_mode_string)
-        if install_mode not in (INSTALL_MODE_AUTO, INSTALL_MODE_PROMPT_OPTIONAL, INSTALL_MODE_MANDATORY_ONLY):
-            raise ValueError
-    except ValueError:
-        log.error("Invalid setting value for UpdaterServiceSetting (%s); falling back to auto (%d)" % (install_mode_string, INSTALL_MODE_AUTO))
+        install_mode_desc = install_modes[install_mode]
+    except (ValueError, KeyError):
+        log.error("Invalid setting value for UpdaterServiceSetting (%s); falling back to auto (%d)",
+                  install_mode_string, INSTALL_MODE_AUTO)
         install_mode = INSTALL_MODE_AUTO
-    log.info("Update mode (UpdaterServiceSetting) is %s (%d)" % (["Mandatory Only", "Prompt When Optional", "", "Automatic"][install_mode], install_mode))
-
-    #set UpdaterWillingToTest to None if not given
-    UpdaterWillingToTest = cli_settings.get('UpdaterWillingToTest')
-    UpdaterServiceURL = cli_settings.get('UpdaterServiceURL')
+    log.info("Update mode (UpdaterServiceSetting) is %s (%d)",
+             install_modes[install_mode], install_mode)
 
     # get channel and version
     default_channel = BuildData.get('Channel')
     # we send the override to the VVM, but retain the default_channel version for in_place computations
-    # note that this get() intentionally conflates the case of 'no channel
-    # key' with 'not bool(value of channel key)'
     channel = cli_overrides.get('channel')
     if channel and channel != default_channel:
         log.info("Overriding channel '%s' with '%s' from command line" %
@@ -728,9 +756,7 @@ def _update_manager(command, cli_overrides = {}):
 
     #  On launch, the Viewer Manager should query the Viewer Version Manager update api.
     result_data = query_vvm(platform_key=platform_key,
-                            settings=settings,
-                            UpdaterServiceURL=UpdaterServiceURL,
-                            UpdaterWillingToTest=UpdaterWillingToTest)
+                            settings=settings)
 
     #nothing to do or error
     if not result_data:
