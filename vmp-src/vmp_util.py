@@ -260,29 +260,42 @@ class Application(object):
         elif (running_on == 'Linux'): 
             base_dir = os.path.join(os.path.expanduser('~'))
         elif (running_on == 'Windows'):
-            import ctypes
-            dll = ctypes.windll.shell32
-            buf = ctypes.create_unicode_buffer(300)
-            # SHGetSpecialFolderPath():
-            # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762204(v=vs.85).aspx
-            # This says it has been deprecated in favor of SHGetFolderPath():
-            # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762181(v=vs.85).aspx
-            # which in turn says new code should use SHGetKnownFolderPath:
-            # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762188(v=vs.85).aspx
-            # However, the parameters to each of those get more and more
-            # complicated (therefore harder to fake up with Python ctypes),
-            # until with the recommended SHGetKnownFolderPath() you need an
-            # entire Python module just to make that one call:
-            # https://gist.github.com/mkropat/7550097
-            # Therefore just use freakin SHGetSpecialFolderPath(), whose
-            # parameters are decimal integers documented here:
-            # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762494(v=vs.85).aspx
-            CSIDL_APPDATA = 26
-            dll.SHGetSpecialFolderPathW(None, buf, CSIDL_APPDATA, False)
-            base_dir = os.path.join(buf.value, app_element_nowhite)
+            appdata = Application.get_folder_path(Application.CSIDL_APPDATA)
+            base_dir = os.path.join(appdata, app_element_nowhite)
         else:
             raise ValueError("Unsupported platform '%s'" % running_on)
         return base_dir
+
+    # Folder ID values for get_folder_path()
+    CSIDL_APPDATA       = 26
+    CSIDL_LOCAL_APPDATA = 28
+
+    @staticmethod
+    def get_folder_path(id):
+        """
+        Windows-only function to return the special folder pathname
+        corresponding to the passed ID value.
+        """
+        import ctypes
+        dll = ctypes.windll.shell32
+        buf = ctypes.create_unicode_buffer(300)
+        # SHGetFolderPath():
+        # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762181(v=vs.85).aspx
+        # This says new code should use SHGetKnownFolderPath():
+        # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762188(v=vs.85).aspx
+        # However, the parameters to SHGetKnownFolderPath() are more
+        # complicated (therefore harder to fake up with Python ctypes) --
+        # you need an entire Python module just to make that one call:
+        # https://gist.github.com/mkropat/7550097
+        # Therefore just use SHGetFolderPath(), whose parameters are
+        # decimal integers documented here:
+        # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762494(v=vs.85).aspx
+        rc = dll.SHGetFolderPathW(None, id, None, 0, buf)
+        if rc == 0:
+            return buf.value
+        # rc is an HRESULT, which probably packs hi word, lo word, so display
+        # in hex. AND with F's to simulate 32-bit truncation.
+        raise Error("SHGetFolderPathW(%s) failed with %08x" % (id, (rc & 0xFFFFFFFF)))
 
     @staticmethod
     def user_settings_path():

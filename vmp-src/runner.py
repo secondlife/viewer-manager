@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 import InstallerUserMessage
-from vmp_util import SL_Logging
+from vmp_util import SL_Logging, Application
 
 class Runner(object):
     def __init__(self, *command):
@@ -114,7 +114,18 @@ class PopenRunner(Runner):
         log.info("Launching %s", self.command)
 
         env = os.environ.copy()
-        env["PARENT"] = "SL_Launcher" # suppresses warning about not running the viewer directly
+        # suppresses warning about not running the viewer directly
+        env["PARENT"] = "SL_Launcher"
+
+        if platform.system() == "Windows":
+            # MAINT-8087: for a Windows user with a non-ASCII username, the
+            # environment variables APPDATA and LOCALAPPDATA are just wrong.
+            # Set them properly. Don't forget to encode them: they have to
+            # pass through the environment as 8-bit strings.
+            env.update(**{
+                key: Application.get_folder_path(id).encode('utf8')
+                for key, id in dict(APPDATA=Application.CSIDL_APPDATA,
+                                    LOCALAPPDATA=Application.CSIDL_LOCAL_APPDATA)})
 
         with self.error_trap(log):
             viewer_process = self.Popen(self.command, env=env)
