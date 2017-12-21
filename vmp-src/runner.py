@@ -124,8 +124,8 @@ class PopenRunner(Runner):
             # pass through the environment as 8-bit strings.
             env.update(**{
                 key: Application.get_folder_path(id).encode('utf8')
-                for key, id in dict(APPDATA=Application.CSIDL_APPDATA,
-                                    LOCALAPPDATA=Application.CSIDL_LOCAL_APPDATA)})
+                for key, id in (("APPDATA",      Application.CSIDL_APPDATA),
+                                ("LOCALAPPDATA", Application.CSIDL_LOCAL_APPDATA))})
 
         with self.error_trap(log):
             viewer_process = self.Popen(self.command, env=env)
