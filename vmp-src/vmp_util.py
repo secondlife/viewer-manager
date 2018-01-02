@@ -165,20 +165,16 @@ class Application(object):
 
     @staticmethod
     def executable():
-        """Return the pathname of the application executable"""
+        """Return the pathname of the viewer executable"""
         if platform.system() == "Darwin":
             # the viewer executable is found inside the companion bundled
             # Viewer.app/Contents/MacOS
             return os.path.join(Application._darwin_viewer_app_contents_path(),
                                 "MacOS", Application.name())
-        elif platform.system() == "Windows":
-            # On Windows, the executable is in the same directory as the
-            # running SL_Launcher.exe -- but it's a little weird to locate that
-            return os.path.join(os.path.dirname(sys.executable), Application.name())
         else:
-            # On other platforms, the executable is found in the same
-            # directory as this script
-            return os.path.join(os.path.dirname(__file__), Application.name())
+            # On other platforms, the executable is found in the application
+            # install path
+            return os.path.join(Application.install_path(), Application.name())
 
     @staticmethod
     def name():
@@ -198,6 +194,61 @@ class Application(object):
         return name
 
     @staticmethod
+    def install_path():
+        """Return the pathname of the application's install directory"""
+        if platform.system() == "Windows":
+            # Even on Windows, if we're testing in a normal developer work
+            # area, we're using an ordinary Python interpreter with ordinary
+            # Python source modules.
+            # conflate "sys has no frozen attribute" with "sys.frozen == False"
+            if getattr(sys, 'frozen', False):
+                # sys.frozen == True: we're in PyInstaller land
+                # With PyInstaller, the zipped Python modules are unpacked to
+                # a temp directory, so __file__ lives in that temp directory
+                # instead of the actual application install directory. To find
+                # the install directory we must ask for the main executable --
+                # which, with PyInstaller, is the generated exe rather than a
+                # separate Python interpreter in a system install.
+                # Unfortunately (MAINT-8078) with Python 2, if the install
+                # directory contains non-ASCII characters, neither
+                # sys.executable nor sys.argv[0] is usable: Python 2 uses the
+                # ASCII variants of the Windows APIs, so any non-ASCII
+                # characters in the pathname are translated to plain ASCII
+                # question marks. We must ask Windows ourselves.
+                return os.path.dirname(Application.get_executable_name())
+
+        elif platform.system() == "Darwin":
+            # On Darwin, what do we mean by the install directory? Is that the
+            # embedded VMP app, or the embedded viewer app, or the outer
+            # Second Life.app? Is it the Contents directory, or MacOS, or
+            # Resources?
+            # We choose to return the outer Second Life.app directory -- not
+            # its Contents, or MacOS, or Resources, but the .app directory
+            # itself. __file__ should be:
+            # somepath/Second Life.app/Contents/Resources/Launcher.app/Contents/MacOS/vmp_util.py
+            pieces = os.abspath(__file__).rsplit(os.sep, 6)
+            try:
+                if (pieces[-7].endswith(".app")
+                    and pieces[-6] == "Contents"
+                    and pieces[-5] == "Resources"
+                    and pieces[-4].endswith(".app")
+                    and pieces[-3] == "Contents"
+                    and pieces[-2] == "MacOS"):
+                    # because we limited rsplit() to 6 splits, pieces[-7] is
+                    # "somepath/Second Life.app"
+                    return pieces[-7]
+                # developer work area: we're not in the embedded Launcher.app
+                # in the outer Second Life.app at all
+            except IndexError:
+                # developer work area: there just aren't that many path
+                # components in __file__
+                pass
+
+        # Here we're either not on Windows or Mac, or just running developer
+        # tests rather than the packaged application.
+        return os.path.dirname(__file__)
+
+    @staticmethod
     def app_data_path():
         try:
             # allow tests to override where to look for application data
@@ -212,7 +263,7 @@ class Application(object):
                 Application._darwin_viewer_app_contents_path(), "Resources")
         else:
             # Everywhere else, just look in the application directory.
-            app_data_dir = os.path.dirname(sys.executable)
+            app_data_dir = Application.install_path()
         return os.path.abspath(app_data_dir)
 
     @staticmethod
@@ -296,6 +347,53 @@ class Application(object):
         # rc is an HRESULT, which probably packs hi word, lo word, so display
         # in hex. AND with F's to simulate 32-bit truncation.
         raise Error("SHGetFolderPathW(%s) failed with %08x" % (id, (rc & 0xFFFFFFFF)))
+
+    @staticmethod
+    def get_executable_name():
+        """
+        Windows-only function to return the name by which the current process
+        was launched. We *should* be able to get this from sys.executable
+        and/or sys.argv[0], but Python 2.7 uses ASCII-only versions of the
+        applicable Windows APIs, so when the executable pathname contains
+        non-ASCII characters, they get translated to question marks. The
+        resulting pathname is useless because it doesn't map to anything on
+        the actual filesystem.
+        """
+        # derived from
+        # https://www.programcreek.com/python/example/55296/ctypes.wintypes.LPWSTR
+        # but since
+        # https://msdn.microsoft.com/en-us/library/windows/desktop/bb776391(v=vs.85).aspx
+        # says of CommandLineToArgvW()'s first parameter:
+        # "Pointer to a null-terminated Unicode string that contains the full
+        # command line. If this parameter is an empty string the function
+        # returns the path to the current executable file."
+        # Therefore we don't even call GetCommandLineW(), since all we really
+        # want for Christmas is the current executable file.
+        import ctypes
+        CommandLineToArgvW = ctypes.windll.shell32.CommandLineToArgvW
+        from ctypes.wintypes import LPWSTR, LPCWSTR, POINTER, HLOCAL
+        CommandLineToArgvW.argtypes = [ LPCWSTR, POINTER(ctypes.c_int)]
+        CommandLineToArgvW.restype = POINTER(LPWSTR)
+        LocalFree = ctypes.windll.kernel32.LocalFree
+        LocalFree.argtypes = [HLOCAL]
+        LocalFree.restype = HLOCAL
+        # variable into which CommandLineToArgvW() will store length of
+        # returned array
+        argc = ctypes.c_int()
+        argv = CommandLineToArgvW(unicode(), ctypes.byref(argc))
+        try:
+            # argv is a pointer, not an array as such -- len(argv) produces a
+            # TypeError; argv[:] produces a MemoryError, presumably when we
+            # run past the end of the array.
+            # argv[:argc.value] is the whole list of results.
+            # As long as argc.value >= 1, argv[0] is the executable name.
+            if not argc.value:
+                raise Error("CommandLineToArgvW() returned empty list")
+            # We're about to free argv. Make sure we copy its [0] entry into a
+            # new unicode object.
+            return unicode(argv[0])
+        finally:
+            LocalFree(argv)
 
     @staticmethod
     def user_settings_path():

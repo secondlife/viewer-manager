@@ -41,14 +41,35 @@ from InstallerUserMessage import status_message
 
 #if for some reason we are running on a POSIX machine with python less than 2.7
 #just give up on VMP and execute the viewer per product.
-if os.name != 'nt' and platform.python_version() < '2.7':
+if platform.system() != 'Windows' and platform.python_version_tuple() < (2, 7, 0):
     log = SL_Logging.getLogger('SL_Launcher')
     log.error("Computer is below minimum specifications. Python version needs to be 2.7, but is %r" % platform.python_version())
-    if sys.platform.startswith('darwin'):
+    absfile = os.path.abspath(__file__)
+    if platform.system == 'Darwin':
+        import glob
         executable_name = "Second Life"
-    elif sys.platform.startswith("linux"):
+        # __file__ is
+        # Second Life.app/Contents/Resources/launcher.app/Contents/MacOS/SL_Launcher
+        # need to run
+        # Second Life.app/Contents/Resources/viewer.app/Contents/MacOS/executable_name
+        # but we don't know the exact name of either launcher.app or
+        # viewer.app, just that they should (!) be the only two .apps
+        pieces = absfile.rsplit(os.sep, 4)
+        try:
+            pattern = os.path.join(pieces[-5], "*.app")
+        except IndexError:
+            log.error("Can't locate viewer relative to %s", absfile)
+            sys.exit(1)
+        apps = [app for app in glob.glob(pattern)
+                if os.path.basename(app) != pieces[-4]]
+        if len(apps) != 1:
+            log.error("%s viewer .app, found %s in %s",
+                      ("Ambiguous" if apps else "Missing"), apps, pattern)
+            sys.exit(1)
+        viewer_binary = os.path.join(apps[0], "Contents", "MacOS", executable_name)
+    elif platform.system == "Linux":
         executable_name = "secondlife"
-    viewer_binary = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), executable_name) 
+        viewer_binary = os.path.join(os.path.dirname(absfile), executable_name)
     log.debug("viewer binary name: %r" % viewer_binary)
 
     command = [viewer_binary] + sys.argv[1:]
@@ -62,36 +83,17 @@ import collections
 #NOTA BENE: 
 #   For POSIX platforms, llsd.py will be imported from the same directory.  
 #   For Windows, llsd.py will be compiled into the executable by pyinstaller
-try:
-    from llbase import llsd
-except:
-    #if Windows, this is expected, if not, we're dead
-    if os.name == 'nt':
-        pass
-import Tkinter
-import ttk
+#make sure we find our local llbase, which is in a subdir
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'llbase'))
+from llbase import llsd
 
 from datetime import datetime
 
 #module globals
 
-#this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
-if 'ython' in sys.executable:
-    sys.executable =  os.path.abspath(sys.argv[0])
-cwd = os.path.dirname(os.path.realpath(str(sys.executable)))
-
-#make sure we find our local llbase
-sys.path.insert(0, os.path.join(cwd, 'llbase'))
-
 #imports of other VMP modules
 import InstallerUserMessage
 import update_manager
-
-#this is to support pyinstaller, which uses sys._MEIPASS to point to the location
-#the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
-#normal Python environment.
-if getattr(sys, 'frozen', False):
-    __file__ = sys._MEIPASS
 
 def get_cmd_line(cmd_settings_file = None):
     log=SL_Logging.getLogger('get_cmd_line')

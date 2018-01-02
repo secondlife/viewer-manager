@@ -85,12 +85,6 @@ class UpdateErrorIn(UpdateError):
 #hence the strange equality test for 'Graphics' when we pop the last word off the string.
 NO64_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
 
-#this is to support pyinstaller, which uses sys._MEIPASS to point to the location
-#the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
-#normal Python environment.
-if getattr(sys, 'frozen', False):
-    __file__ = sys._MEIPASS
-
 def md5file(fname):
     with open(fname, "rb") as f:
         return md5handle(f)
@@ -751,7 +745,7 @@ def _update_manager(command, cli_overrides = {}):
     # check to see if user has install rights
     # get the owner of the install and the current user
     # none of this is supported by Python on Windows
-    try:
+    if platform.system() != "Windows":
         script_owner_id = os.stat(os.path.realpath(__file__)).st_uid
         user_id = os.getuid()
         if script_owner_id != user_id:
@@ -767,10 +761,6 @@ def _update_manager(command, cli_overrides = {}):
                 InstallerUserMessage.basic_message(
                     "Please find a system admin to upgrade Second Life")
                 return existing_viewer
-    except (AttributeError, ImportError):
-        #Windows throws AttributeError on getuid() and ImportError on pwd
-        #Just ignore it and consider the ID check as passed.
-        pass
 
     #get download directory, if there are perm issues or similar problems, give up
     try:
@@ -903,9 +893,6 @@ def cleanup_previous_download(log, platform_key):
                       past_download_dir, e.__class__.__name__, e)
 
 if __name__ == '__main__':
-    #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
-    if 'ython' in sys.executable:
-        sys.executable =  os.path.abspath(sys.argv[0])
     #there is no argument parsing or other main() work to be done
     # Initialize the python logging system to SL Logging format and destination
     log = SL_Logging.getLogger('SL_Updater')

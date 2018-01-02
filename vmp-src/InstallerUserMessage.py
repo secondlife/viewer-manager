@@ -64,12 +64,6 @@ import ttk
 import webbrowser
 from vmp_util import Application, SL_Logging
 
-#this is to support pyinstaller, which uses sys._MEIPASS to point to the location
-#the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
-#normal Python environment.
-if getattr(sys, 'frozen', False):
-    __file__ = sys._MEIPASS
-
 # ****************************************************************************
 #   status frame functionality
 # ****************************************************************************
@@ -181,15 +175,24 @@ class InstallerUserMessage(tk.Tk):
         self.geometry('{0}x{1}+{2}+{3}'.format(width, height, self.xp, self.yp))
 
         #find a few things
-        self.script_dir = os.path.dirname(os.path.realpath(__file__))
-        self.contents_dir = os.path.dirname(self.script_dir)
-        self.icon_dir = os.path.abspath(os.path.join(self.contents_dir, 'Resources/vmp_icons'))
-        if not os.path.exists(self.icon_dir):
-            #not mac, so icons are not in ../Resources, but in a subdir of the app dir
-            self.icon_dir = os.path.join(os.path.dirname(sys.executable), 'vmp_icons')
+        if not icon_path:
+            if platform.system() == "Darwin":
+                # Unlike almost everything else we look for in Resources, the
+                # vmp_icons are in the Resources directory for the embedded
+                # launcher app rather than the sibling embedded viewer app. So
+                # instead of calling Application.app_data_path(), just look
+                # relative to __file__, which should be
+                # launcher.app/Contents/MacOS/InstallerUserMessage.py
+                # We want
+                # launcher.app/Contents/Resources/vmp_icons
+                icon_path = os.path.join(os.path.dirname(__file__), os.pardir,
+                                         "Resources", "vmp_icons")
+            else:
+                #not mac, so icons are not in ../Resources, but in a subdir of the app dir
+                icon_path = os.path.join(Application.install_path(), 'vmp_icons')
         if platform.system() == 'Windows':
             self.call('wm', 'iconbitmap', self._w, '-default',
-                      os.path.join(self.icon_dir, 'secondlife.ico'))
+                      os.path.join(icon_path, 'secondlife.ico'))
 
         #finds the icon and creates the widget
         self.find_icon(icon_path, icon_name)
@@ -235,10 +238,8 @@ class InstallerUserMessage(tk.Tk):
         widget.config(foreground = InstallerUserMessage.linden_green)
         widget.config(background='black') 
 
-    def find_icon(self, icon_path = None, icon_name = None):
+    def find_icon(self, icon_path, icon_name):
         #we do this in each message, let's do it just once instead.
-        if not icon_path:
-            icon_path = self.icon_dir
         icon_path = os.path.join(icon_path, icon_name)
         if os.path.exists(icon_path):
             icon = tk.PhotoImage(file=icon_path)

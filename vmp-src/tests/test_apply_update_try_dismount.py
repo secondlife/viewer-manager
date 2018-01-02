@@ -49,11 +49,7 @@ def try_dismount_setup():
         return [], {}
     script_dir = os.path.dirname(os.path.realpath(__file__))
     test_dmg = os.path.join(script_dir, 'tests/data/Second Life Installer.dmg')
-    try:
-        subprocess.check_output(["hdiutil", "attach", test_dmg, "-mountroot", tmpdir])
-    except Exception, e:
-        print "Test failed due to: %s" % str(e)
-        assert False
+    subprocess.check_output(["hdiutil", "attach", test_dmg, "-mountroot", tmpdir])
     return [], {}
 
 def try_dismount_teardown():

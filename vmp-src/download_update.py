@@ -164,9 +164,6 @@ if __name__ == "__main__":
     # Initialize the python logging system to SL Logging format and destination
     log = SL_Logging.getLogger('SL_Downloader')
 
-    #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
-    if 'ython' in sys.executable:
-        sys.executable =  os.path.abspath(sys.argv[0])    
     try:
         main()
     except Exception:

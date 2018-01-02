@@ -70,15 +70,6 @@ MAC_GLOB = '*' + '.dmg'
 MAC_APP_GLOB = '*' + '.app'
 WIN_GLOB = '*' + '.exe'
 
-#which install the updater is run from
-INSTALL_DIR = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
-
-#this is to support pyinstaller, which uses sys._MEIPASS to point to the location
-#the bootloader unpacked the bundle to.  If the getattr returns false, we are in a 
-#normal Python environment.
-if getattr(sys, 'frozen', False):
-    __file__ = sys._MEIPASS
-
 def get_filename(download_dir):
     #given a directory that supposedly has the download, find the installable
     #if you are on platform X and you give the updater a directory with an installable  
@@ -155,15 +146,17 @@ def apply_linux_update(command, installable):
     # UNTESTED
     log = SL_Logging.getLogger("SL_Apply_Update")
     IUM.status_message("Installing from tarball...")
+    #which install the updater is run from
+    install_dir = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
     try:
         #untar to tmpdir
         tmpdir = tempfile.mkdtemp()
         tar = tarfile.open(name = installable, mode="r:bz2")
         tar.extractall(path = tmpdir)
         #rename current install dir
-        shutil.move(INSTALL_DIR,INSTALL_DIR + ".bak")
+        shutil.move(install_dir,install_dir + ".bak")
         #mv new to current
-        shutil.move(tmpdir, INSTALL_DIR)
+        shutil.move(tmpdir, install_dir)
         #delete tarball on success
         os.remove(installable)
     except Exception as e:
@@ -171,7 +164,7 @@ def apply_linux_update(command, installable):
 
     # replace the original executable in the command, but pass through all
     # remaining command-line arguments
-    return ExecRunner(os.path.join(INSTALL_DIR, "SL_Launcher"), *command[1:])
+    return ExecRunner(os.path.join(install_dir, "SL_Launcher"), *command[1:])
 
 def apply_mac_update(command, installable):
     log = SL_Logging.getLogger("SL_Apply_Update")
@@ -319,9 +312,6 @@ def main():
     
 if __name__ == "__main__":
     cgitb.enable(format='text')
-    #this is mostly for testing on Windows, emulating exe enviroment with $python scriptname
-    if 'ython' in sys.executable:
-        sys.executable =  os.path.abspath(sys.argv[0])
     # Initialize the python logging system to SL Logging format and destination
     # if you are running this manually, not via SL_Launcher, it is assumed you want all logging
     os.environ['SL_LAUNCH_LOGLEVEL'] = 'DEBUG'
