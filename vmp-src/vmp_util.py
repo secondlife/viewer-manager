@@ -328,7 +328,13 @@ class Application(object):
         corresponding to the passed ID value.
         """
         import ctypes
-        dll = ctypes.windll.shell32
+        # https://docs.python.org/2.7/library/ctypes.html#loading-dynamic-link-libraries
+        # "windll libraries call functions using the stdcall calling
+        # convention. oledll also uses the stdcall calling convention, and
+        # assumes the functions return a Windows HRESULT error code. The error
+        # code is used to automatically raise a WindowsError exception when
+        # the function call fails."
+        dll = ctypes.oledll.shell32
         buf = ctypes.create_unicode_buffer(300)
         # SHGetFolderPath():
         # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762181(v=vs.85).aspx
@@ -341,12 +347,9 @@ class Application(object):
         # Therefore just use SHGetFolderPath(), whose parameters are
         # decimal integers documented here:
         # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762494(v=vs.85).aspx
-        rc = dll.SHGetFolderPathW(None, id, None, 0, buf)
-        if rc == 0:
-            return buf.value
-        # rc is an HRESULT, which probably packs hi word, lo word, so display
-        # in hex. AND with F's to simulate 32-bit truncation.
-        raise Error("SHGetFolderPathW(%s) failed with %08x" % (id, (rc & 0xFFFFFFFF)))
+        # Discard HRESULT; trust the oledll assertion documented above.
+        dll.SHGetFolderPathW(None, id, None, 0, buf)
+        return buf.value
 
     @staticmethod
     def get_executable_name():
@@ -370,6 +373,7 @@ class Application(object):
         # Therefore we don't even call GetCommandLineW(), since all we really
         # want for Christmas is the current executable file.
         import ctypes
+        # Use windll instead of oledll since neither of these returns HRESULT.
         CommandLineToArgvW = ctypes.windll.shell32.CommandLineToArgvW
         from ctypes.wintypes import LPWSTR, LPCWSTR, POINTER, HLOCAL
         CommandLineToArgvW.argtypes = [ LPCWSTR, POINTER(ctypes.c_int)]
