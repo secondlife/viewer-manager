@@ -285,7 +285,7 @@ def apply_mac_update(command, installable):
     # replace the original executable in the command, but pass through all
     # remaining command-line arguments
     # we can't just exec the .app
-    return ExecRunner('/usr/bin/open', deploy_path, *command[1:])
+    return ExecRunner('/usr/bin/open', deploy_path, '--args', *command[1:])
     # Alternatively:
     # return ExecRunner(os.path.join(deploy_path, "Contents", "MacOS", "SL_Launcher"),
     #                   *command[1:])
