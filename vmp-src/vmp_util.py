@@ -364,18 +364,28 @@ class Application(object):
         """
         # derived from
         # https://www.programcreek.com/python/example/55296/ctypes.wintypes.LPWSTR
-        # but since
+        # N.B.
         # https://msdn.microsoft.com/en-us/library/windows/desktop/bb776391(v=vs.85).aspx
         # says of CommandLineToArgvW()'s first parameter:
         # "Pointer to a null-terminated Unicode string that contains the full
         # command line. If this parameter is an empty string the function
         # returns the path to the current executable file."
-        # Therefore we don't even call GetCommandLineW(), since all we really
-        # want for Christmas is the current executable file.
+        # HOWEVER -- if you call CommandLineToArgvW() with an empty string,
+        # and the path to the current executable file contains spaces (e.g.
+        # "c:\Program Files\Something\Something"), then you get back a list
+        # containing [u'C:\\Program', u'Files\\Something\\Something']: the
+        # well-known Windows idiocy concerning pathnames with spaces. If,
+        # however, you actually call GetCommandLineW() and pass *that* string
+        # to CommandLineToArgvW(), then the complete command pathname, spaces
+        # and all, is returned in the first entry. Mere eyerolling is
+        # inadequate for the occasion.
         import ctypes
+        from ctypes.wintypes import LPWSTR, LPCWSTR, POINTER, HLOCAL
+        GetCommandLineW = ctypes.cdll.kernel32.GetCommandLineW
+        GetCommandLineW.argtypes = []
+        GetCommandLineW.restype = LPCWSTR
         # Use windll instead of oledll since neither of these returns HRESULT.
         CommandLineToArgvW = ctypes.windll.shell32.CommandLineToArgvW
-        from ctypes.wintypes import LPWSTR, LPCWSTR, POINTER, HLOCAL
         CommandLineToArgvW.argtypes = [ LPCWSTR, POINTER(ctypes.c_int)]
         CommandLineToArgvW.restype = POINTER(LPWSTR)
         LocalFree = ctypes.windll.kernel32.LocalFree
@@ -384,7 +394,7 @@ class Application(object):
         # variable into which CommandLineToArgvW() will store length of
         # returned array
         argc = ctypes.c_int()
-        argv = CommandLineToArgvW(unicode(), ctypes.byref(argc))
+        argv = CommandLineToArgvW(GetCommandLineW(), ctypes.byref(argc))
         try:
             # argv is a pointer, not an array as such -- len(argv) produces a
             # TypeError; argv[:] produces a MemoryError, presumably when we
@@ -432,7 +442,7 @@ class BuildData(object):
         except Exception as err:
             # without this file, nothing is going to work,
             # so abort immediately with a simple message about the problem
-            sys.exit("Failed to read application build_data: %r %r" % (build_data_file, err))
+            raise Error("Failed to read %r: %s", build_data_file, err)
 
     @staticmethod
     def get(name ,default=None):
