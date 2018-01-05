@@ -34,9 +34,17 @@ import os.path
 import platform
 import subprocess
 import sys
-import logging
-from runner import PopenRunner
+
+# Must be FIRST VMP IMPORT: in case of crash anywhere along the way, try to
+# ensure that at least we'll produce diagnostic output into the log.
 from vmp_util import SL_Logging, Application, BuildData
+if __name__ == "__main__":
+    # sets up unhandled exception handler in sys.excepthook
+    # do this right away because in the past we've hit crashes even importing
+    # other VMP modules
+    SL_Logging.getLogger('SL_Launcher')
+
+from runner import PopenRunner
 from InstallerUserMessage import status_message
 
 #if for some reason we are running on a POSIX machine with python less than 2.7
@@ -78,7 +86,6 @@ if platform.system() != 'Windows' and platform.python_version_tuple() < (2, 7, 0
     viewer_process = subprocess.Popen(command)
     sys.exit(0)
 
-import cgitb
 import collections
 #NOTA BENE: 
 #   For POSIX platforms, llsd.py will be imported from the same directory.  
@@ -171,6 +178,7 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
 
 def main():
     #main entry point      
+    log = SL_Logging.getLogger('SL_Launcher')
     args_list_to_pass = sys.argv[1:]
 
     version=BuildData.get('Version')
@@ -206,11 +214,4 @@ def main():
     log.info("Launcher exiting after viewer exit.")
 
 if __name__ == "__main__":
-    # Initialize the python logging system to SL Logging format and destination
-    log = SL_Logging.getLogger('SL_Launcher')
-    try:
-        main()
-    except Exception:
-        log_traceback = cgitb.Hook(file=SL_Logging.stream(prefix_msg="Unhandled exception:"),
-                                   format='text')
-        log_traceback.handle()
+    main()

@@ -130,7 +130,7 @@ class PopenRunner(Runner):
         with self.error_trap(log):
             viewer_process = self.Popen(self.command, env=env)
 
-        log.info("Successfully launched %s", (self.command,))
+        log.info("Successfully launched %s", self.command)
         return viewer_process
 
 class ExecRunner(Runner):
