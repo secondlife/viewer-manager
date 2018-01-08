@@ -18,6 +18,9 @@ from llbase import llsd
 class Error(Exception):
     pass
 
+# ****************************************************************************
+#   SL_Logging
+# ****************************************************************************
 class SL_Logging(object):
     """
     This is a wrapper for the python standard 'logging' class that provides for
@@ -160,7 +163,9 @@ class SL_Logging(object):
                 pass # nothing to be done about this either
         return new_name
 
-
+# ****************************************************************************
+#   Application
+# ****************************************************************************
 class Application(object):
 
     @staticmethod
@@ -297,6 +302,9 @@ class Application(object):
         #platform specific actions as appropriate
         return Application.PlatformKey.get(platform.system())
 
+# ****************************************************************************
+#   BuildData
+# ****************************************************************************
 class BuildData(object):
     """Get information about the application from the metadata in the install"""
 
@@ -331,6 +339,9 @@ class BuildData(object):
             BuildData.read()
         BuildData.package_data[name] = value
 
+# ****************************************************************************
+#   subprocess_args()
+# ****************************************************************************
 # This utility method is lifted from https://github.com/pyinstaller/pyinstaller/wiki/Recipe-subprocess
 # and gets us around the issue of pythonw breaking subprocess when default values for I/O handles are used.
 # it is slightly modified to provide for writing to the log file rather than providing pipes
@@ -390,10 +401,54 @@ def subprocess_args(include_stdout=True, log_stream=None):
                 'env': env })
     return ret
 
-
+# ****************************************************************************
+#   put_marker_file()
+# ****************************************************************************
 def put_marker_file(dir, ext):
     #mkstemp() returns (file handle, abspath)
     try:
         os.close(tempfile.mkstemp(suffix=ext, dir=dir)[0])
     except OSError:
         pass
+
+# ****************************************************************************
+#   MergedSettings
+# ****************************************************************************
+class MergedSettings(object):
+    """
+    This class unifies settings from the settings.xml file (in which each key
+    maps to a subdict that has (or should have) a 'Value' key) and a plain
+    dict corresponding to command-line --set overrides.
+    """
+    def __init__(self, settings):
+        """pass settings as the contents of a settings.xml file"""
+        # We only care about settings entries that have a 'Value' sub-key.
+        self.settings = {key: entry['Value'] for key, entry in settings.items()
+                         if 'Value' in entry}
+        # May or may not be set later; see override_with().
+        self.overrides = {}
+
+    def override_with(self, overrides):
+        """pass overrides as a plain dict mapping keys to actual values"""
+        self.overrides = overrides
+
+    def __nonzero__(self):
+        # not empty if either settings or overrides is non-empty
+        return bool(self.overrides) or bool(self.settings)
+
+    def __getitem__(self, key):
+        """operator[] method"""
+        try:
+            # if the key exists in overrides, look no further
+            return self.overrides[key]
+        except KeyError:
+            # okay, look further
+            return self.settings[key]
+
+    def get(self, key, default=None):
+        try:
+            # if the key exists in overrides, look no further
+            return self.overrides[key]
+        except KeyError:
+            # okay, look further
+            return self.settings.get(key, default)

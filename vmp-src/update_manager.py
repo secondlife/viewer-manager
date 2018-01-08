@@ -32,7 +32,8 @@ $/LicenseInfo$
 from copy import deepcopy
 from datetime import datetime   
 from logging import DEBUG
-from vmp_util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file
+from vmp_util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file, \
+     MergedSettings
 from llbase import llsd, llrest
 
 import apply_update
@@ -91,45 +92,6 @@ NO64_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
 #normal Python environment.
 if getattr(sys, 'frozen', False):
     __file__ = sys._MEIPASS
-
-class MergedSettings(object):
-    """
-    This class unifies settings from the settings.xml file (in which each key
-    maps to a subdict that has (or should have) a 'Value' key) and a plain
-    dict corresponding to command-line --set overrides.
-    """
-    def __init__(self, settings):
-        """pass settings as the contents of a settings.xml file"""
-        # We only care about settings entries that have a 'Value' sub-key.
-        self.settings = {key: entry['Value'] for key, entry in settings.items()
-                         if 'Value' in entry}
-        # May or may not be set later; see override_with().
-        self.overrides = {}
-
-    def override_with(self, overrides):
-        """pass overrides as a plain dict mapping keys to actual values"""
-        self.overrides = overrides
-
-    def __nonzero__(self):
-        # not empty if either settings or overrides is non-empty
-        return bool(self.overrides) or bool(self.settings)
-
-    def __getitem__(self, key):
-        """operator[] method"""
-        try:
-            # if the key exists in overrides, look no further
-            return self.overrides[key]
-        except KeyError:
-            # okay, look further
-            return self.settings[key]
-
-    def get(self, key, default=None):
-        try:
-            # if the key exists in overrides, look no further
-            return self.overrides[key]
-        except KeyError:
-            # okay, look further
-            return self.settings.get(key, default)
 
 def md5file(fname):
     with open(fname, "rb") as f:
