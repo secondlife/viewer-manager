@@ -362,52 +362,52 @@ class Application(object):
         resulting pathname is useless because it doesn't map to anything on
         the actual filesystem.
         """
-        # derived from
-        # https://www.programcreek.com/python/example/55296/ctypes.wintypes.LPWSTR
-        # N.B.
+        # At first we tried to use CommandLineToArgvW():
         # https://msdn.microsoft.com/en-us/library/windows/desktop/bb776391(v=vs.85).aspx
-        # says of CommandLineToArgvW()'s first parameter:
+        # This says of CommandLineToArgvW()'s first parameter:
         # "Pointer to a null-terminated Unicode string that contains the full
         # command line. If this parameter is an empty string the function
         # returns the path to the current executable file."
-        # HOWEVER -- if you call CommandLineToArgvW() with an empty string,
-        # and the path to the current executable file contains spaces (e.g.
-        # "c:\Program Files\Something\Something"), then you get back a list
-        # containing [u'C:\\Program', u'Files\\Something\\Something']: the
-        # well-known Windows idiocy concerning pathnames with spaces. If,
-        # however, you actually call GetCommandLineW() and pass *that* string
-        # to CommandLineToArgvW(), then the complete command pathname, spaces
-        # and all, is returned in the first entry. Mere eyerolling is
-        # inadequate for the occasion.
+        # GOTCHA (MAINT-8135): If you call CommandLineToArgvW() with an empty
+        # string, and the path to the current executable file contains spaces
+        # (e.g. "c:\Program Files\Something\Something"), then you get back a
+        # list containing [u'C:\\Program', u'Files\\Something\\Something']:
+        # the well-known Windows idiocy concerning pathnames with spaces.
+        # (Empirically, rejoining those entries with a single space doesn't
+        # work because the scan treats multiple spaces as a single space.)
+        # (Rejoining them with '*' and passing the result through glob.glob()
+        # is TOO inclusive: you also get names without spaces at all, and with
+        # other characters instead of spaces.)
+        # GOTCHA (MAINT-8150): If you actually call GetCommandLineW() and pass
+        # *that* string to CommandLineToArgvW(), then the complete command,
+        # spaces and all, is returned in the first entry. However, if the user
+        # typed the command at a Command Prompt, you do NOT get the full
+        # pathname of the executable -- only what the user typed.
+        # Mere eyerolling is inadequate for the occasion.
+        # GetModuleFileNameW() *seems* to work better:
+        # https://msdn.microsoft.com/en-us/library/windows/desktop/ms683197(v=vs.85).aspx
+        # although: 'The string returned will use the same format that was
+        # specified when the module was loaded. Therefore, the path can be a
+        # long or short file name, and can use the prefix "\\?\".'
+        # The following is adapted from:
+        # http://nullege.com/codes/search/ctypes.windll.kernel32.GetModuleFileNameW
         import ctypes
-        from ctypes.wintypes import LPWSTR, LPCWSTR, POINTER, HLOCAL
-        GetCommandLineW = ctypes.cdll.kernel32.GetCommandLineW
-        GetCommandLineW.argtypes = []
-        GetCommandLineW.restype = LPCWSTR
-        # Use windll instead of oledll since neither of these returns HRESULT.
-        CommandLineToArgvW = ctypes.windll.shell32.CommandLineToArgvW
-        CommandLineToArgvW.argtypes = [ LPCWSTR, POINTER(ctypes.c_int)]
-        CommandLineToArgvW.restype = POINTER(LPWSTR)
-        LocalFree = ctypes.windll.kernel32.LocalFree
-        LocalFree.argtypes = [HLOCAL]
-        LocalFree.restype = HLOCAL
-        # variable into which CommandLineToArgvW() will store length of
-        # returned array
-        argc = ctypes.c_int()
-        argv = CommandLineToArgvW(GetCommandLineW(), ctypes.byref(argc))
-        try:
-            # argv is a pointer, not an array as such -- len(argv) produces a
-            # TypeError; argv[:] produces a MemoryError, presumably when we
-            # run past the end of the array.
-            # argv[:argc.value] is the whole list of results.
-            # As long as argc.value >= 1, argv[0] is the executable name.
-            if not argc.value:
-                raise Error("CommandLineToArgvW() returned empty list")
-            # We're about to free argv. Make sure we copy its [0] entry into a
-            # new unicode object.
-            return unicode(argv[0])
-        finally:
-            LocalFree(argv)
+        name = ctypes.create_unicode_buffer(1024)
+        # "If this [hModule] parameter is NULL [i.e. None], GetModuleFileName
+        # retrieves the path of the executable file of the current process."
+        rc = ctypes.windll.kernel32.GetModuleFileNameW(None, name, len(name))
+        # "If the function fails, the return value is 0 (zero). To get
+        # extended error information, call GetLastError."
+        if not rc:
+            # https://docs.python.org/2/library/ctypes.html#return-types
+            # "WinError is a function which will call Windows FormatMessage()
+            # api to get the string representation of an error code, and
+            # returns an exception. WinError takes an optional error code
+            # parameter, if no one is used, it calls GetLastError() to
+            # retrieve it."
+            raise ctypes.WinError()
+        # must've worked
+        return name.value
 
     @staticmethod
     def user_settings_path():
