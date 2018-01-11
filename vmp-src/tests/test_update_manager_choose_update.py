@@ -89,22 +89,39 @@ def bitness32(key):
 def bitness64(key):
     return 64
 
-# These are used to mock update_manager.onNo64Windows
-# For the real test of that method, see test_update_manager_onNo64Windows.py
-def lessThan10():
-    return False
+# These are used to mock the methods for interogating Windows versions and video cards
+class Windows10VideoBadCards:
+    @staticmethod
+    def onWin10orGreater():
+        return True
 
-def greaterThanOrAt10():
-    return True
-
-# These are used to mock the discovery of video cards
-# For the real test of that method, see test_update_manager_WindowsVideo.py
-class WindowsVideoBadCards:
     @staticmethod
     def isUnsupported():
         return True
 
-class WindowsVideoGoodCards:
+class Windows10VideoGoodCards:
+    @staticmethod
+    def onWin10orGreater():
+        return True
+
+    @staticmethod
+    def isUnsupported():
+        return False
+
+class WindowsOldVideoBadCards:
+    @staticmethod
+    def onWin10orGreater():
+        return False
+
+    @staticmethod
+    def isUnsupported():
+        return True
+
+class WindowsOldVideoGoodCards:
+    @staticmethod
+    def onWin10orGreater():
+        return False
+
     @staticmethod
     def isUnsupported():
         return False
@@ -169,8 +186,7 @@ class testChooseUpdate:
 
     def test_equal_version_good_bitness(self):
         with patch( update_manager, "getBitness", bitness64 ), \
-             patch( update_manager, "onNo64Windows", greaterThanOrAt10 ), \
-             patch( update_manager, "WindowsVideo", WindowsVideoGoodCards ), \
+             patch( update_manager, "WindowsVideo", Windows10VideoGoodCards ), \
              patch_dict(VVM_RESULT, 'required', True):
 
             BuildData.override('Version', VVM_RESULT['version'])
@@ -181,8 +197,7 @@ class testChooseUpdate:
 
     def test_equal_version_wrong_bitness(self):
         with patch( update_manager, "getBitness", bitness32 ), \
-             patch( update_manager, "onNo64Windows", greaterThanOrAt10 ), \
-             patch( update_manager, "WindowsVideo", WindowsVideoGoodCards ):
+             patch( update_manager, "WindowsVideo", Windows10VideoGoodCards ):
 
             BuildData.override('Version', VVM_RESULT['version']) 
 
@@ -192,7 +207,7 @@ class testChooseUpdate:
 
     def test_win64_on_win32(self):
         with patch( update_manager, "getBitness", bitness32 ), \
-             patch( update_manager, "onNo64Windows", greaterThanOrAt10 ):
+             patch( update_manager, "WindowsVideo", Windows10VideoGoodCards ):
 
             chosen = update_manager.choose_update('win', {}, VVM_RESULT)
 
@@ -201,7 +216,7 @@ class testChooseUpdate:
     def test_win32_on_win8_64(self):
         BuildData.override('Address Size', 32)
         with patch( update_manager, "getBitness", bitness64 ), \
-             patch( update_manager, "onNo64Windows", lessThan10 ):
+             patch( update_manager, "WindowsVideo", WindowsOldVideoGoodCards ):
 
             chosen = update_manager.choose_update('win', {}, VVM_RESULT)
 
@@ -210,8 +225,7 @@ class testChooseUpdate:
     def test_win32_on_win10_64(self):
         BuildData.override('Address Size', 32)
         with patch( update_manager, "getBitness", bitness64 ), \
-             patch( update_manager, "onNo64Windows", greaterThanOrAt10 ), \
-             patch( update_manager, "WindowsVideo", WindowsVideoGoodCards ):
+             patch( update_manager, "WindowsVideo", Windows10VideoGoodCards ):
 
             chosen = update_manager.choose_update('win', {}, VVM_RESULT)
 
@@ -219,8 +233,7 @@ class testChooseUpdate:
 
     def test_win64_bad_cards(self):
         with patch( update_manager, "getBitness", bitness64 ), \
-             patch( update_manager, "onNo64Windows", greaterThanOrAt10 ), \
-             patch( update_manager, "WindowsVideo", WindowsVideoBadCards ):
+             patch( update_manager, "WindowsVideo", Windows10VideoBadCards ):
 
             chosen = update_manager.choose_update('win', {}, VVM_RESULT)
             assert_equal(chosen, mandatoryWin32)
@@ -231,8 +244,7 @@ class testChooseUpdate:
 
     def test_win64_good_cards(self):
         with patch( update_manager, "getBitness", bitness64 ), \
-             patch( update_manager, "onNo64Windows", greaterThanOrAt10 ), \
-             patch( update_manager, "WindowsVideo", WindowsVideoGoodCards ): 
+             patch( update_manager, "WindowsVideo", Windows10VideoGoodCards ): 
              
             chosen = update_manager.choose_update('win', {}, VVM_RESULT)
             assert_equal(chosen, optionalWin64)
@@ -240,8 +252,7 @@ class testChooseUpdate:
     def test_win_only_bad_card_force_address_32(self):
         # Windows 10, bad video, force to 32
         with patch( update_manager, "getBitness", bitness64 ), \
-             patch( update_manager, "onNo64Windows", greaterThanOrAt10 ), \
-             patch( update_manager, "WindowsVideo", WindowsVideoBadCards ):
+             patch( update_manager, "WindowsVideo", Windows10VideoBadCards ):
              
             chosen = update_manager.choose_update('win', force(32), VVM_RESULT)
             assert_equal(chosen, mandatoryWin32)
@@ -252,8 +263,7 @@ class testChooseUpdate:
         # into Application.userpath()/user_settings/settings.xml. We'll have to
         # make a temporary one of those.
         with patch( update_manager, "getBitness", bitness64 ), \
-             patch( update_manager, "onNo64Windows", greaterThanOrAt10 ), \
-             patch( update_manager, "WindowsVideo", WindowsVideoBadCards ):
+             patch( update_manager, "WindowsVideo", Windows10VideoBadCards ):
              
             chosen = update_manager.choose_update('win', force(64), VVM_RESULT)
             assert_equal(chosen, optionalWin64)
@@ -264,8 +274,7 @@ class testChooseUpdate:
 
     def test_platform_fallback(self):
         with patch( update_manager, "getBitness", bitness64 ), \
-             patch( update_manager, "onNo64Windows", greaterThanOrAt10 ), \
-             patch( update_manager, "WindowsVideo", WindowsVideoGoodCards ), \
+             patch( update_manager, "WindowsVideo", Windows10VideoGoodCards ), \
              patch_dict(VVM_RESULT['platforms'], 'win64', DELETE):
 
             chosen = update_manager.choose_update('win', {}, VVM_RESULT)
