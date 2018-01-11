@@ -39,7 +39,6 @@ from vmp_util import subprocess_args, SL_Logging, BuildData
 import distutils
 from distutils import dir_util
 
-import cgitb
 import ctypes
 import errno
 import fnmatch
@@ -311,14 +310,8 @@ def main():
                           platform_key = args.platform_key)
     
 if __name__ == "__main__":
-    cgitb.enable(format='text')
     # Initialize the python logging system to SL Logging format and destination
     # if you are running this manually, not via SL_Launcher, it is assumed you want all logging
     os.environ['SL_LAUNCH_LOGLEVEL'] = 'DEBUG'
-    log = SL_Logging.getLogger('SL_Installer')
-    try:
-        main()
-    except Exception:
-        log_traceback = cgitb.Hook(file=SL_Logging.stream(prefix_msg="Unhandled exception:"), format='text')
-        log_traceback.handle()
-
+    SL_Logging.getLogger('SL_Installer')
+    main()

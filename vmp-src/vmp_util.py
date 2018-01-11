@@ -1,3 +1,4 @@
+import cgitb
 import errno
 import glob
 import json
@@ -5,6 +6,7 @@ import logging
 import os
 import os.path
 import platform
+from StringIO import StringIO
 import subprocess
 import sys
 import tempfile
@@ -46,16 +48,50 @@ class SL_Logging(object):
         Returns the python logging object.
         """
         if not SL_Logging.logger:
-            log_basepath=os.path.join(SL_Logging.directory(),basename)
-            #accomodate verbosity with larger files before rotation
-            verbosity = SL_Logging.get_verbosity()
-            if verbosity == logging.DEBUG:
-                logsize = maxsize*4
-            else:
-                logsize = maxsize*2
-            log_name = SL_Logging.rotate(log_basepath, extension=extension, maxsize=logsize)
+            # before we actually have a log file, buffer any interesting
+            # messages
+            msgs = StringIO()
+            # get an exception handler that writes into that buffer
+            handler = cgitb.Hook(file=msgs, format="text")
 
+            try:
+                verbosity = SL_Logging.get_verbosity()
+            except Exception as err:
+                # bad log level shouldn't derail the entire log setup
+                verbosity = logging.DEBUG
+                print >>msgs, "Setting DEBUG level because: %s" % err
+
+            try:
+                logdir = SL_Logging.directory()
+            except Exception as err:
+                # directory() depends, among other things, on being able to
+                # find and read build_data.json. Even if we can't find the
+                # official log directory, put our log file SOMEWHERE.
+                logdir = tempfile.gettempdir()
+                print >>msgs, "Redirecting log to %r because:" % logdir
+                # get diagnostic info for this exception into msgs
+                # while still within the 'except' handler clause
+                handler.handle()
+
+            log_basepath=os.path.join(logdir,basename)
+            #accomodate verbosity with larger files before rotation
+            logsize = maxsize*4 if verbosity == logging.DEBUG else maxsize*2
+
+            try:
+                log_name = SL_Logging.rotate(log_basepath, extension=extension, maxsize=logsize)
+            except Exception as err:
+                print >>msgs, "Growing previous log file because:"
+                handler.handle()
+                # shrug! Just append to the same log file, despite size!
+                log_name = log_basepath + extension
+
+            # If this blows up, we're just hosed.
             SL_Logging.logStream = open(log_name,'a')
+
+            # from this point forward, any unhandled exceptions go into the
+            # log file
+            # just like cgitb.enable(), except that enable() doesn't support file=
+            sys.excepthook = cgitb.Hook(file=SL_Logging.logStream, format="text")
 
             log_handler = logging.StreamHandler(SL_Logging.logStream)
             log_handler.setFormatter(SL_Logging.Formatter())
@@ -64,9 +100,14 @@ class SL_Logging(object):
 
             SL_Logging.logger.addHandler(log_handler)
 
-            SL_Logging.logger.setLevel(SL_Logging.get_verbosity(verbosity))
+            SL_Logging.logger.setLevel(verbosity)
             SL_Logging.logger.info("================ Running %s" % basename)
             log = SL_Logging.logger
+            # now log any messages we deferred previously
+            for line in msgs.getvalue().splitlines():
+                if line:
+                    log.warning(line)
+            msgs.close()
 
         else:
             log = SL_Logging.logger.getChild(basename)
@@ -74,17 +115,17 @@ class SL_Logging(object):
         return log
         
     @staticmethod
-    def get_verbosity(verbosity=None):
-        if not verbosity:
-            verbosity_env = os.getenv('SL_LAUNCH_LOGLEVEL','INFO')
-            if verbosity_env == 'INFO':
-                verbosity=logging.INFO
-            elif verbosity_env == 'DEBUG':
-                verbosity=logging.DEBUG
-            elif verbosity_env == 'WARNING':
-                verbosity=logging.WARNING
-            else:
-                raise ValueError("Unknown log level '%s'" % verbosity_env)
+    def get_verbosity():
+        verbosity_env = os.getenv('SL_LAUNCH_LOGLEVEL','INFO')
+        # we COULD just use getattr(logging, verbosity_env) ...
+        try:
+            verbosity = dict(
+                INFO=logging.INFO,
+                DEBUG=logging.DEBUG,
+                WARNING=logging.WARNING,
+                )[verbosity_env]
+        except KeyError:
+            raise ValueError("Unknown log level %r" % verbosity_env)
         return verbosity
 
     @staticmethod
@@ -314,7 +355,7 @@ class Application(object):
         if (running_on == 'Darwin'):
             base_dir = os.path.join(os.path.expanduser('~'),'Library','Application Support',app_element_nowhite)
         elif (running_on == 'Linux'): 
-            base_dir = os.path.join(os.path.expanduser('~'))
+            base_dir = os.path.join(os.path.expanduser('~'), app_element_nowhite)
         elif (running_on == 'Windows'):
             appdata = Application.get_folder_path(Application.CSIDL_APPDATA)
             base_dir = os.path.join(appdata, app_element_nowhite)
@@ -450,7 +491,7 @@ class BuildData(object):
         except Exception as err:
             # without this file, nothing is going to work,
             # so abort immediately with a simple message about the problem
-            raise Error("Failed to read %r: %s", build_data_file, err)
+            raise Error("Failed to read %r: %s" % (build_data_file, err))
 
     @staticmethod
     def get(name ,default=None):
