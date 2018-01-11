@@ -89,10 +89,10 @@ def bitness32(key):
 def bitness64(key):
     return 64
 
-# These are used to mock the methods for interogating Windows versions and video cards
+# These are used to mock the methods for interrogating Windows versions and video cards
 class Windows10VideoBadCards:
     @staticmethod
-    def onWin10orGreater():
+    def onNo64Windows():
         return True
 
     @staticmethod
@@ -101,7 +101,7 @@ class Windows10VideoBadCards:
 
 class Windows10VideoGoodCards:
     @staticmethod
-    def onWin10orGreater():
+    def onNo64Windows():
         return True
 
     @staticmethod
@@ -110,7 +110,7 @@ class Windows10VideoGoodCards:
 
 class WindowsOldVideoBadCards:
     @staticmethod
-    def onWin10orGreater():
+    def onNo64Windows():
         return False
 
     @staticmethod
@@ -119,7 +119,7 @@ class WindowsOldVideoBadCards:
 
 class WindowsOldVideoGoodCards:
     @staticmethod
-    def onWin10orGreater():
+    def onNo64Windows():
         return False
 
     @staticmethod

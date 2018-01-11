@@ -438,10 +438,10 @@ class WindowsVideo(object):
     NO64_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
 
     @staticmethod
-    def onWin10orGreater():
+    def onNo64Windows():
         if platform.system() != 'Windows':
             return False
-        log = SL_Logging.getLogger('onWin10orGreater')
+        log = SL_Logging.getLogger('onNo64Windows')
         windowsVersion = platform.win32_ver()[1]
         versionPair = [int(field) for field in windowsVersion.split('.')[:2]]
         # As far as we know, Intel doesn't have (working) drivers for the cards in
@@ -449,10 +449,10 @@ class WindowsVideo(object):
         # to this page:
         # https://msdn.microsoft.com/en-us/library/windows/desktop/ms724832(v=vs.85).aspx
         # that would be every version >= [6, 3].
-        is10orBetter = (versionPair >= [6, 3])
+        no64 = (versionPair >= [6, 3])
         log.debug("Windows version %s should%s be okay", windowsVersion,
-                  (" not" if is10orBetter else ""))
-        return is10orBetter
+                  (" not" if no64 else ""))
+        return no64
 
     @staticmethod
     def isUnsupported():
@@ -486,7 +486,8 @@ class WindowsVideo(object):
                 else:
                     # all we found were cards that are not supported in the Windows 64bit build
                     WindowsVideo.hasOnlyUnsupported = True
-                    log.warning("Found only graphics cards not supported in Windows 10: '%s'; should switch to the 32 bit build", "', '".join(wmic_list))
+                    log.warning("Found only graphics cards not supported in Windows 8.1 or 10: "
+                                "'%s'; should switch to the 32 bit build", "', '".join(wmic_list))
             else:
                 log.warning("wmic did not return any video cards")
                 WindowsVideo.hasOnlyUnsupported = False # we are probably hosed, but go ahead and try
@@ -513,8 +514,10 @@ def choose_update(platform_key, settings, vvm_response):
         if current_build == 'win64' and target_platform == 'win32':
             log.info("This is a 64 bit build, but this system is 32 bit; looking for a 32 bit build")
 
-        elif target_platform == 'win64' and WindowsVideo.onWin10orGreater() and WindowsVideo.isUnsupported():
-            log.warning("Your video card(s) are not supported on Windows 10; switching you to the 32bit build, which runs in a compatibility mode that works better")
+        elif target_platform == 'win64' and WindowsVideo.onNo64Windows() and WindowsVideo.isUnsupported():
+            log.warning("Your video card(s) are not supported for 64-bit on Windows 8.1 or 10; "
+                        "switching you to the 32bit build, "
+                        "which runs in a compatibility mode that works better")
             target_platform = 'win32'
 
     # We could have done this check earlier, but by waiting we can make the warnings more specific
@@ -669,10 +672,10 @@ def _update_manager(command, cli_overrides = {}):
     # our viewer's video benchmarking -- but that if we skip it, things run
     # okay. Test this now because we prepare a default PopenRunner for the
     # various cases in which we decide to launch the existing viewer.
-    if WindowsVideo.onWin10orGreater() \
+    if WindowsVideo.onNo64Windows() \
       and int(BuildData.get('Address Size')) == 64 \
       and WindowsVideo.isUnsupported():
-        log.info("Windows 10 does not support the video card; setting option to skip video benchmarking")
+        log.info("Windows 8.1 and 10 do not support the video card; setting option to skip video benchmarking")
         command = command + ['--set', 'SkipBenchmark', '1']
 
     # we end up running the existing viewer in many cases
