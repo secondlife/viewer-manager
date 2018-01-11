@@ -93,7 +93,7 @@ def download_update_teardown(tmpdir1):
 @with_setup_args.with_setup_args(download_update_setup, download_update_teardown)
 def test_download_update_null_url(tmpdir1):     
     try:
-        download_update.download_update(url=None, download_dir=tmpdir1, size=None, progressbar=False, chunk_size=1024)
+        download_update.download_update(url=None, download_dir=tmpdir1, size=None, progressbar=False)
     #this is the expected error when d_u tries to apply split() to None
     except AttributeError, e:
         pass
