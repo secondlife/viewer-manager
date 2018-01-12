@@ -37,7 +37,7 @@ import sys
 
 # Must be FIRST VMP IMPORT: in case of crash anywhere along the way, try to
 # ensure that at least we'll produce diagnostic output into the log.
-from vmp_util import SL_Logging, Application, BuildData
+from vmp_util import SL_Logging, Application, BuildData, udir, ufile
 if __name__ == "__main__":
     # sets up unhandled exception handler in sys.excepthook
     # do this right away because in the past we've hit crashes even importing
@@ -52,7 +52,7 @@ from InstallerUserMessage import status_message
 if platform.system() != 'Windows' and platform.python_version_tuple() < (2, 7, 0):
     log = SL_Logging.getLogger('SL_Launcher')
     log.error("Computer is below minimum specifications. Python version needs to be 2.7, but is %r" % platform.python_version())
-    absfile = os.path.abspath(__file__)
+    absfile = os.path.abspath(ufile(__file__))
     if platform.system == 'Darwin':
         import glob
         executable_name = "Second Life"
@@ -91,7 +91,7 @@ import collections
 #   For POSIX platforms, llsd.py will be imported from the same directory.  
 #   For Windows, llsd.py will be compiled into the executable by pyinstaller
 #make sure we find our local llbase, which is in a subdir
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'llbase'))
+sys.path.insert(0, os.path.join(udir(), 'llbase'))
 from llbase import llsd
 
 from datetime import datetime

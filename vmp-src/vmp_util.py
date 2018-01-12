@@ -21,6 +21,34 @@ class Error(Exception):
     pass
 
 # ****************************************************************************
+#   ufile(), udir()
+# ****************************************************************************
+# MAINT-8161: When the viewer is installed into a Mac directory with a Unicode
+# pathname, __file__ is utf8-encoded. If we pass that encoded pathname into
+# os.path functions, we're likely to blow up with an exception of the form:
+# UnicodeDecodeError: 'ascii' codec can't decode byte xx: ordinal not in range(128)
+# The fix is simply to ensure that every time we go to reference __file__, we
+# apply decode('utf8') first. This function does that for us.
+if platform.system() != 'Darwin':
+    def ufile(file=__file__):
+        return file
+else:
+    def ufile(file=__file__):
+        """
+        Caller may pass own __file__ if desired; or if ufile() is just being
+        used to locate the directory path, ufile() suffices since most of our
+        callers are in the same directory as this __file__.
+        """
+        return file.decode('utf8')
+
+def udir(file=__file__):
+    """
+    Need only pass own __file__ if you suspect you're in a different directory
+    than vmp_util.py.
+    """
+    return os.path.dirname(ufile(file))
+
+# ****************************************************************************
 #   SL_Logging
 # ****************************************************************************
 class SL_Logging(object):
@@ -272,7 +300,7 @@ class Application(object):
             # its Contents, or MacOS, or Resources, but the .app directory
             # itself. __file__ should be:
             # somepath/Second Life.app/Contents/Resources/Launcher.app/Contents/MacOS/vmp_util.py
-            pieces = os.abspath(__file__).rsplit(os.sep, 6)
+            pieces = os.abspath(ufile()).rsplit(os.sep, 6)
             try:
                 if (pieces[-7].endswith(".app")
                     and pieces[-6] == "Contents"
@@ -292,7 +320,7 @@ class Application(object):
 
         # Here we're either not on Windows or Mac, or just running developer
         # tests rather than the packaged application.
-        return os.path.dirname(__file__)
+        return udir()
 
     @staticmethod
     def app_data_path():
@@ -326,7 +354,7 @@ class Application(object):
         # This file lives under $myapp/Contents/MacOS. dirname(__file__) is
         # MacOS; realpath(MacOS/../..) should get us myapp.
         parent, myapp = \
-            os.path.split(os.path.realpath(os.path.join(os.path.dirname(__file__),
+            os.path.split(os.path.realpath(os.path.join(udir(),
                                                         os.pardir,
                                                         os.pardir)))
         # find all the app bundles under parent, keeping only basenames
