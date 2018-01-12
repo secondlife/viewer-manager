@@ -32,7 +32,7 @@ $/LicenseInfo$
 from copy import deepcopy
 from datetime import datetime   
 from logging import DEBUG
-from vmp_util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file
+from vmp_util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file, ufile
 from llbase import llsd, llrest
 
 import apply_update
@@ -746,7 +746,7 @@ def _update_manager(command, cli_overrides = {}):
     # get the owner of the install and the current user
     # none of this is supported by Python on Windows
     if platform.system() != "Windows":
-        script_owner_id = os.stat(os.path.realpath(__file__)).st_uid
+        script_owner_id = os.stat(os.path.realpath(ufile(__file__))).st_uid
         user_id = os.getuid()
         if script_owner_id != user_id:
             import pwd
