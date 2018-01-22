@@ -37,7 +37,7 @@ import sys
 
 # Must be FIRST VMP IMPORT: in case of crash anywhere along the way, try to
 # ensure that at least we'll produce diagnostic output into the log.
-from vmp_util import SL_Logging, Application, BuildData, udir, ufile
+from vmp_util import SL_Logging, Application, BuildData, udir, ufile, subprocess_args
 if __name__ == "__main__":
     # sets up unhandled exception handler in sys.excepthook
     # do this right away because in the past we've hit crashes even importing
@@ -208,6 +208,18 @@ def main():
     # If runner is actually an ExecRunner, or if the launch attempt fails,
     # this run() call won't return.
     viewer_process = runner.run()
+    if platform.system() == "Darwin":
+        # MAINT-8109: try to make the real viewer's window frontmost
+        # derived from https://stackoverflow.com/q/38923478
+        osascript = ['/usr/bin/osascript', '-e',
+                     'tell app "System Events" to set frontmost of every process '
+                     'whose unix id is %s to true' % viewer_process.pid]
+        # Use call() rather than check_call() because this is merely for
+        # convenience: if it doesn't work, user can still manually bring the
+        # viewer window forward.
+        subprocess.call(
+            osascript,
+            **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
     # at the moment, we just wait here.  Later, the crash monitor will be launched at this point
     rc = viewer_process.wait()
     log.info("Viewer terminated with %s" % rc)
