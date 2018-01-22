@@ -36,7 +36,7 @@ import subprocess
 import sys
 import logging
 from runner import PopenRunner
-from vmp_util import SL_Logging, Application, BuildData
+from vmp_util import SL_Logging, Application, BuildData, subprocess_args
 from InstallerUserMessage import status_message
 
 #if for some reason we are running on a POSIX machine with python less than 2.7
@@ -200,6 +200,18 @@ def main():
     # If runner is actually an ExecRunner, or if the launch attempt fails,
     # this run() call won't return.
     viewer_process = runner.run()
+    if platform.system() == "Darwin":
+        # MAINT-8109: try to make the real viewer's window frontmost
+        # derived from https://stackoverflow.com/q/38923478
+        osascript = ['/usr/bin/osascript', '-e',
+                     'tell app "System Events" to set frontmost of every process '
+                     'whose unix id is %s to true' % viewer_process.pid]
+        # Use call() rather than check_call() because this is merely for
+        # convenience: if it doesn't work, user can still manually bring the
+        # viewer window forward.
+        subprocess.call(
+            osascript,
+            **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
     # at the moment, we just wait here.  Later, the crash monitor will be launched at this point
     rc = viewer_process.wait()
     log.info("Viewer terminated with %s" % rc)
