@@ -158,7 +158,7 @@ class ExecRunner(Runner):
         else:                               # any platform other than Windows
             # In this case os.execv() should actually replace this process, just
             # as we want.
-            log.info("Executing %s", (self.command,))
+            log.info("Executing %s", self.command)
 
             # ensure that logs are closed and flushed before execing
             logging.shutdown()
