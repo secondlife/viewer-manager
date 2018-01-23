@@ -27,7 +27,7 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
-from nose.tools import assert_equal, assert_false
+from nose.tools import assert_equal, assert_false, assert_true
 
 import os
 import sys
@@ -79,5 +79,10 @@ class testWindowsVideo(object):
                        lambda *args: 
                        'Name                    \r\r\n' 
                        '\r\r\n'): 
-            assert_false(update_manager.WindowsVideo.isUnsupported())
+            assert_true(update_manager.WindowsVideo.isUnsupported())
 
+    def testBadWmic(self):
+        def wmic(*args):
+            raise update_manager.WmicError("fake error")
+        with patch(update_manager, "wmic", wmic):
+            assert_true(update_manager.WindowsVideo.isUnsupported())
