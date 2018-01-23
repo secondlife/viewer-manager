@@ -501,16 +501,17 @@ def subprocess_args(include_stdout=True, log_stream=None):
     #
     # So, add it only if it's needed.
     if include_stdout:
-        ret = {'stdout': log_stream}
+        # If we're logging stdout as well as stderr, then tell subprocess to
+        # pass literally the same file handle so output interleaves nicely.
+        ret = dict(stdout=log_stream, stderr=subprocess.STDOUT)
     else:
-        ret = {}
+        ret = dict(stderr=log_stream)
 
     # On Windows, running this from the binary produced by Pyinstaller
     # with the ``--noconsole`` option requires redirecting everything
     # (stdin, stdout, stderr) to avoid an OSError exception
     # "[Error 6] the handle is invalid."
     ret.update({'stdin': subprocess.PIPE,
-                'stderr': log_stream,
                 'startupinfo': si,
                 'env': env })
     return ret

@@ -60,17 +60,15 @@ from time import sleep
 import urllib
 #for the disable_warnings method 
 import urllib3
+import uuid
 import warnings
 
 
 class UpdateError(Exception):
     pass
 
-class UpdateErrorIn(UpdateError):
-    def __init__(self, state):
-        super(UpdateErrorIn, self).__init__(
-            'Update failed in the %s process.  Please check logs.' % state)
-
+class WmicError(UpdateError):
+    pass
 
 #module globals
 
@@ -264,20 +262,24 @@ def make_VVM_UUID_hash(platform_key):
         muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
         log.debug("result of subprocess call to get mac MUUID: %r" % muuid)
     elif (platform_key == 'win'):
-        # wmic csproduct get UUID | grep -v UUID
-        muuid = wmic('csproduct','get','UUID')
-        #outputs in two rows:
-        #UUID
-        #XXXXXXX-XXXX...
-        muuid = muuid.splitlines()[1].rstrip()
-        log.debug("result of subprocess call to get win MUUID: %r" % muuid)
+        try:
+            # wmic csproduct get UUID | grep -v UUID
+            muuid = wmic('csproduct','get','UUID')
+        except WmicError as err:
+            log.warning(err)
+            muuid = None
+        else:
+            #outputs in two rows:
+            #UUID
+            #XXXXXXX-XXXX...
+            muuid = muuid.splitlines()[1].rstrip()
+            log.debug("result of subprocess call to get win MUUID: %r" % muuid)
             
-    if muuid is not None:
-        hash = hashlib.md5(muuid).hexdigest()
-    else:
+    if muuid is None:
         #fake it
         log.info("Unable to get system unique id; constructing a dummy")
-        hash = hashlib.md5(str(uuid.uuid1())).hexdigest()
+        muuid = str(uuid.uuid1())
+    hash = hashlib.md5(muuid).hexdigest()
     return hash
 
 def getBitness(platform_key):
@@ -309,12 +311,15 @@ def wmic(*args):
             wmic_cmd,
             **subprocess_args(include_stdout=False,
                               log_stream=SL_Logging.stream_from_process(wmic_cmd)))
+    except subprocess.CalledProcessError as err:
+        # https://docs.python.org/2/library/subprocess.html#subprocess.CalledProcessError
+        # When check_output() raises CalledProcessError, it stores collected
+        # output into err.output.
+        raise WmicError("wmic error: %s\n%s" % (err, err.output))
     except WindowsError as winerr:
-        raise UpdateError("wmic command failed; error %s %s" % (winerr.winerror, winerr.strerror))
-    except OSError as err:
         if err.errno == errno.ENOENT:
-            raise UpdateError("No wmic command found - bad Windows install?")
-        raise
+            raise WmicError("No wmic command found - bad Windows install?")
+        raise WmicError("wmic command failed; error %s %s" % (winerr.winerror, winerr.strerror))
 
 def query_vvm(platform_key = None, settings = {},
               UpdaterServiceURL = None, UpdaterWillingToTest = None):
@@ -461,36 +466,48 @@ class WindowsVideo(object):
 
             # There are video cards that are not supported for the 64bit build on Windows 10,
             # so find out what the video controller is
-            wmic_graphics = wmic('path','Win32_VideoController','get','NAME')
-            log.debug("wmic graphics card info: %r" % wmic_graphics)
-            # first rstrip() every line, then discard any that are completely blank
-            # the first line of the response is always the string literal 'Name'
-            wmic_list = [line for line in
-                             (ln.rstrip() for ln in wmic_graphics.splitlines())
-                             if line][1:]
-            if wmic_list:
-                # The logic here is a little complicated:
-                # - If there's no bad card, we're good.
-                # - If there's a bad card AND some other card, still good.
-                # - If the only card(s) present are bad cards, not good.
-                good_cards = [line for line in wmic_list
-                              if not ("Intel(R) HD Graphics" in line and
-                                      line.split()[-1] in WindowsVideo.NO64_GRAPHICS_LIST)]
-                # There's no order guarantee from wmic, this is to prevent an
-                # HD card discovered after a good card from overwriting the state variable
-                # by specification, a machine is bad iff ALL of the cards on the machine are bad ones
-                if good_cards:
-                    WindowsVideo.hasOnlyUnsupported = False
-                    log.debug("Found at least one good graphics card: '%s'", "', '".join(good_cards))
-                    # so we can leave the target win64
-                else:
-                    # all we found were cards that are not supported in the Windows 64bit build
-                    WindowsVideo.hasOnlyUnsupported = True
-                    log.warning("Found only graphics cards not supported in Windows 8.1 or 10: "
-                                "'%s'; should switch to the 32 bit build", "', '".join(wmic_list))
+            try:
+                wmic_graphics = wmic('path','Win32_VideoController','get','NAME')
+            except WmicError as err:
+                log.warning(err)
+                # MAINT-8200: If we can't get information about the video
+                # card, conservatively assume we'll need the 32-bit viewer.
+                # The downside if we guess wrong is a performance hit, which
+                # can be overridden by the ForceAddressSize parameter. If we
+                # guess the other way, the downside is a viewer crash.
+                WindowsVideo.hasOnlyUnsupported = True
             else:
-                log.warning("wmic did not return any video cards")
-                WindowsVideo.hasOnlyUnsupported = False # we are probably hosed, but go ahead and try
+                log.debug("wmic graphics card info: %r", wmic_graphics)
+                # first rstrip() every line, then discard any that are completely blank
+                # the first line of the response is always the string literal 'Name'
+                wmic_list = [line for line in
+                                 (ln.rstrip() for ln in wmic_graphics.splitlines())
+                                 if line][1:]
+                if wmic_list:
+                    # The logic here is a little complicated:
+                    # - If there's no bad card, we're good.
+                    # - If there's a bad card AND some other card, still good.
+                    # - If the only card(s) present are bad cards, not good.
+                    good_cards = [line for line in wmic_list
+                                  if not ("Intel(R) HD Graphics" in line and
+                                          line.split()[-1] in WindowsVideo.NO64_GRAPHICS_LIST)]
+                    # There's no order guarantee from wmic, this is to prevent an
+                    # HD card discovered after a good card from overwriting the state variable
+                    # by specification, a machine is bad iff ALL of the cards on the machine are bad ones
+                    if good_cards:
+                        WindowsVideo.hasOnlyUnsupported = False
+                        log.debug("Found at least one good graphics card: '%s'",
+                                  "', '".join(good_cards))
+                    else:
+                        # all we found were cards that are not supported in the Windows 64bit build
+                        WindowsVideo.hasOnlyUnsupported = True
+                        log.warning("Found only graphics cards not supported in Windows 8.1 or 10: "
+                                    "'%s'; should switch to the 32 bit build",
+                                    "', '".join(wmic_list))
+                else:
+                    log.warning("wmic did not return any video cards")
+                    # use MAINT-8200 reasoning described above
+                    WindowsVideo.hasOnlyUnsupported = True
 
         return WindowsVideo.hasOnlyUnsupported
 
