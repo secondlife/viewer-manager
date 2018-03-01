@@ -34,7 +34,6 @@ Performs a download of an update.  In a separate script from update_manager so t
 call it with subprocess.
 """
 import os
-import cgitb
 from datetime import datetime
 import errno
 import glob
@@ -160,13 +159,7 @@ def main():
                     chunk_size = args.chunk_size)
 
 if __name__ == "__main__":
-    cgitb.enable(format='text')
     # Initialize the python logging system to SL Logging format and destination
-    log = SL_Logging.getLogger('SL_Downloader')
+    SL_Logging.getLogger('SL_Downloader')
 
-    try:
-        main()
-    except Exception:
-        log_traceback = cgitb.Hook(file=SL_Logging.stream(prefix_msg="Unhandled exception:"), format='text')
-        log_traceback.handle()
-
+    main()

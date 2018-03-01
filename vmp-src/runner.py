@@ -130,7 +130,7 @@ class PopenRunner(Runner):
         with self.error_trap(log):
             viewer_process = self.Popen(self.command, env=env)
 
-        log.info("Successfully launched %s", (self.command,))
+        log.info("Successfully launched %s", self.command)
         return viewer_process
 
 class ExecRunner(Runner):
@@ -158,7 +158,7 @@ class ExecRunner(Runner):
         else:                               # any platform other than Windows
             # In this case os.execv() should actually replace this process, just
             # as we want.
-            log.info("Executing %s", (self.command,))
+            log.info("Executing %s", self.command)
 
             # ensure that logs are closed and flushed before execing
             logging.shutdown()
