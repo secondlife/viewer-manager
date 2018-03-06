@@ -23,37 +23,45 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
+from __future__ import print_function
+
 # Check https://wiki.lindenlab.com/wiki/How_To_Start_Using_Autobuild/Examples for info on how to build this package
 from shutil import copy, copytree, ignore_patterns, rmtree
 
 import cgitb
 import errno
 import glob
+from importlib import import_module
 import os
 import os.path
 import platform
+from pprint import pprint
 import re
 import subprocess
 import sys
 import trace
 
-# so that we find the llbase installed by autobuild first
-sys.path.insert(0,"packages/lib/python")
-try:
-    import llbase
-except Exception as e:
-    print "Python at %s could not find llbase" % sys.executable
-    repr(e)
-    sys.exit(1)
-    
-llbasedir = os.path.dirname(os.path.abspath(llbase.__file__))
-print "Found llbase at: %r" % llbasedir
-
+# set this up early to report crashes in anything that follows
 cgitb.enable(format='text')
-darwin = re.compile('darwin')
-linux = re.compile('linux')
+
+darwin  = re.compile('darwin')
+linux   = re.compile('linux')
 windows = re.compile('win')
-bit32 = re.compile('32 bit')
+bit32   = re.compile('32 bit')
+
+# Python packages on which the VMP depends: this should correspond with
+# packages listed in requirements.txt, but requirements.txt supports
+# sufficiently rich syntax that we can't count on simply digging these package
+# names out of that file.
+DEPENDENCIES = [
+    "eventlet",
+    "greenlet",                         # required by eventlet
+    "llbase",
+    "requests",
+]
+
+class Error(Exception):
+    pass
 
 #unify platform names and correctly return bitness
 def getPlatform():
@@ -66,7 +74,7 @@ def getPlatform():
     elif linux.search(plat):
         return 'linux' + bitness
     elif windows.search(plat):
-        print "sys.version: %s" % repr(sys.version)
+        print("sys.version: %s" % repr(sys.version))
         #sadly, most of the ways that python uses to determine bitness
         #in the end rely on the CPU/memory bitness and all return 64
         #scraping sys.version is the only reliable method
@@ -79,34 +87,62 @@ def getPlatform():
         return None
     
 def main():
-    print "Python version string: %s" % sys.version
-    print "Using python from: %s" % sys.executable
+    print("Python version string: %s" % sys.version)
+    print("Using python from: %s" % sys.executable)
     autobuild = os.environ.get('AUTOBUILD')
     platform = getPlatform()
 
     # various places things go and come from.  
-    print "sys.argv: %r" % sys.argv
-    top = os.path.dirname(os.path.realpath(sys.argv[0]))
+    print("sys.argv: %r" % sys.argv)
+    top, scriptname = os.path.split(os.path.realpath(sys.argv[0]))
+    vmp_src = os.path.join(top, 'vmp-src')
+    icon = os.path.join(vmp_src, 'icons', 'secondlife.ico')
+    tests = os.path.join(vmp_src,'tests')
     stage = os.path.join(top, 'stage')
     stage_VMP = os.path.join(stage, "VMP")
     build = os.path.join(top, 'build')
-    #if we decide we need to copy yet another directory tree, just add the source and dest to this dict
-    # each value in iter_paths is a (src, dst) pair in that order
-    src, dst = range(2)
-    iter_paths = {'vmp': (os.path.join(top, 'vmp-src'), stage_VMP), 
-                  'llb': (llbasedir, os.path.join(stage_VMP, 'llbase'))
-    }
-    print "iterpaths: %r" % iter_paths
-    icon = os.path.join(iter_paths['vmp'][src], 'icons', 'secondlife.ico')
-    tests = os.path.join(iter_paths['vmp'][src],'tests')
-    
-    #We will ship a 32 bit VMP with 64 bit viewers
+
+    # ensure we're running in a virtualenv
+    try:
+        virtualenv = os.environ["VIRTUAL_ENV"]
+    except KeyError:
+        raise Error('Run %s within a virtualenv: it uses pip install' % scriptname)
+    print("Installing %s into virtualenv: %s" % (', '.join(DEPENDENCIES), virtualenv))
+
+    # pip install the various dependencies listed in requirements.txt.
+    # -U means: even if we already have an older version of (say) requests in
+    # the system image, ensure our virtualenv has the version specified in
+    # requirements.txt (or the latest version if not version-locked).
+    cmd = ['pip', 'install', '-U', '-r', os.path.join(top, 'requirements.txt')]
+    print('Running: %s' % ' '.join(cmd))
+    sys.stdout.flush()
+    try:
+        subprocess.check_call(cmd)
+    except subprocess.CalledProcessError as err:
+        raise Error(str(err))
+
+    # We use copytree() to populate stage_VMP. copytree() doesn't like it when
+    # its destination directory already exists.
+    try:
+        rmtree(stage_VMP, ignore_errors=True)
+    except OSError as err:
+        if err.errno != errno.ENOENT:
+            # anything but "doesn't exist" is a problem
+            raise
+
+    # But make sure the stage directory exists
+    try:
+        os.makedirs(stage)
+    except OSError as err:
+        if err.errno != errno.EEXIST:
+            raise
+
+    #We ship a 32 bit VMP with 64 bit viewers
     if platform is None: 
-        print >>sys.stderr, 'No valid platform found'
-        sys.exit(1)         
+        raise Error('No valid platform found')         
     if platform == 'win64':
         #this is just a warning so that devs can build on w64 boxen
-        print >>sys.stderr, 'The Windows VMP must be built on a 32-bit python Windows host'   
+        print('The Windows VMP must be built on a 32-bit python Windows host', sys.stderr)
     
     #run nosetests
     # hardcoded fallback path
@@ -143,21 +179,21 @@ def main():
         nose_env['PYTHONPATH'] = llbasedir
 
     try:
-        print "About to call %s on %s from %s" % (nosetests, tests, iter_paths['vmp'][src])
-        #print "nose environment: %r" % nose_env
+        print("About to call %s on %s from %s" % (nosetests, tests, vmp_src))
+        #print("nose environment: %r" % nose_env)
         output = repr(subprocess.check_output([nosetests, tests],
                                               stderr=subprocess.STDOUT, env=nose_env,
-                                              cwd=iter_paths['vmp'][src]))
+                                              cwd=vmp_src))
     except subprocess.CalledProcessError as e:
-        print repr(e)
+        print(repr(e))
         #these only exist if the exception is a CalledProcessError
-        print "returncode: %s" % e.returncode
-        print "command: %s" % e.cmd
-        print "output: %s" % e.output
-        sys.exit(1)
+        print("returncode: %s" % e.returncode)
+        print("command: %s" % e.cmd)
+        print("output: %s" % e.output)
+        raise Error(str(e))
     except Exception as e:
         #more debug is best effort
-        sys.exit(repr(e))
+        raise Error(str(e))
 
     output = output.replace('\\n','$')
     output = output.replace('\'','')
@@ -166,8 +202,8 @@ def main():
     for line in output_list:
         if 'Ran' in line or 'OK' in line:
             one_line =  one_line + " " + line
-    print "Successful nosetest output:"
-    print one_line
+    print("Successful nosetest output:")
+    print(one_line)
            
     #the version file consists of one line with the version string in it
     sourceVersionFile = os.path.join(top, "VERSION.txt")
@@ -175,12 +211,36 @@ def main():
     packageVersionFile=open(os.path.join(stage,"VERSION.txt"), 'wb')
     packageVersionFile.write("%s.%s" % (sourceVersion, os.getenv('AUTOBUILD_BUILD_ID','0')))
 
-    #copytree doesn't want the destination directory to pre-exist
-    for srcdir, dstdir in iter_paths.values():
-        if os.path.exists(dstdir):
-            rmtree(dstdir, ignore_errors=True)
-        copytree(srcdir, dstdir, ignore=ignore_patterns('*.pyc', '*tests*'))
-        print "copied %s to %s with contents %s" % (srcdir, dstdir, repr(os.listdir(dstdir)))
+    ignores = ignore_patterns('*.pyc', '*tests*')
+    # start with the parent directory
+    copytree(vmp_src, stage_VMP, ignore=ignores)
+    # Copy packages named in DEPENDENCIES.
+    # Instead of reporting only the *first* ImportError, gotta catch 'em all.
+    iter_paths = {}
+    errors = []
+    for pkg in DEPENDENCIES:
+        try:
+            modfile = import_module(pkg).__file__
+        except ImportError as err:
+            errors.append(str(err))
+        else:
+            # splitext()[0] strips off the extension (e.g. .pyc)
+            # split() takes apart the directory path from the simple name
+            moddir, modname = os.path.split(os.path.splitext(modfile)[0])
+            if modname == '__init__':
+                # If an imported module's name is __init__, the name
+                # represents a whole package. Have to copy its entire
+                # directory.
+                dstdir = os.path.join(stage_VMP, pkg)
+                print("Copying %s to %s" % (moddir, dstdir))
+                copytree(moddir, dstdir, ignore=ignores)
+            else:
+                # imported module isn't named __init__, therefore it's a
+                # single file module -- copy just that file
+                print("Copying %s to %s" % (modfile, os.path.join(stage_VMP, modfile)))
+                copy(modfile, stage_VMP)
+    if errors:
+        raise Error('\n'.join(errors))
 
     sourceLicenseFile = os.path.join(top, "LICENSE")
     copy(sourceLicenseFile, stage)
@@ -193,11 +253,10 @@ def main():
         pass
     elif windows.search(platform):
         #to keep things as platform independent as possible, EXEs go into the same directory as .py files
-        dstdir = iter_paths['vmp'][dst]
         # SL_Launcher is the main entry point for the VMP.
-        vmp_files = [os.path.join(dstdir, f)
+        vmp_files = [os.path.join(stage_VMP, f)
                      for f in ("SL_Launcher",)]
-        print "Manifest of files to be compiled by pyinstaller: %s" % repr(vmp_files)
+        print("Manifest of files to be compiled by pyinstaller: %s" % repr(vmp_files))
 
         #In a typical Windows install, pinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         #BUT that's not true of the virtualenv that autobuild runs in, so
@@ -218,33 +277,33 @@ def main():
             # not on $PATH, hmm, try hard coding the canonical location
             pyinstaller_path = os.path.join(r'C:\Python27\Scripts', pyinstaller)
             if not os.path.exists(pyinstaller_path):
-                sys.exit("pyinstaller not found")
+                raise Error("pyinstaller not found")
             else:
-                print "pyinstaller not on PATH, using hardcoded %r" % pyinstaller_path
+                print("pyinstaller not on PATH, using hardcoded %r" % pyinstaller_path)
 
-        args = [ "-y", "-w", "-i", icon, "--clean", "--onefile", "--log-level", "DEBUG", "-p", dstdir, "--distpath", dstdir]
+        args = [ "-y", "-w", "-i", icon, "--clean", "--onefile", "--log-level", "DEBUG", "-p", stage_VMP, "--distpath", stage_VMP]
         # The requests module invokes the certifi.where function we provide
         # at _load_ time; since that module looks in the application data
         # directory to find build_data.json, it needs to find one, so point
         # to it with this override variable. This has no effect at run time
         # because the variable won't be defined.
-        os.environ['APP_DATA_DIR'] = os.path.join(iter_paths['vmp'][src],'tests')
+        os.environ['APP_DATA_DIR'] = os.path.join(vmp_src,'tests')
         for f in vmp_files:
-            print "target %r exists: %s" % (f, os.path.exists(f))
+            print("target %r exists: %s" % (f, os.path.exists(f)))
             command = [sys.executable, pyinstaller_path] + args + [f]
-            print "about to call %s " % command
+            print("about to call %s " % command)
             sys.stdout.flush()
             try:
                 subprocess.check_call(command)
             except subprocess.CalledProcessError as e:
-                print "Pyinstaller failed"
-                print repr(e)
-                print "returncode: %s" % e.returncode
-                print "command: %s" % e.cmd
-                print "output: %s" % e.output
-                sys.exit(1)
+                print("Pyinstaller failed")
+                print(repr(e))
+                print("returncode: %s" % e.returncode)
+                print("command: %s" % e.cmd)
+                print("output: %s" % e.output)
+                raise Error(str(e))
             except Exception as e:
-                sys.exit(repr(e))
+                raise Error(str(e))
         #best effort cleanup after pyinstaller
         rmtree(build, ignore_errors=True)
         for f in glob.glob(os.path.join(top, "*.spec")):
@@ -252,10 +311,14 @@ def main():
                 os.remove(f)
             except:
                 pass
-    print "Build Succeeded"
+    print("Build Succeeded")
         
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
-    libs = os.path.dirname(os.__file__)
-    tracer = trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix, libs], ignoremods=["subprocess", "shutil"], trace=1, count=0, timing=False)
-    tracer.run('main()')
+    libs = os.path.dirname(trace.__file__)
+    tracer = trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix, libs],
+                         trace=1, count=0, timing=False)
+    try:
+        tracer.run('main()')
+    except Error as err:
+        sys.exit(str(err))
