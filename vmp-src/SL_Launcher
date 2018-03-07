@@ -29,6 +29,8 @@ $/LicenseInfo$
 @date   2016-06-23
 """
 
+import eventlet
+from functools import partial
 import os
 import os.path
 import platform
@@ -43,9 +45,15 @@ if __name__ == "__main__":
     # do this right away because in the past we've hit crashes even importing
     # other VMP modules
     SL_Logging.getLogger('SL_Launcher')
+    # We use a number of other modules, including 'requests'. We want every
+    # single module that performs network I/O, or other conventional
+    # operations, to perform it using eventlet magic.
+    eventlet.monkey_patch(os=True, select=True, socket=True, time=True,
+                          builtins=True, subprocess=True)
 
 from runner import PopenRunner
-from InstallerUserMessage import status_message
+from InstallerUserMessage import status_message, root
+from tkeventlet import TkGreenthread
 
 #if for some reason we are running on a POSIX machine with python less than 2.7
 #just give up on VMP and execute the viewer per product.
@@ -210,20 +218,50 @@ def main():
     viewer_process = runner.run()
     if platform.system() == "Darwin":
         # MAINT-8109: try to make the real viewer's window frontmost
-        # derived from https://stackoverflow.com/q/38923478
-        osascript = ['/usr/bin/osascript', '-e',
-                     'tell app "System Events" to set frontmost of every process '
-                     'whose unix id is %s to true' % viewer_process.pid]
-        # Use call() rather than check_call() because this is merely for
-        # convenience: if it doesn't work, user can still manually bring the
-        # viewer window forward.
-        subprocess.call(
-            osascript,
-            **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
+        raise_window(viewer_process)
+
+    # MAINT-8304: when the user clicks on OUR taskbar/Dock icon instead of the
+    # viewer's, raise the viewer window.
+    eventlet.spawn(listen_for_clicks, viewer_process)
+
     # at the moment, we just wait here.  Later, the crash monitor will be launched at this point
     rc = viewer_process.wait()
     log.info("Viewer terminated with %s" % rc)
     log.info("Launcher exiting after viewer exit.")
+
+def listen_for_clicks(viewer_process):
+    # eventlet greenthread dedicated to calling Tk.mainloop() so we can
+    # respond to user clicks on the Taskbar/Dock icon
+
+    # Find or create the Tk root window
+    rt = root()
+    # Platform-specific event bindings. If we don't recognize the platform,
+    # don't bind anything.
+    bindings = dict(
+        Windows=["<Map>", "<Unmap>"],
+        Darwin =["<Activate>"],
+        ).get(platform.system(), [])
+    for binding in bindings:
+        # Prebind the viewer_process argument to raise_window().
+        rt.bind(binding, partial(raise_window, viewer_process))
+    # now listen
+    ##rt.mainloop()
+    TkGreenthread(rt)
+
+def raise_window(viewer_process, event=None):
+    # The idiom we use above, passing partial(raise_window, viewer_process) to
+    # Tk.bind(), passes an extra 'event' param on click. We must be prepared
+    # to receive it, even though we ignore it.
+    # derived from https://stackoverflow.com/q/38923478
+    osascript = ['/usr/bin/osascript', '-e',
+                 'tell app "System Events" to set frontmost of every process '
+                 'whose unix id is %s to true' % viewer_process.pid]
+    # Use call() rather than check_call() because this is merely for
+    # convenience: if it doesn't work, user can still manually bring the
+    # viewer window forward.
+    subprocess.call(
+        osascript,
+        **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
 
 if __name__ == "__main__":
     main()

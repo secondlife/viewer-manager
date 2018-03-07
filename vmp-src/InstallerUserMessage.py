@@ -65,6 +65,28 @@ import webbrowser
 from vmp_util import Application, SL_Logging, udir
 
 # ****************************************************************************
+#   Tk root window
+# ****************************************************************************
+# We want the Tk root window to be available as needed -- but we don't want to
+# initialize it at import time, only on demand. If we could define a "module
+# property," we'd do that; since we can't, just use a function.
+_root = None
+
+def root():
+    global _root
+    if _root is None:
+        _root = tk.Tk()
+        # _root is actually an invisible window, the parent for all Frames we
+        # engage later on. Its main purpose is to provide the Taskbar/Dock
+        # icon, allowing us to detect when the user clicks on said icon.
+        ##_root.withdraw()
+        # It's actually important to use this incantation to hide the root
+        # window: withdraw() leaves the Taskbar/Dock icon insensitive to
+        # clicks, versus this alpha trick.
+        _root.attributes("-alpha", 0.0)
+    return _root
+
+# ****************************************************************************
 #   status frame functionality
 # ****************************************************************************
 # When we're currently displaying a StatusMessage, this module global holds
@@ -122,7 +144,7 @@ def basic_message(text, **kwds):
 # ****************************************************************************
 #   InstallerUserMessage class
 # ****************************************************************************
-class InstallerUserMessage(tk.Tk):
+class InstallerUserMessage(tk.Frame):
     #Goals for this class:
     #  Provide a uniform look and feel
     #  Provide an easy to use convenience class for other scripts
@@ -137,17 +159,8 @@ class InstallerUserMessage(tk.Tk):
 
     def __init__(self, title=None, width=500, height=230,
                  icon_name = "head-sl-logo.gif", icon_path = None):
-        # Before we even perform base-class initialization, suppress any
-        # existing _status_frame. Deriving from tk.Tk (vs. tk.Frame) is great
-        # when you know that any one of these might be the first visible
-        # frame, but empirically, multiple concurrent instances of tk.Tk
-        # subclasses confuse the communication between Python and Tkinter:
-        # things end up in the wrong frame. Make them mutually exclusive by
-        # destroying any existing _status_frame before constructing this tk.Tk
-        # subclass.
-        status_message(None)
-        # Now initialize base class.
-        tk.Tk.__init__(self)
+        # initialize base class, passing invisible root window as parent
+        tk.Frame.__init__(self, master=root())
         self.grid()
         self.title(title or Application.name())
         self.choice = tk.BooleanVar()
