@@ -175,8 +175,6 @@ def main():
     if platform == 'win32':
         nose_env['LIB'] = ""
         nose_env['WINDOWSSDK_EXECUTABLEPATH_X64'] = ''
-        nose_env['PATH'] = llbasedir + ":" + nose_env['PATH']
-        nose_env['PYTHONPATH'] = llbasedir
 
     try:
         print("About to call %s on %s from %s" % (nosetests, tests, vmp_src))
