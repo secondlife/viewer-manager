@@ -179,9 +179,9 @@ def main():
     try:
         print("About to call %s on %s from %s" % (nosetests, tests, vmp_src))
         #print("nose environment: %r" % nose_env)
-        output = repr(subprocess.check_output([nosetests, tests],
-                                              stderr=subprocess.STDOUT, env=nose_env,
-                                              cwd=vmp_src))
+        output = subprocess.check_output([nosetests, tests],
+                                         stderr=subprocess.STDOUT, env=nose_env,
+                                         cwd=vmp_src)
     except subprocess.CalledProcessError as e:
         #exception attribute only exists on CalledProcessError
         raise Error("Tests failed: %s\n"
@@ -199,7 +199,7 @@ def main():
     with open(sourceVersionFile, 'r') as svf:
         sourceVersion = svf.read().strip()
     with open(os.path.join(stage,"VERSION.txt"), 'w') as packageVersionFile:
-    packageVersionFile.write("%s.%s" % (sourceVersion, os.getenv('AUTOBUILD_BUILD_ID','0')))
+        packageVersionFile.write("%s.%s" % (sourceVersion, os.getenv('AUTOBUILD_BUILD_ID','0')))
 
     ignores = ignore_patterns('*.pyc', '*tests*')
     # start with the parent directory
@@ -245,30 +245,41 @@ def main():
         #In a typical Windows install, pinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         #BUT that's not true of the virtualenv that autobuild runs in, so
         #search.
-        pyinstaller_script = 'pyinstaller-script.py'
+        pyinstaller_runners = [
+            # If what we find is pyinstaller-script.py, need to run it with
+            # our own interpreter.
+            [sys.executable, 'pyinstaller-script.py'],
+            # On the other hand, if we find pyinstaller.exe, just run that.
+            ['pyinstaller.exe'],
+            ]
+        # search directories on PATH
+        # use one-off exception to escape doubly-nested loop
+        class Found(Exception):
+            pass
         try:
-            # We want the FIRST path on $PATH containing pyinstaller_script. Before
-            # generator comprehensions, we'd have written a list comprehension
-            # and taken [0] of that -- but that would unconditionally check
-            # every directory on $PATH. Writing next(generator) stops at the
-            # first item to satisfy the filter, or raises StopIteration if no
-            # item satisfies.
-            pyinstaller_path = next(path for path in
-                                    (os.path.join(dir, pyinstaller_script)
-                                     for dir in os.environ["PATH"].split(os.pathsep))
-                                    if os.path.exists(path))
-        except StopIteration:
+            for dir in os.environ["PATH"].split(os.pathsep):
+                for cmd in pyinstaller_runners:
+                    # Check if the LAST entry in pyinstaller_cmd is in this dir.
+                    pyinstaller_path = os.path.join(dir, cmd[-1])
+                    if os.path.exists(pyinstaller_path):
+                        raise Found()
+        except Found:
+            pass
+        else:
             # not on $PATH, hmm, try hard coding the canonical location
-            pyinstaller_path = os.path.join(r'C:\Python27\Scripts', pyinstaller_script)
-            if not os.path.exists(pyinstaller_path):
-                raise Error("pyinstaller not found")
-            else:
-                print("pyinstaller not on PATH, using hardcoded %r" % pyinstaller_path)
+            dir = r'C:\Python27\Scripts'
+            cmd = pyinstaller_runners[0]
+            pyinstaller_path = os.path.join(dir, cmd[-1])
+            print("pyinstaller not on PATH, trying hardcoded %s" % pyinstaller_path)
+
+        # take everything but the last entry in cmd, then append
+        # the new (prepended with dir) pyinstaller_path as last
+        pyinstaller_cmd = cmd[:-1] + [pyinstaller_path]
 
         # to keep things as platform independent as possible, EXEs go into the
         # same directory as .py files
         # SL_Launcher is the main entry point for the VMP.
-        pyinstaller(pyinstaller_path, os.path.join(stage_VMP, "SL_Launcher"), icon)
+        pyinstaller(pyinstaller_cmd, os.path.join(stage_VMP, "SL_Launcher"), icon)
 
         #best effort cleanup after pyinstaller
         rmtree(build, ignore_errors=True)
@@ -279,29 +290,29 @@ def main():
                 pass
     print("Build Succeeded")
 
-def pyinstaller(pyinstaller_path, mainfile, icon, manifest_from_build=None):
+def pyinstaller(pyinstaller_cmd, mainfile, icon, manifest_from_build=None):
     dstdir, basename = os.path.split(mainfile)
     print((" %s " % basename).center(72, '='))
     print("target %r exists: %s" % (mainfile, os.path.exists(mainfile)))
     # https://pyinstaller.readthedocs.io/en/stable/usage.html#options
-    command = [sys.executable, pyinstaller_path,
-               # don't prompt, just overwrite previous exe
-               "-y",
-               # suppress opening console window at runtime
-               "-w",
-               # icon to use for the generated executable
-               "-i", icon,
-               # don't reuse previous PyInstaller cache
-               "--clean",
-               # cram everything into single .exe file
-               "--onefile",
-               # control build-time output detail (for TeamCity builds)
-               "--log-level", "DEBUG",
-               # search specified path for Python imports
-               "-p", dstdir,
-               # where to put the generated executable
-               "--distpath", dstdir,
-               mainfile]
+    command = pyinstaller_cmd + [
+        # don't prompt, just overwrite previous exe
+        "-y",
+        # suppress opening console window at runtime
+        "-w",
+        # icon to use for the generated executable
+        "-i", icon,
+        # don't reuse previous PyInstaller cache
+        "--clean",
+        # cram everything into single .exe file
+        "--onefile",
+        # control build-time output detail (for TeamCity builds)
+        "--log-level", "DEBUG",
+        # search specified path for Python imports
+        "-p", dstdir,
+        # where to put the generated executable
+        "--distpath", dstdir,
+        mainfile]
     # Also note, in case of need:
     # --debug: produce runtime startup messages about imports and such (may
     #          need --console rather than -w?)
@@ -330,7 +341,7 @@ def pyinstaller(pyinstaller_path, mainfile, icon, manifest_from_build=None):
             subprocess.check_call(command)
         except subprocess.CalledProcessError as e:
             raise Error("Couldn't embed manifest %s in %s: %s\n"
-                        "output:\n%s" % % (manifest, exe, e, e.output))
+                        "output:\n%s" % (manifest, exe, e, e.output))
         
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
