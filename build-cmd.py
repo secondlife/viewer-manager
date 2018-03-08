@@ -168,7 +168,7 @@ def main():
                 break
 
     nose_env = os.environ.copy()
-    nose_env['PYTHONPATH'] = os.pathsep.join(sys.path)
+##  nose_env['PYTHONPATH'] = os.pathsep.join(sys.path)
     #stupid windows limit:
     # TypeError: encoded string too long (547, maximum length 519)
     #so nuke a few env vars we aren't using for this
