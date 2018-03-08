@@ -168,7 +168,6 @@ def main():
                 break
 
     nose_env = os.environ.copy()
-##  nose_env['PYTHONPATH'] = os.pathsep.join(sys.path)
     #stupid windows limit:
     # TypeError: encoded string too long (547, maximum length 519)
     #so nuke a few env vars we aren't using for this
@@ -320,9 +319,6 @@ def pyinstaller(pyinstaller_cmd, mainfile, icon, manifest_from_build=None):
     sys.stdout.flush()
     try:
         subprocess.check_call(command)
-    except subprocess.CalledProcessError as e:
-        raise Error("Pyinstaller failed building %s: %s\n"
-                    "output:\n%s" % (mainfile, e, e.output))
     except Exception as e:
         raise Error("Error building %s: %s: %s" % (mainfile, e.__class__.__name__, e))
 
@@ -340,8 +336,7 @@ def pyinstaller(pyinstaller_cmd, mainfile, icon, manifest_from_build=None):
         try:
             subprocess.check_call(command)
         except subprocess.CalledProcessError as e:
-            raise Error("Couldn't embed manifest %s in %s: %s\n"
-                        "output:\n%s" % (manifest, exe, e, e.output))
+            raise Error("Couldn't embed manifest %s in %s: %s" % (manifest, exe, e))
         
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
