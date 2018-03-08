@@ -183,30 +183,22 @@ def main():
                                               stderr=subprocess.STDOUT, env=nose_env,
                                               cwd=vmp_src))
     except subprocess.CalledProcessError as e:
-        print(repr(e))
-        #these only exist if the exception is a CalledProcessError
-        print("returncode: %s" % e.returncode)
-        print("command: %s" % e.cmd)
-        print("output: %s" % e.output)
-        raise Error(str(e))
+        #exception attribute only exists on CalledProcessError
+        raise Error("Tests failed: %s\n"
+                    "output:\n%s" % (e, e.output))
     except Exception as e:
         #more debug is best effort
-        raise Error(str(e))
+        raise Error("Tests didn't run: %s: %s" % (e.__class__.__name__, e))
 
-    output = output.replace('\\n','$')
-    output = output.replace('\'','')
-    output_list = output.split('$')
-    one_line = ''
-    for line in output_list:
-        if 'Ran' in line or 'OK' in line:
-            one_line =  one_line + " " + line
     print("Successful nosetest output:")
-    print(one_line)
+    print(' '.join(line for line in output.splitlines()
+                   if 'Ran' in line or 'OK' in line))
            
     #the version file consists of one line with the version string in it
     sourceVersionFile = os.path.join(top, "VERSION.txt")
-    sourceVersion = open(sourceVersionFile, 'r').read().strip()
-    packageVersionFile=open(os.path.join(stage,"VERSION.txt"), 'wb')
+    with open(sourceVersionFile, 'r') as svf:
+        sourceVersion = svf.read().strip()
+    with open(os.path.join(stage,"VERSION.txt"), 'w') as packageVersionFile:
     packageVersionFile.write("%s.%s" % (sourceVersion, os.getenv('AUTOBUILD_BUILD_ID','0')))
 
     ignores = ignore_patterns('*.pyc', '*tests*')
@@ -250,58 +242,34 @@ def main():
         #left as a separate clause in case lnx and mac ever diverge
         pass
     elif windows.search(platform):
-        #to keep things as platform independent as possible, EXEs go into the same directory as .py files
-        # SL_Launcher is the main entry point for the VMP.
-        vmp_files = [os.path.join(stage_VMP, f)
-                     for f in ("SL_Launcher",)]
-        print("Manifest of files to be compiled by pyinstaller: %s" % repr(vmp_files))
-
         #In a typical Windows install, pinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         #BUT that's not true of the virtualenv that autobuild runs in, so
         #search.
-        pyinstaller = 'pyinstaller-script.py'
+        pyinstaller_script = 'pyinstaller-script.py'
         try:
-            # We want the FIRST path on $PATH containing pyinstaller. Before
+            # We want the FIRST path on $PATH containing pyinstaller_script. Before
             # generator comprehensions, we'd have written a list comprehension
             # and taken [0] of that -- but that would unconditionally check
             # every directory on $PATH. Writing next(generator) stops at the
             # first item to satisfy the filter, or raises StopIteration if no
             # item satisfies.
             pyinstaller_path = next(path for path in
-                                    (os.path.join(dir, pyinstaller)
+                                    (os.path.join(dir, pyinstaller_script)
                                      for dir in os.environ["PATH"].split(os.pathsep))
                                     if os.path.exists(path))
         except StopIteration:
             # not on $PATH, hmm, try hard coding the canonical location
-            pyinstaller_path = os.path.join(r'C:\Python27\Scripts', pyinstaller)
+            pyinstaller_path = os.path.join(r'C:\Python27\Scripts', pyinstaller_script)
             if not os.path.exists(pyinstaller_path):
                 raise Error("pyinstaller not found")
             else:
                 print("pyinstaller not on PATH, using hardcoded %r" % pyinstaller_path)
 
-        args = [ "-y", "-w", "-i", icon, "--clean", "--onefile", "--log-level", "DEBUG", "-p", stage_VMP, "--distpath", stage_VMP]
-        # The requests module invokes the certifi.where function we provide
-        # at _load_ time; since that module looks in the application data
-        # directory to find build_data.json, it needs to find one, so point
-        # to it with this override variable. This has no effect at run time
-        # because the variable won't be defined.
-        os.environ['APP_DATA_DIR'] = os.path.join(vmp_src,'tests')
-        for f in vmp_files:
-            print("target %r exists: %s" % (f, os.path.exists(f)))
-            command = [sys.executable, pyinstaller_path] + args + [f]
-            print("about to call %s " % command)
-            sys.stdout.flush()
-            try:
-                subprocess.check_call(command)
-            except subprocess.CalledProcessError as e:
-                print("Pyinstaller failed")
-                print(repr(e))
-                print("returncode: %s" % e.returncode)
-                print("command: %s" % e.cmd)
-                print("output: %s" % e.output)
-                raise Error(str(e))
-            except Exception as e:
-                raise Error(str(e))
+        # to keep things as platform independent as possible, EXEs go into the
+        # same directory as .py files
+        # SL_Launcher is the main entry point for the VMP.
+        pyinstaller(pyinstaller_path, os.path.join(stage_VMP, "SL_Launcher"), icon)
+
         #best effort cleanup after pyinstaller
         rmtree(build, ignore_errors=True)
         for f in glob.glob(os.path.join(top, "*.spec")):
@@ -310,6 +278,59 @@ def main():
             except:
                 pass
     print("Build Succeeded")
+
+def pyinstaller(pyinstaller_path, mainfile, icon, manifest_from_build=None):
+    dstdir, basename = os.path.split(mainfile)
+    print((" %s " % basename).center(72, '='))
+    print("target %r exists: %s" % (mainfile, os.path.exists(mainfile)))
+    # https://pyinstaller.readthedocs.io/en/stable/usage.html#options
+    command = [sys.executable, pyinstaller_path,
+               # don't prompt, just overwrite previous exe
+               "-y",
+               # suppress opening console window at runtime
+               "-w",
+               # icon to use for the generated executable
+               "-i", icon,
+               # don't reuse previous PyInstaller cache
+               "--clean",
+               # cram everything into single .exe file
+               "--onefile",
+               # control build-time output detail (for TeamCity builds)
+               "--log-level", "DEBUG",
+               # search specified path for Python imports
+               "-p", dstdir,
+               # where to put the generated executable
+               "--distpath", dstdir,
+               mainfile]
+    # Also note, in case of need:
+    # --debug: produce runtime startup messages about imports and such (may
+    #          need --console rather than -w?)
+    print("about to call %s " % command)
+    sys.stdout.flush()
+    try:
+        subprocess.check_call(command)
+    except subprocess.CalledProcessError as e:
+        raise Error("Pyinstaller failed building %s: %s\n"
+                    "output:\n%s" % (mainfile, e, e.output))
+    except Exception as e:
+        raise Error("Error building %s: %s: %s" % (mainfile, e.__class__.__name__, e))
+
+    if manifest_from_build:
+        basebase = os.path.splitext(basename)[0]
+        exe = os.path.join(dstdir, basebase + ".exe")
+        manifest = os.path.join(manifest_from_build, basebase, basebase + '.exe.manifest')
+        # https://msdn.microsoft.com/en-us/library/ms235591.aspx
+        command = ['mt.exe',
+                   '-manifest', manifest,
+                   '-outputresource:%s;1' % exe]
+        print(' '.join((("'%s'" % word) if ' ' in word else word)
+                       for word in command))
+        sys.stdout.flush()
+        try:
+            subprocess.check_call(command)
+        except subprocess.CalledProcessError as e:
+            raise Error("Couldn't embed manifest %s in %s: %s\n"
+                        "output:\n%s" % % (manifest, exe, e, e.output))
         
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
