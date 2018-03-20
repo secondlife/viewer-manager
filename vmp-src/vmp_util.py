@@ -39,7 +39,7 @@ class SL_Logging(object):
         standard log format; the verbosity can be any of:
           'DEBUG', 'INFO', 'WARNING'
         and may be set by environment variable SL_LAUNCH_LOGLEVEL
-        the default is 'INFO'
+        the default is 'DEBUG'
         Returns the python logging object.
         """
         if not SL_Logging.logger:
@@ -73,7 +73,7 @@ class SL_Logging(object):
     @staticmethod
     def get_verbosity(verbosity=None):
         if not verbosity:
-            verbosity_env = os.getenv('SL_LAUNCH_LOGLEVEL','INFO')
+            verbosity_env = os.getenv('SL_LAUNCH_LOGLEVEL','DEBUG')
             if verbosity_env == 'INFO':
                 verbosity=logging.INFO
             elif verbosity_env == 'DEBUG':
