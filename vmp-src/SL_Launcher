@@ -34,9 +34,17 @@ import os.path
 import platform
 import subprocess
 import sys
-import logging
+
+# Must be FIRST VMP IMPORT: in case of crash anywhere along the way, try to
+# ensure that at least we'll produce diagnostic output into the log.
+from vmp_util import SL_Logging, Application, BuildData, udir, ufile, subprocess_args
+if __name__ == "__main__":
+    # sets up unhandled exception handler in sys.excepthook
+    # do this right away because in the past we've hit crashes even importing
+    # other VMP modules
+    SL_Logging.getLogger('SL_Launcher')
+
 from runner import PopenRunner
-from vmp_util import SL_Logging, Application, BuildData
 from InstallerUserMessage import status_message
 
 #if for some reason we are running on a POSIX machine with python less than 2.7
@@ -44,7 +52,7 @@ from InstallerUserMessage import status_message
 if platform.system() != 'Windows' and platform.python_version_tuple() < (2, 7, 0):
     log = SL_Logging.getLogger('SL_Launcher')
     log.error("Computer is below minimum specifications. Python version needs to be 2.7, but is %r" % platform.python_version())
-    absfile = os.path.abspath(__file__)
+    absfile = os.path.abspath(ufile(__file__))
     if platform.system == 'Darwin':
         import glob
         executable_name = "Second Life"
@@ -78,13 +86,12 @@ if platform.system() != 'Windows' and platform.python_version_tuple() < (2, 7, 0
     viewer_process = subprocess.Popen(command)
     sys.exit(0)
 
-import cgitb
 import collections
 #NOTA BENE: 
 #   For POSIX platforms, llsd.py will be imported from the same directory.  
 #   For Windows, llsd.py will be compiled into the executable by pyinstaller
 #make sure we find our local llbase, which is in a subdir
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'llbase'))
+sys.path.insert(0, os.path.join(udir(), 'llbase'))
 from llbase import llsd
 
 from datetime import datetime
@@ -171,6 +178,7 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
 
 def main():
     #main entry point      
+    log = SL_Logging.getLogger('SL_Launcher')
     args_list_to_pass = sys.argv[1:]
 
     version=BuildData.get('Version')
@@ -200,17 +208,22 @@ def main():
     # If runner is actually an ExecRunner, or if the launch attempt fails,
     # this run() call won't return.
     viewer_process = runner.run()
+    if platform.system() == "Darwin":
+        # MAINT-8109: try to make the real viewer's window frontmost
+        # derived from https://stackoverflow.com/q/38923478
+        osascript = ['/usr/bin/osascript', '-e',
+                     'tell app "System Events" to set frontmost of every process '
+                     'whose unix id is %s to true' % viewer_process.pid]
+        # Use call() rather than check_call() because this is merely for
+        # convenience: if it doesn't work, user can still manually bring the
+        # viewer window forward.
+        subprocess.call(
+            osascript,
+            **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
     # at the moment, we just wait here.  Later, the crash monitor will be launched at this point
     rc = viewer_process.wait()
     log.info("Viewer terminated with %s" % rc)
     log.info("Launcher exiting after viewer exit.")
 
 if __name__ == "__main__":
-    # Initialize the python logging system to SL Logging format and destination
-    log = SL_Logging.getLogger('SL_Launcher')
-    try:
-        main()
-    except Exception:
-        log_traceback = cgitb.Hook(file=SL_Logging.stream(prefix_msg="Unhandled exception:"),
-                                   format='text')
-        log_traceback.handle()
+    main()

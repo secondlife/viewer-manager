@@ -54,7 +54,7 @@ def test_get_settings(tmpdir1):
     settings_llsd = update_manager.get_settings(
         os.path.join(data_dir, "user_settings", "settings.xml"))
     #we aren't testing the LLSD library, one dictionary value is enough
-    assert_equal(settings_llsd['CurrentGrid']['Value'],'util.agni.lindenlab.com')
+    assert_equal(settings_llsd['CurrentGrid'],'util.agni.lindenlab.com')
 
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
 def test_get_settings_bad_key(tmpdir1):

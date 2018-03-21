@@ -62,7 +62,7 @@ import Tkinter as tk
 import ttk
 #for hyperlinks
 import webbrowser
-from vmp_util import Application, SL_Logging
+from vmp_util import Application, SL_Logging, udir
 
 # ****************************************************************************
 #   status frame functionality
@@ -185,8 +185,7 @@ class InstallerUserMessage(tk.Tk):
                 # launcher.app/Contents/MacOS/InstallerUserMessage.py
                 # We want
                 # launcher.app/Contents/Resources/vmp_icons
-                icon_path = os.path.join(os.path.dirname(__file__), os.pardir,
-                                         "Resources", "vmp_icons")
+                icon_path = os.path.join(udir(), os.pardir, "Resources", "vmp_icons")
             else:
                 #not mac, so icons are not in ../Resources, but in a subdir of the app dir
                 icon_path = os.path.join(Application.install_path(), 'vmp_icons')
