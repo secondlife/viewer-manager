@@ -1,3 +1,4 @@
+import cgitb
 import errno
 import glob
 import json
@@ -5,6 +6,7 @@ import logging
 import os
 import os.path
 import platform
+from StringIO import StringIO
 import subprocess
 import sys
 import tempfile
@@ -18,6 +20,37 @@ from llbase import llsd
 class Error(Exception):
     pass
 
+# ****************************************************************************
+#   ufile(), udir()
+# ****************************************************************************
+# MAINT-8161: When the viewer is installed into a Mac directory with a Unicode
+# pathname, __file__ is utf8-encoded. If we pass that encoded pathname into
+# os.path functions, we're likely to blow up with an exception of the form:
+# UnicodeDecodeError: 'ascii' codec can't decode byte xx: ordinal not in range(128)
+# The fix is simply to ensure that every time we go to reference __file__, we
+# apply decode('utf8') first. This function does that for us.
+if platform.system() != 'Darwin':
+    def ufile(file=__file__):
+        return file
+else:
+    def ufile(file=__file__):
+        """
+        Caller may pass own __file__ if desired; or if ufile() is just being
+        used to locate the directory path, ufile() suffices since most of our
+        callers are in the same directory as this __file__.
+        """
+        return file.decode('utf8')
+
+def udir(file=__file__):
+    """
+    Need only pass own __file__ if you suspect you're in a different directory
+    than vmp_util.py.
+    """
+    return os.path.dirname(ufile(file))
+
+# ****************************************************************************
+#   SL_Logging
+# ****************************************************************************
 class SL_Logging(object):
     """
     This is a wrapper for the python standard 'logging' class that provides for
@@ -43,16 +76,50 @@ class SL_Logging(object):
         Returns the python logging object.
         """
         if not SL_Logging.logger:
-            log_basepath=os.path.join(SL_Logging.directory(),basename)
-            #accomodate verbosity with larger files before rotation
-            verbosity = SL_Logging.get_verbosity()
-            if verbosity == logging.DEBUG:
-                logsize = maxsize*4
-            else:
-                logsize = maxsize*2
-            log_name = SL_Logging.rotate(log_basepath, extension=extension, maxsize=logsize)
+            # before we actually have a log file, buffer any interesting
+            # messages
+            msgs = StringIO()
+            # get an exception handler that writes into that buffer
+            handler = cgitb.Hook(file=msgs, format="text")
 
+            try:
+                verbosity = SL_Logging.get_verbosity()
+            except Exception as err:
+                # bad log level shouldn't derail the entire log setup
+                verbosity = logging.DEBUG
+                print >>msgs, "Setting DEBUG level because: %s" % err
+
+            try:
+                logdir = SL_Logging.directory()
+            except Exception as err:
+                # directory() depends, among other things, on being able to
+                # find and read build_data.json. Even if we can't find the
+                # official log directory, put our log file SOMEWHERE.
+                logdir = tempfile.gettempdir()
+                print >>msgs, "Redirecting log to %r because:" % logdir
+                # get diagnostic info for this exception into msgs
+                # while still within the 'except' handler clause
+                handler.handle()
+
+            log_basepath=os.path.join(logdir,basename)
+            #accomodate verbosity with larger files before rotation
+            logsize = maxsize*4 if verbosity == logging.DEBUG else maxsize*2
+
+            try:
+                log_name = SL_Logging.rotate(log_basepath, extension=extension, maxsize=logsize)
+            except Exception as err:
+                print >>msgs, "Growing previous log file because:"
+                handler.handle()
+                # shrug! Just append to the same log file, despite size!
+                log_name = log_basepath + extension
+
+            # If this blows up, we're just hosed.
             SL_Logging.logStream = open(log_name,'a')
+
+            # from this point forward, any unhandled exceptions go into the
+            # log file
+            # just like cgitb.enable(), except that enable() doesn't support file=
+            sys.excepthook = cgitb.Hook(file=SL_Logging.logStream, format="text")
 
             log_handler = logging.StreamHandler(SL_Logging.logStream)
             log_handler.setFormatter(SL_Logging.Formatter())
@@ -61,9 +128,14 @@ class SL_Logging(object):
 
             SL_Logging.logger.addHandler(log_handler)
 
-            SL_Logging.logger.setLevel(SL_Logging.get_verbosity(verbosity))
+            SL_Logging.logger.setLevel(verbosity)
             SL_Logging.logger.info("================ Running %s" % basename)
             log = SL_Logging.logger
+            # now log any messages we deferred previously
+            for line in msgs.getvalue().splitlines():
+                if line:
+                    log.warning(line)
+            msgs.close()
 
         else:
             log = SL_Logging.logger.getChild(basename)
@@ -71,17 +143,17 @@ class SL_Logging(object):
         return log
         
     @staticmethod
-    def get_verbosity(verbosity=None):
-        if not verbosity:
-            verbosity_env = os.getenv('SL_LAUNCH_LOGLEVEL','DEBUG')
-            if verbosity_env == 'INFO':
-                verbosity=logging.INFO
-            elif verbosity_env == 'DEBUG':
-                verbosity=logging.DEBUG
-            elif verbosity_env == 'WARNING':
-                verbosity=logging.WARNING
-            else:
-                raise ValueError("Unknown log level '%s'" % verbosity_env)
+    def get_verbosity():
+        verbosity_env = os.getenv('SL_LAUNCH_LOGLEVEL','DEBUG')
+        # we COULD just use getattr(logging, verbosity_env) ...
+        try:
+            verbosity = dict(
+                INFO=logging.INFO,
+                DEBUG=logging.DEBUG,
+                WARNING=logging.WARNING,
+                )[verbosity_env]
+        except KeyError:
+            raise ValueError("Unknown log level %r" % verbosity_env)
         return verbosity
 
     @staticmethod
@@ -160,7 +232,9 @@ class SL_Logging(object):
                 pass # nothing to be done about this either
         return new_name
 
-
+# ****************************************************************************
+#   Application
+# ****************************************************************************
 class Application(object):
 
     @staticmethod
@@ -226,7 +300,7 @@ class Application(object):
             # its Contents, or MacOS, or Resources, but the .app directory
             # itself. __file__ should be:
             # somepath/Second Life.app/Contents/Resources/Launcher.app/Contents/MacOS/vmp_util.py
-            pieces = os.abspath(__file__).rsplit(os.sep, 6)
+            pieces = os.abspath(ufile()).rsplit(os.sep, 6)
             try:
                 if (pieces[-7].endswith(".app")
                     and pieces[-6] == "Contents"
@@ -246,7 +320,7 @@ class Application(object):
 
         # Here we're either not on Windows or Mac, or just running developer
         # tests rather than the packaged application.
-        return os.path.dirname(__file__)
+        return udir()
 
     @staticmethod
     def app_data_path():
@@ -280,7 +354,7 @@ class Application(object):
         # This file lives under $myapp/Contents/MacOS. dirname(__file__) is
         # MacOS; realpath(MacOS/../..) should get us myapp.
         parent, myapp = \
-            os.path.split(os.path.realpath(os.path.join(os.path.dirname(__file__),
+            os.path.split(os.path.realpath(os.path.join(udir(),
                                                         os.pardir,
                                                         os.pardir)))
         # find all the app bundles under parent, keeping only basenames
@@ -309,7 +383,7 @@ class Application(object):
         if (running_on == 'Darwin'):
             base_dir = os.path.join(os.path.expanduser('~'),'Library','Application Support',app_element_nowhite)
         elif (running_on == 'Linux'): 
-            base_dir = os.path.join(os.path.expanduser('~'))
+            base_dir = os.path.join(os.path.expanduser('~'), app_element_nowhite)
         elif (running_on == 'Windows'):
             appdata = Application.get_folder_path(Application.CSIDL_APPDATA)
             base_dir = os.path.join(appdata, app_element_nowhite)
@@ -362,52 +436,52 @@ class Application(object):
         resulting pathname is useless because it doesn't map to anything on
         the actual filesystem.
         """
-        # derived from
-        # https://www.programcreek.com/python/example/55296/ctypes.wintypes.LPWSTR
-        # N.B.
+        # At first we tried to use CommandLineToArgvW():
         # https://msdn.microsoft.com/en-us/library/windows/desktop/bb776391(v=vs.85).aspx
-        # says of CommandLineToArgvW()'s first parameter:
+        # This says of CommandLineToArgvW()'s first parameter:
         # "Pointer to a null-terminated Unicode string that contains the full
         # command line. If this parameter is an empty string the function
         # returns the path to the current executable file."
-        # HOWEVER -- if you call CommandLineToArgvW() with an empty string,
-        # and the path to the current executable file contains spaces (e.g.
-        # "c:\Program Files\Something\Something"), then you get back a list
-        # containing [u'C:\\Program', u'Files\\Something\\Something']: the
-        # well-known Windows idiocy concerning pathnames with spaces. If,
-        # however, you actually call GetCommandLineW() and pass *that* string
-        # to CommandLineToArgvW(), then the complete command pathname, spaces
-        # and all, is returned in the first entry. Mere eyerolling is
-        # inadequate for the occasion.
+        # GOTCHA (MAINT-8135): If you call CommandLineToArgvW() with an empty
+        # string, and the path to the current executable file contains spaces
+        # (e.g. "c:\Program Files\Something\Something"), then you get back a
+        # list containing [u'C:\\Program', u'Files\\Something\\Something']:
+        # the well-known Windows idiocy concerning pathnames with spaces.
+        # (Empirically, rejoining those entries with a single space doesn't
+        # work because the scan treats multiple spaces as a single space.)
+        # (Rejoining them with '*' and passing the result through glob.glob()
+        # is TOO inclusive: you also get names without spaces at all, and with
+        # other characters instead of spaces.)
+        # GOTCHA (MAINT-8150): If you actually call GetCommandLineW() and pass
+        # *that* string to CommandLineToArgvW(), then the complete command,
+        # spaces and all, is returned in the first entry. However, if the user
+        # typed the command at a Command Prompt, you do NOT get the full
+        # pathname of the executable -- only what the user typed.
+        # Mere eyerolling is inadequate for the occasion.
+        # GetModuleFileNameW() *seems* to work better:
+        # https://msdn.microsoft.com/en-us/library/windows/desktop/ms683197(v=vs.85).aspx
+        # although: 'The string returned will use the same format that was
+        # specified when the module was loaded. Therefore, the path can be a
+        # long or short file name, and can use the prefix "\\?\".'
+        # The following is adapted from:
+        # http://nullege.com/codes/search/ctypes.windll.kernel32.GetModuleFileNameW
         import ctypes
-        from ctypes.wintypes import LPWSTR, LPCWSTR, POINTER, HLOCAL
-        GetCommandLineW = ctypes.cdll.kernel32.GetCommandLineW
-        GetCommandLineW.argtypes = []
-        GetCommandLineW.restype = LPCWSTR
-        # Use windll instead of oledll since neither of these returns HRESULT.
-        CommandLineToArgvW = ctypes.windll.shell32.CommandLineToArgvW
-        CommandLineToArgvW.argtypes = [ LPCWSTR, POINTER(ctypes.c_int)]
-        CommandLineToArgvW.restype = POINTER(LPWSTR)
-        LocalFree = ctypes.windll.kernel32.LocalFree
-        LocalFree.argtypes = [HLOCAL]
-        LocalFree.restype = HLOCAL
-        # variable into which CommandLineToArgvW() will store length of
-        # returned array
-        argc = ctypes.c_int()
-        argv = CommandLineToArgvW(GetCommandLineW(), ctypes.byref(argc))
-        try:
-            # argv is a pointer, not an array as such -- len(argv) produces a
-            # TypeError; argv[:] produces a MemoryError, presumably when we
-            # run past the end of the array.
-            # argv[:argc.value] is the whole list of results.
-            # As long as argc.value >= 1, argv[0] is the executable name.
-            if not argc.value:
-                raise Error("CommandLineToArgvW() returned empty list")
-            # We're about to free argv. Make sure we copy its [0] entry into a
-            # new unicode object.
-            return unicode(argv[0])
-        finally:
-            LocalFree(argv)
+        name = ctypes.create_unicode_buffer(1024)
+        # "If this [hModule] parameter is NULL [i.e. None], GetModuleFileName
+        # retrieves the path of the executable file of the current process."
+        rc = ctypes.windll.kernel32.GetModuleFileNameW(None, name, len(name))
+        # "If the function fails, the return value is 0 (zero). To get
+        # extended error information, call GetLastError."
+        if not rc:
+            # https://docs.python.org/2/library/ctypes.html#return-types
+            # "WinError is a function which will call Windows FormatMessage()
+            # api to get the string representation of an error code, and
+            # returns an exception. WinError takes an optional error code
+            # parameter, if no one is used, it calls GetLastError() to
+            # retrieve it."
+            raise ctypes.WinError()
+        # must've worked
+        return name.value
 
     @staticmethod
     def user_settings_path():
@@ -422,6 +496,9 @@ class Application(object):
         #platform specific actions as appropriate
         return Application.PlatformKey.get(platform.system())
 
+# ****************************************************************************
+#   BuildData
+# ****************************************************************************
 class BuildData(object):
     """Get information about the application from the metadata in the install"""
 
@@ -442,7 +519,7 @@ class BuildData(object):
         except Exception as err:
             # without this file, nothing is going to work,
             # so abort immediately with a simple message about the problem
-            raise Error("Failed to read %r: %s", build_data_file, err)
+            raise Error("Failed to read %r: %s" % (build_data_file, err))
 
     @staticmethod
     def get(name ,default=None):
@@ -456,6 +533,9 @@ class BuildData(object):
             BuildData.read()
         BuildData.package_data[name] = value
 
+# ****************************************************************************
+#   subprocess_args()
+# ****************************************************************************
 # This utility method is lifted from https://github.com/pyinstaller/pyinstaller/wiki/Recipe-subprocess
 # and gets us around the issue of pythonw breaking subprocess when default values for I/O handles are used.
 # it is slightly modified to provide for writing to the log file rather than providing pipes
@@ -516,10 +596,54 @@ def subprocess_args(include_stdout=True, log_stream=None):
                 'env': env })
     return ret
 
-
+# ****************************************************************************
+#   put_marker_file()
+# ****************************************************************************
 def put_marker_file(dir, ext):
     #mkstemp() returns (file handle, abspath)
     try:
         os.close(tempfile.mkstemp(suffix=ext, dir=dir)[0])
     except OSError:
         pass
+
+# ****************************************************************************
+#   MergedSettings
+# ****************************************************************************
+class MergedSettings(object):
+    """
+    This class unifies settings from the settings.xml file (in which each key
+    maps to a subdict that has (or should have) a 'Value' key) and a plain
+    dict corresponding to command-line --set overrides.
+    """
+    def __init__(self, settings):
+        """pass settings as the contents of a settings.xml file"""
+        # We only care about settings entries that have a 'Value' sub-key.
+        self.settings = {key: entry['Value'] for key, entry in settings.items()
+                         if 'Value' in entry}
+        # May or may not be set later; see override_with().
+        self.overrides = {}
+
+    def override_with(self, overrides):
+        """pass overrides as a plain dict mapping keys to actual values"""
+        self.overrides = overrides
+
+    def __nonzero__(self):
+        # not empty if either settings or overrides is non-empty
+        return bool(self.overrides) or bool(self.settings)
+
+    def __getitem__(self, key):
+        """operator[] method"""
+        try:
+            # if the key exists in overrides, look no further
+            return self.overrides[key]
+        except KeyError:
+            # okay, look further
+            return self.settings[key]
+
+    def get(self, key, default=None):
+        try:
+            # if the key exists in overrides, look no further
+            return self.overrides[key]
+        except KeyError:
+            # okay, look further
+            return self.settings.get(key, default)
