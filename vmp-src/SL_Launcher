@@ -107,7 +107,6 @@ from datetime import datetime
 #module globals
 
 #imports of other VMP modules
-import InstallerUserMessage
 import update_manager
 
 def get_cmd_line(cmd_settings_file = None):
@@ -234,7 +233,7 @@ def listen_for_clicks(viewer_process):
     # respond to user clicks on the Taskbar/Dock icon
 
     # Find or create the Tk root window
-    rt = root()
+    app_window = root()
     # Platform-specific event bindings. If we don't recognize the platform,
     # don't bind anything.
     bindings = dict(
@@ -243,10 +242,10 @@ def listen_for_clicks(viewer_process):
         ).get(platform.system(), [])
     for binding in bindings:
         # Prebind the viewer_process argument to raise_window().
-        rt.bind(binding, partial(raise_window, viewer_process))
+        app_window.bind(binding, partial(raise_window, viewer_process))
     # now listen
-    ##rt.mainloop()
-    TkGreenthread(rt)
+    ##app_window.mainloop()
+    TkGreenthread(app_window)
 
 def raise_window(viewer_process, event=None):
     # The idiom we use above, passing partial(raise_window, viewer_process) to
