@@ -186,6 +186,11 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
 def main():
     #main entry point      
     log = SL_Logging.getLogger('SL_Launcher')
+
+    # right away, start interleaving Tkinter with eventlet
+    app_window = root()
+    eventlet.spawn(TkGreenthread, app_window)
+
     args_list_to_pass = sys.argv[1:]
 
     version=BuildData.get('Version')
@@ -221,19 +226,6 @@ def main():
 
     # MAINT-8304: when the user clicks on OUR taskbar/Dock icon instead of the
     # viewer's, raise the viewer window.
-    eventlet.spawn(listen_for_clicks, viewer_process)
-
-    # at the moment, we just wait here.  Later, the crash monitor will be launched at this point
-    rc = viewer_process.wait()
-    log.info("Viewer terminated with %s" % rc)
-    log.info("Launcher exiting after viewer exit.")
-
-def listen_for_clicks(viewer_process):
-    # eventlet greenthread dedicated to calling Tk.mainloop() so we can
-    # respond to user clicks on the Taskbar/Dock icon
-
-    # Find or create the Tk root window
-    app_window = root()
     # Platform-specific event bindings. If we don't recognize the platform,
     # don't bind anything.
     bindings = dict(
@@ -243,9 +235,11 @@ def listen_for_clicks(viewer_process):
     for binding in bindings:
         # Prebind the viewer_process argument to raise_window().
         app_window.bind(binding, partial(raise_window, viewer_process))
-    # now listen
-    ##app_window.mainloop()
-    TkGreenthread(app_window)
+
+    # at the moment, we just wait here.  Later, the crash monitor will be launched at this point
+    rc = viewer_process.wait()
+    log.info("Viewer terminated with %s" % rc)
+    log.info("Launcher exiting after viewer exit.")
 
 def raise_window(viewer_process, event=None):
     # The idiom we use above, passing partial(raise_window, viewer_process) to
