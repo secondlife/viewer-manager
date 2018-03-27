@@ -37,6 +37,7 @@ import os.path
 import platform
 from pprint import pprint
 import re
+import setuptools
 import subprocess
 import sys
 import trace
@@ -53,12 +54,11 @@ bit32   = re.compile('32 bit')
 # packages listed in requirements.txt, but requirements.txt supports
 # sufficiently rich syntax that we can't count on simply digging these package
 # names out of that file.
-DEPENDENCIES = [
+DEPENDENCIES = set((
     "eventlet",
-    "greenlet",                         # required by eventlet
     "llbase",
     "requests",
-]
+))
 
 class Error(Exception):
     pass
@@ -109,6 +109,20 @@ def main():
         raise Error('Run %s within a virtualenv: it uses pip install' % scriptname)
     print("Installing %s into virtualenv: %s" % (', '.join(DEPENDENCIES), virtualenv))
 
+    # Figure out in which directory this platform installs Python packages for
+    # this virtualenv. We expect that every (modern) virtualenv contains a
+    # setuptools install. Its __file__ is setuptools/__init__.pyc, so
+    # dirname() gets us the setuptools directory, and joining that with pardir
+    # should get us the containing directory.
+    venvlibs = os.path.realpath(os.path.join(os.path.dirname(setuptools.__file__), os.pardir))
+    if venvlibs.endswith(".egg"):
+        # however, we've also found it nested under a setuptools-blah.egg directory
+        venvlibs = os.path.realpath(os.path.join(venvlibs, os.pardir))
+
+    # Now that we know where our dependencies will be installed, take a
+    # snapshot of what's there already (from the initial virtualenv setup).
+    before = set(os.listdir(venvlibs))
+
     # pip install the various dependencies listed in requirements.txt.
     # -U means: even if we already have an older version of (say) requests in
     # the system image, ensure our virtualenv has the version specified in
@@ -120,6 +134,19 @@ def main():
         subprocess.check_call(cmd)
     except subprocess.CalledProcessError as err:
         raise Error(str(err))
+
+    # We've installed our dependencies and -- importantly -- all THEIR
+    # dependencies. Figure out what we just added.
+    after = set(os.listdir(venvlibs))
+    installed = after - before
+    # As of 2018-03-27, anyway, there's some cruft in that directory
+    filtered = set(f for f in installed if not f.endswith(".dist-info"))
+    # The steps above intentionally capture only stuff added by our 'pip
+    # install' command. But what if one or more of our dependencies was
+    # already present in system Python before we created the virtualenv? In
+    # that case, it wouldn't show up in 'installed' or 'filtered'. Stir in the
+    # list we started with.
+    tocopy = filtered + DEPENDENCIES
 
     # We use copytree() to populate stage_VMP. copytree() doesn't like it when
     # its destination directory already exists.
@@ -203,11 +230,11 @@ def main():
     ignores = ignore_patterns('*.pyc', '*tests*')
     # start with the parent directory
     copytree(vmp_src, stage_VMP, ignore=ignores)
-    # Copy packages named in DEPENDENCIES.
+    # Copy packages installed by DEPENDENCIES.
     # Instead of reporting only the *first* ImportError, gotta catch 'em all.
     iter_paths = {}
     errors = []
-    for pkg in DEPENDENCIES:
+    for pkg in tocopy:
         try:
             modfile = import_module(pkg).__file__
         except ImportError as err:
