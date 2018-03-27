@@ -1,5 +1,0 @@
-eventlet
-llbase
-nose
-pyinstaller
-requests

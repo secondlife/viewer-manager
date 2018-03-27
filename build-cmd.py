@@ -32,6 +32,7 @@ import cgitb
 import errno
 import glob
 from importlib import import_module
+import itertools
 import os
 import os.path
 import platform
@@ -50,15 +51,19 @@ linux   = re.compile('linux')
 windows = re.compile('win')
 bit32   = re.compile('32 bit')
 
-# Python packages on which the VMP depends: this should correspond with
-# packages listed in requirements.txt, but requirements.txt supports
-# sufficiently rich syntax that we can't count on simply digging these package
-# names out of that file.
-DEPENDENCIES = set((
-    "eventlet",
-    "llbase",
-    "requests",
-))
+# Python packages on which our build depends. Each entry names a package and
+# provides any qualifiers (as strings) supported by pip.
+BUILD_DEPS = dict(
+    nose='',
+    pyinstaller='',
+)
+
+# Python packages on which the VMP depends at runtime, in the same form.
+RUNTIME_DEPS = dict(
+    eventlet='',
+    llbase='',
+    requests='',
+)
 
 class Error(Exception):
     pass
@@ -107,7 +112,15 @@ def main():
         virtualenv = os.environ["VIRTUAL_ENV"]
     except KeyError:
         raise Error('Run %s within a virtualenv: it uses pip install' % scriptname)
-    print("Installing %s into virtualenv: %s" % (', '.join(DEPENDENCIES), virtualenv))
+    # iterating over a dict produces just its keys
+    print("Installing %s into virtualenv: %s" %
+          (', '.join(itertools.chain(BUILD_DEPS, RUNTIME_DEPS)), virtualenv))
+
+    # First, install the stuff on which this build depends.
+    try:
+        run('pip', 'install', '-U', *(''.join(pair) for pair in BUILD_DEPS.items()))
+    except RunError as err:
+        raise Error(str(err))
 
     # Figure out in which directory this platform installs Python packages for
     # this virtualenv. We expect that every (modern) virtualenv contains a
@@ -118,27 +131,32 @@ def main():
     if venvlibs.endswith(".egg"):
         # however, we've also found it nested under a setuptools-blah.egg directory
         venvlibs = os.path.realpath(os.path.join(venvlibs, os.pardir))
+    print("%s installed into %s" % (', '.join(BUILD_DEPS), venvlibs))
 
     # Now that we know where our dependencies will be installed, take a
-    # snapshot of what's there already (from the initial virtualenv setup).
+    # snapshot of what's there already (from the initial virtualenv setup plus
+    # the above 'pip install').
     before = set(os.listdir(venvlibs))
+    print('\n'.join(itertools.chain(["inventory before runtime dependencies:"],
+                                    sorted(before))))
 
-    # pip install the various dependencies listed in requirements.txt.
+    # Now install the runtime stuff.
     # -U means: even if we already have an older version of (say) requests in
     # the system image, ensure our virtualenv has the version specified in
     # requirements.txt (or the latest version if not version-locked).
-    cmd = ['pip', 'install', '-U', '-r', os.path.join(top, 'requirements.txt')]
-    print('Running: %s' % ' '.join(cmd))
-    sys.stdout.flush()
     try:
-        subprocess.check_call(cmd)
-    except subprocess.CalledProcessError as err:
+        run('pip', 'install', '-U', *(''.join(pair) for pair in RUNTIME_DEPS.items()))
+    except RunError as err:
         raise Error(str(err))
 
-    # We've installed our dependencies and -- importantly -- all THEIR
-    # dependencies. Figure out what we just added.
+    # Now that we've installed our dependencies and -- importantly -- all
+    # THEIR dependencies, figure out what we just added.
     after = set(os.listdir(venvlibs))
+    print('\n'.join(itertools.chain(["inventory after installing runtime dependencies:"],
+                                    sorted(after))))
     installed = after - before
+    print('\n'.join(itertools.chain(["newly-installed runtime dependencies:"],
+                                    sorted(installed))))
     # As of 2018-03-27, anyway, there's some cruft in that directory
     filtered = set(f for f in installed if not f.endswith(".dist-info"))
     # The steps above intentionally capture only stuff added by our 'pip
@@ -147,6 +165,8 @@ def main():
     # that case, it wouldn't show up in 'installed' or 'filtered'. Stir in the
     # set we started with.
     tocopy = filtered | DEPENDENCIES
+    print('\n'.join(itertools.chain(["packages to copy:"],
+                                    sorted(tocopy))))
 
     # We use copytree() to populate stage_VMP. copytree() doesn't like it when
     # its destination directory already exists.
@@ -342,10 +362,8 @@ def pyinstaller(pyinstaller_cmd, mainfile, icon, manifest_from_build=None):
     # Also note, in case of need:
     # --debug: produce runtime startup messages about imports and such (may
     #          need --console rather than -w?)
-    print("about to call %s " % command)
-    sys.stdout.flush()
     try:
-        subprocess.check_call(command)
+        run(*command)
     except Exception as e:
         raise Error("Error building %s: %s: %s" % (mainfile, e.__class__.__name__, e))
 
@@ -354,17 +372,22 @@ def pyinstaller(pyinstaller_cmd, mainfile, icon, manifest_from_build=None):
         exe = os.path.join(dstdir, basebase + ".exe")
         manifest = os.path.join(manifest_from_build, basebase, basebase + '.exe.manifest')
         # https://msdn.microsoft.com/en-us/library/ms235591.aspx
-        command = ['mt.exe',
-                   '-manifest', manifest,
-                   '-outputresource:%s;1' % exe]
-        print(' '.join((("'%s'" % word) if ' ' in word else word)
-                       for word in command))
-        sys.stdout.flush()
         try:
-            subprocess.check_call(command)
-        except subprocess.CalledProcessError as e:
+            run('mt.exe', '-manifest', manifest, '-outputresource:%s;1' % exe)
+        except RunError as e:
             raise Error("Couldn't embed manifest %s in %s: %s" % (manifest, exe, e))
-        
+
+# We don't bother to catch CalledProcessError and reraise it as RunError; we
+# just alias the original exception.
+RunError = subprocess.CalledProcessError
+
+def run(*command, **kwds):
+    print(' '.join((("'%s'" % word) if ' ' in word else word)
+                   for word in command))
+    sys.stdout.flush()
+    # it's caller's responsibility to catch RunError
+    return subprocess.check_call(command, **kwds)
+
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
     libs = os.path.dirname(trace.__file__)
