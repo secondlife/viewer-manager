@@ -145,8 +145,8 @@ def main():
     # install' command. But what if one or more of our dependencies was
     # already present in system Python before we created the virtualenv? In
     # that case, it wouldn't show up in 'installed' or 'filtered'. Stir in the
-    # list we started with.
-    tocopy = filtered + DEPENDENCIES
+    # set we started with.
+    tocopy = filtered | DEPENDENCIES
 
     # We use copytree() to populate stage_VMP. copytree() doesn't like it when
     # its destination directory already exists.
