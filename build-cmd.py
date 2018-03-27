@@ -164,7 +164,7 @@ def main():
     # already present in system Python before we created the virtualenv? In
     # that case, it wouldn't show up in 'installed' or 'filtered'. Stir in the
     # set we started with.
-    tocopy = filtered | DEPENDENCIES
+    tocopy = filtered | RUNTIME_DEPS
     print('\n'.join(itertools.chain(["packages to copy:"],
                                     sorted(tocopy))))
 
@@ -250,7 +250,7 @@ def main():
     ignores = ignore_patterns('*.pyc', '*tests*')
     # start with the parent directory
     copytree(vmp_src, stage_VMP, ignore=ignores)
-    # Copy packages installed by DEPENDENCIES.
+    # Copy packages installed by RUNTIME_DEPS.
     # Instead of reporting only the *first* ImportError, gotta catch 'em all.
     iter_paths = {}
     errors = []
