@@ -164,7 +164,7 @@ def main():
     # already present in system Python before we created the virtualenv? In
     # that case, it wouldn't show up in 'installed' or 'filtered'. Stir in the
     # set we started with.
-    tocopy = filtered | RUNTIME_DEPS
+    tocopy = filtered.union(RUNTIME_DEPS)
     print('\n'.join(itertools.chain(["packages to copy:"],
                                     sorted(tocopy))))
 
