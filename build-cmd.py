@@ -38,7 +38,6 @@ import os.path
 import platform
 from pprint import pprint
 import re
-import setuptools
 import subprocess
 import sys
 import trace
@@ -122,6 +121,13 @@ def main():
     except RunError as err:
         raise Error(str(err))
 
+    # Try for a package we can assume to be present in any virtualenv. We
+    # don't import this at the top of the script in case we're NOT in a
+    # virtualenv and DON'T have setuptools available. In that case we should
+    # hit the "Run within a virtualenv" test above, which will be more helpful
+    # to the user than an ImportError regarding setuptools. (Huh?)
+    import setuptools
+
     # Figure out in which directory this platform installs Python packages for
     # this virtualenv. We expect that every (modern) virtualenv contains a
     # setuptools install. Its __file__ is setuptools/__init__.pyc, so
@@ -158,13 +164,36 @@ def main():
     print('\n'.join(itertools.chain(["newly-installed runtime dependencies:"],
                                     sorted(installed))))
     # As of 2018-03-27, anyway, there's some cruft in that directory
-    filtered = set(f for f in installed if not f.endswith(".dist-info"))
+    tocopy = set(os.path.join(venvlibs, f)
+                 for f in installed if not f.endswith(".dist-info"))
     # The steps above intentionally capture only stuff added by our 'pip
     # install' command. But what if one or more of our dependencies was
     # already present in system Python before we created the virtualenv? In
     # that case, it wouldn't show up in 'installed' or 'filtered'. Stir in the
-    # set we started with.
-    tocopy = filtered.union(RUNTIME_DEPS)
+    # set we started with -- but first convert from package name to file or
+    # directory name.
+    # Instead of reporting only the *first* ImportError, gotta catch 'em all.
+    errors = []
+    for pkg in RUNTIME_DEPS:
+        try:
+            modfile = import_module(pkg).__file__
+        except ImportError as err:
+            errors.append(str(err))
+        else:
+            # splitext()[0] strips off the extension (e.g. .pyc)
+            # split() takes apart the directory path from the simple name
+            moddir, modname = os.path.split(os.path.splitext(modfile)[0])
+            if modname == '__init__':
+                # If an imported module's name is __init__, the name
+                # represents a whole package. Have to copy its entire
+                # directory.
+                tocopy.add(moddir)
+            else:
+                # imported module isn't named __init__, therefore it's a
+                # single file module -- copy just that file
+                tocopy.add(modfile)
+    if errors:
+        raise Error('\n'.join(errors))
     print('\n'.join(itertools.chain(["packages to copy:"],
                                     sorted(tocopy))))
 
@@ -251,32 +280,16 @@ def main():
     # start with the parent directory
     copytree(vmp_src, stage_VMP, ignore=ignores)
     # Copy packages installed by RUNTIME_DEPS.
-    # Instead of reporting only the *first* ImportError, gotta catch 'em all.
-    iter_paths = {}
-    errors = []
-    for pkg in tocopy:
-        try:
-            modfile = import_module(pkg).__file__
-        except ImportError as err:
-            errors.append(str(err))
+    for srcpath in tocopy:
+        dstpath = os.path.join(stage_VMP, os.path.basename(srcpath))
+        print("Copying %s to %s" % (srcpath, dstpath))
+        if os.path.isdir(srcpath):
+            # srcpath represents a whole package. Have to copy its entire
+            # directory.
+            copytree(srcpath, dstpath, ignore=ignores)
         else:
-            # splitext()[0] strips off the extension (e.g. .pyc)
-            # split() takes apart the directory path from the simple name
-            moddir, modname = os.path.split(os.path.splitext(modfile)[0])
-            if modname == '__init__':
-                # If an imported module's name is __init__, the name
-                # represents a whole package. Have to copy its entire
-                # directory.
-                dstdir = os.path.join(stage_VMP, pkg)
-                print("Copying %s to %s" % (moddir, dstdir))
-                copytree(moddir, dstdir, ignore=ignores)
-            else:
-                # imported module isn't named __init__, therefore it's a
-                # single file module -- copy just that file
-                print("Copying %s to %s" % (modfile, os.path.join(stage_VMP, modfile)))
-                copy(modfile, stage_VMP)
-    if errors:
-        raise Error('\n'.join(errors))
+            # it's a single file module -- copy just that file
+            copy(srcpath, dstpath)
 
     sourceLicenseFile = os.path.join(top, "LICENSE")
     copy(sourceLicenseFile, stage)
