@@ -64,6 +64,27 @@ RUNTIME_DEPS = dict(
     requests='',
 )
 
+# As of 2018-03-30, these are the packages on which RUNTIME_DEPS depend. It
+# bugs me (nat) to have to enumerate them explicitly -- but I have found no
+# good way to derive only the set of modules imported by the packages above
+# that are NOT in a vanilla macOS bundled Python install. ModuleFinder, for
+# instance, presents *everything*, even the stuff bundled with the system.
+# The code in main() derives the set of packages added to the current
+# virtualenv as a consequence of pip installing the above, which should defend
+# against the likely case of one or more of the above packages adding new non-
+# default package dependencies.
+# This list is used to ensure that even if one or more of the packages above
+# are already present in the build host's system Python, and hence aren't
+# added by pip install, we copy them anyway.
+RUNTIME_DEPS_DEPS = [
+    "certifi",
+    "chardet",
+    "enum34",
+    "greenlet",
+    "idna",
+    "urllib3",
+]
+
 class Error(Exception):
     pass
 
@@ -143,8 +164,8 @@ def main():
     # snapshot of what's there already (from the initial virtualenv setup plus
     # the above 'pip install').
     before = set(os.listdir(venvlibs))
-    print('\n'.join(itertools.chain(["inventory before runtime dependencies:"],
-                                    sorted(before))))
+##  print('\n'.join(itertools.chain(["inventory before runtime dependencies:"],
+##                                  sorted(before))))
 
     # Now install the runtime stuff.
     # -U means: even if we already have an older version of (say) requests in
@@ -158,27 +179,31 @@ def main():
     # Now that we've installed our dependencies and -- importantly -- all
     # THEIR dependencies, figure out what we just added.
     after = set(os.listdir(venvlibs))
-    print('\n'.join(itertools.chain(["inventory after installing runtime dependencies:"],
-                                    sorted(after))))
+##  print('\n'.join(itertools.chain(["inventory after installing runtime dependencies:"],
+##                                  sorted(after))))
     installed = after - before
     print('\n'.join(itertools.chain(["newly-installed runtime dependencies:"],
                                     sorted(installed))))
     # As of 2018-03-27, anyway, there's some cruft in that directory
     tocopy = set(os.path.join(venvlibs, f)
-                 for f in installed if not f.endswith(".dist-info"))
+                 for f in installed
+                 if not (f.endswith(".dist-info") or f.endswith(".egg-info")))
     # The steps above intentionally capture only stuff added by our 'pip
     # install' command. But what if one or more of our dependencies was
     # already present in system Python before we created the virtualenv? In
-    # that case, it wouldn't show up in 'installed' or 'filtered'. Stir in the
-    # set we started with -- but first convert from package name to file or
-    # directory name.
-    # Instead of reporting only the *first* ImportError, gotta catch 'em all.
-    errors = []
-    for pkg in RUNTIME_DEPS:
+    # that case, it wouldn't show up in 'installed' or 'tocopy'. Stir in the
+    # set we started with, plus (what we believe to be) their dependencies,
+    # converting from package name to file or directory name.
+    for pkg in itertools.chain(RUNTIME_DEPS, RUNTIME_DEPS_DEPS):
         try:
             modfile = import_module(pkg).__file__
         except ImportError as err:
-            errors.append(str(err))
+            # This may mean that one of RUNTIME_DEPS_DEPS is no longer
+            # required by any of RUNTIME_DEPS, and hence was not installed.
+            # A developer should remove that item from RUNTIME_DEPS_DEPS, but
+            # we shouldn't fail the build for that reason.
+            # Produce a warning to stderr, but keep going.
+            print("%s: %s" % (err.__class__.__name__, err), sys.stderr)
         else:
             # splitext()[0] strips off the extension (e.g. .pyc)
             # split() takes apart the directory path from the simple name
@@ -192,8 +217,6 @@ def main():
                 # imported module isn't named __init__, therefore it's a
                 # single file module -- copy just that file
                 tocopy.add(modfile)
-    if errors:
-        raise Error('\n'.join(errors))
     print('\n'.join(itertools.chain(["packages to copy:"],
                                     sorted(tocopy))))
 
