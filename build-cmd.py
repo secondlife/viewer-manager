@@ -137,6 +137,10 @@ def main():
           (', '.join(itertools.chain(BUILD_DEPS, RUNTIME_DEPS)), virtualenv))
 
     # First, install the stuff on which this build depends.
+    # ...but only bother with pyinstaller on Windows
+    if platform.system() != 'Windows':
+        BUILD_DEPS.pop("pyinstaller", None)
+
     try:
         run('pip', 'install', '-U', *(''.join(pair) for pair in BUILD_DEPS.items()))
     except RunError as err:
@@ -203,7 +207,7 @@ def main():
             # A developer should remove that item from RUNTIME_DEPS_DEPS, but
             # we shouldn't fail the build for that reason.
             # Produce a warning to stderr, but keep going.
-            print("%s: %s" % (err.__class__.__name__, err), sys.stderr)
+            print("%s: %s" % (err.__class__.__name__, err), file=sys.stderr)
         else:
             # splitext()[0] strips off the extension (e.g. .pyc)
             # split() takes apart the directory path from the simple name
