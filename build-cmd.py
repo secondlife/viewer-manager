@@ -35,7 +35,7 @@ from importlib import import_module
 import itertools
 import os
 import os.path
-import platform
+from platform import system
 from pprint import pprint
 import re
 import subprocess
@@ -138,7 +138,7 @@ def main():
 
     # First, install the stuff on which this build depends.
     # ...but only bother with pyinstaller on Windows
-    if platform.system() != 'Windows':
+    if system() != 'Windows':
         BUILD_DEPS.pop("pyinstaller", None)
 
     try:
