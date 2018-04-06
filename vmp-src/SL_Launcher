@@ -29,6 +29,8 @@ $/LicenseInfo$
 @date   2016-06-23
 """
 
+from __future__ import print_function
+
 from functools import partial
 import os
 import os.path
@@ -223,6 +225,12 @@ def main():
     # If runner is actually an ExecRunner, or if the launch attempt fails,
     # this run() call won't return.
     viewer_process = runner.run()
+
+    # If it returned, we're running the viewer, not an installer. Be a
+    # responsible parent.
+    # Say hello to our child process.
+    print(llsd.format_notation(None), file=viewer_process.stdin)
+
     if platform.system() == "Darwin":
         # MAINT-8109: try to make the real viewer's window frontmost
         raise_window(viewer_process)
