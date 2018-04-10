@@ -334,13 +334,13 @@ class Application(object):
         # here to tweak this logic whenever they do! Most likely we'll forget,
         # and Bad Things will happen. So instead, rely on our knowledge that
         # it's the only .app bundle under Resources.
-        Contents = glob.glob(os.path.join(udir(), os.pardir, "Resources",
-                                          "*.app", "Contents"))
+        pattern = os.path.join(udir(), os.pardir, "Resources", "*.app", "Contents")
+        Contents = glob.glob(pattern)
         # there had better be exactly one!
         if len(Contents) != 1:
-            raise Error("%s viewer .app under %r: found %s" %
+            raise Error("%s viewer .app matching %r: found %s" %
                         (("Ambiguous" if Contents else "Missing"),
-                         parent, Contents))
+                         pattern, Contents))
         # Extract the only matching pathname; eliminate os.pardir from path.
         return os.path.realpath(Contents[0])
 
