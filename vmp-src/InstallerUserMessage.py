@@ -107,13 +107,9 @@ class Common(object):
         #find a few things
         if platform.system() == "Darwin":
             # Unlike almost everything else we look for in Resources, the
-            # vmp_icons are in the Resources directory for the embedded
-            # launcher app rather than the sibling embedded viewer app. So
-            # instead of calling Application.app_data_path(), just look
-            # relative to __file__, which should be
-            # launcher.app/Contents/MacOS/InstallerUserMessage.py
-            # We want
-            # launcher.app/Contents/Resources/vmp_icons
+            # vmp_icons are in our own Resources directory rather than the
+            # embedded viewer app. So instead of calling
+            # Application.app_data_path(), just look relative to __file__.
             icon_path = os.path.join(udir(), os.pardir, "Resources", "vmp_icons")
         else:
             #not mac, so icons are not in ../Resources, but in a subdir of the app dir
