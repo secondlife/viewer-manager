@@ -248,27 +248,11 @@ def main():
         print('The Windows VMP must be built on a 32-bit python Windows host', sys.stderr)
     
     #run nosetests
-    # hardcoded fallback path
-    if darwin.search(platform):
-        nosetest_cmd = '/usr/local/bin/nosetests'
-    elif linux.search(platform):
-        nosetest_cmd = '/usr/bin/nosetests'
-    else:
-        nosetest_cmd = r"C:\Python27\Scripts\nosetests"
-    # try various ways to find the command -- might just be on PATH
-    for nosetests in "nosetests", os.environ.get('nosetests'), nosetest_cmd:
-        # might not be a $nosetests environment variable
-        if nosetests:
-            try:
-                subprocess.check_output([nosetests, "--version"])
-            except OSError as err:
-                # it's okay at this point if we don't find it
-                if err.errno != errno.ENOENT:
-                    # anything else, not okay
-                    raise
-            else:
-                # yay, we succeeded in running nosetests, done searching
-                break
+    # This MUST be the nosetests we installed in our virtualenv. Otherwise, it
+    # won't find the runtime dependencies we just pip installed.
+    nosetests = os.path.join(virtualenv,
+                             ("Scripts" if system() == "Windows" else "bin"),
+                             "nosetests")
 
     nose_env = os.environ.copy()
     #stupid windows limit:
