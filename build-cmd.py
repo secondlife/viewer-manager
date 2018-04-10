@@ -251,7 +251,7 @@ def main():
     # This MUST be the nosetests we installed in our virtualenv. Otherwise, it
     # won't find the runtime dependencies we just pip installed.
     if system() == "Windows":
-        venv = subprocess.check_output(["cygpath", "-m", virtualenv])
+        venv = subprocess.check_output(["cygpath", "-m", virtualenv]).rstrip()
         bindir = "Scripts"
     else:
         venv = virtualenv
