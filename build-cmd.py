@@ -250,9 +250,13 @@ def main():
     #run nosetests
     # This MUST be the nosetests we installed in our virtualenv. Otherwise, it
     # won't find the runtime dependencies we just pip installed.
-    nosetests = os.path.join(virtualenv,
-                             ("Scripts" if system() == "Windows" else "bin"),
-                             "nosetests")
+    if system() == "Windows":
+        venv = subprocess.check_output(["cygpath", "-m", virtualenv])
+        bindir = "Scripts"
+    else:
+        venv = virtualenv
+        bindir = "bin"
+    nosetests = os.path.join(venv, bindir, "nosetests")
 
     nose_env = os.environ.copy()
     #stupid windows limit:
