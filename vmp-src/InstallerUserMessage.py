@@ -60,147 +60,80 @@ if platform.system() == 'Windows':
 
 import Tkinter as tk
 import ttk
+from tkSimpleDialog import Dialog
 #for hyperlinks
 import webbrowser
 from vmp_util import Application, SL_Logging, udir
 
 # ****************************************************************************
-#   status frame functionality
+#   Tk root window
 # ****************************************************************************
-# When we're currently displaying a StatusMessage, this module global holds
-# that instance so we can find it again. StatusMessage is just like
-# InstallerUserMessage (see below) but with hooks to set/clear _status_frame.
-_status_frame = None
+# We want the Tk root window to be available as needed -- but we don't want to
+# initialize it at import time, only on demand. If we could define a "module
+# property," we'd do that; since we can't, just use a function.
+_root = None
 
-def status_message(text):
-    """
-    Pass a string message. If this is the first status_message() call, this
-    will pop up a new StatusMessage frame containing that text and immediately
-    return. If there's already a StatusMessage frame displayed, it will
-    instead update that frame with the new text.
-
-    Pass None to close the StatusMessage frame.
-    """
-    global _status_frame
-    # Log each status message we display to help diagnose VMP slow operation
-    # -- since each log message gets a timestamp.
-    log = SL_Logging.getLogger('status_message')
-    if text is not None:
-        # display new text
-        log.info(text)
-        if _status_frame is None:
-            # StatusMessage constructor sets _status_frame
-            frame = StatusMessage()
-            frame.basic_message(text, wait=False)
-        else:
-            # there's an existing StatusMessage instance, just use that
-            _status_frame.set_message(text)
-
-    else:
-        # text=None means: make the StatusMessage go away
-        log.info("(close)")
-        if _status_frame is not None:
-            _status_frame.destroy()
-            _status_frame = None
+def root():
+    global _root
+    if _root is None:
+        # StatusMessage is our main window. Pop that up, even if there's no
+        # message yet.
+        _root = StatusMessage()
+    return _root
 
 # ****************************************************************************
-#   Convenience
+#   Methods common to main Tk window and auxiliary Dialogs
 # ****************************************************************************
-def basic_message(text, **kwds):
-    """
-    basic_message(text) just pops up a message box which the user must clear.
-
-    Any parameter overrides for the implicit InstallerUserMessage constructor
-    must be passed as keyword arguments, e.g.:
-
-    basic_message(text, title='This is a non-standard title')
-    """
-    # since by default InstallerUserMessage.basic_message() hangs around until
-    # the user clears the message frame, we don't even need to save the instance
-    InstallerUserMessage(**kwds).basic_message(text)
-
-# ****************************************************************************
-#   InstallerUserMessage class
-# ****************************************************************************
-class InstallerUserMessage(tk.Tk):
-    #Goals for this class:
-    #  Provide a uniform look and feel
-    #  Provide an easy to use convenience class for other scripts
-    #  Provide windows that automatically disappear when done (for differing notions of done)
-    #  Provide a progress bar that isn't a glorified spinner, but based on download progress
-    #Non-goals:
-    #  No claim to threadsafety is made or warranted.  Your mileage may vary. 
-    #     Please consult a doctor if you experience thread pain.
-
+class Common(object):
     #Linden standard green color, from Marketing
     linden_green = "#487A7B"
 
-    def __init__(self, title=None, width=500, height=230,
-                 icon_name = "head-sl-logo.gif", icon_path = None):
-        # Before we even perform base-class initialization, suppress any
-        # existing _status_frame. Deriving from tk.Tk (vs. tk.Frame) is great
-        # when you know that any one of these might be the first visible
-        # frame, but empirically, multiple concurrent instances of tk.Tk
-        # subclasses confuse the communication between Python and Tkinter:
-        # things end up in the wrong frame. Make them mutually exclusive by
-        # destroying any existing _status_frame before constructing this tk.Tk
-        # subclass.
-        status_message(None)
-        # Now initialize base class.
-        tk.Tk.__init__(self)
-        self.grid()
-        self.title(title or Application.name())
-        self.choice = tk.BooleanVar()
-        self.choice3 = tk.IntVar()
+    def __init__(self, parent, icon_name = "head-sl-logo.gif", icon_path = None):
         # Use of StringVar allows us to dynamically change the displayed text.
         self.message = tk.StringVar()
         # Use a Message widget for its automatic text reflow:
         # http://effbot.org/tkinterbook/message.htm
         # Initial width is arbitrary; we just need to suppress Message's
         # default behavior of trying to preserve the specified aspect ratio.
-        self.text_label = tk.Message(textvariable=self.message, width=width)
-        self.config(background = 'black')
+        self.text_label = tk.Message(master=parent, textvariable=self.message, width=150)
+        self.set_colors(self.text_label)
+        parent.config(background = 'black')
         # background="..." doesn't work on MacOS for radiobuttons or progress bars
         # http://tinyurl.com/tkmacbuttons
         for style in 'Linden.TLabel', 'Linden.TButton', "black.Horizontal.TProgressbar":
-            ttk.Style().configure(style, foreground=InstallerUserMessage.linden_green,
+            ttk.Style().configure(style, foreground=Common.linden_green,
                                   background='black')
 
-        #This bit of configuration centers the window on the screen
-        #https://stackoverflow.com/q/3352918/5533635
-        # The constants below are to adjust for typical overhead from the
-        # frame borders.
-        self.xp = (self.winfo_screenwidth()  / 2) - (width  / 2) - 8
-        self.yp = (self.winfo_screenheight() / 2) - (height / 2) - 20
-        self.geometry('{0}x{1}+{2}+{3}'.format(width, height, self.xp, self.yp))
-
         #find a few things
-        if not icon_path:
-            if platform.system() == "Darwin":
-                # Unlike almost everything else we look for in Resources, the
-                # vmp_icons are in the Resources directory for the embedded
-                # launcher app rather than the sibling embedded viewer app. So
-                # instead of calling Application.app_data_path(), just look
-                # relative to __file__, which should be
-                # launcher.app/Contents/MacOS/InstallerUserMessage.py
-                # We want
-                # launcher.app/Contents/Resources/vmp_icons
-                icon_path = os.path.join(udir(), os.pardir, "Resources", "vmp_icons")
-            else:
-                #not mac, so icons are not in ../Resources, but in a subdir of the app dir
-                icon_path = os.path.join(Application.install_path(), 'vmp_icons')
-        if platform.system() == 'Windows':
-            self.call('wm', 'iconbitmap', self._w, '-default',
-                      os.path.join(icon_path, 'secondlife.ico'))
+        if platform.system() == "Darwin":
+            # Unlike almost everything else we look for in Resources, the
+            # vmp_icons are in our own Resources directory rather than the
+            # embedded viewer app. So instead of calling
+            # Application.app_data_path(), just look relative to __file__.
+            icon_path = os.path.join(udir(), os.pardir, "Resources", "vmp_icons")
+        else:
+            #not mac, so icons are not in ../Resources, but in a subdir of the app dir
+            icon_path = os.path.join(Application.install_path(), 'vmp_icons')
+
+        if not os.path.exists(icon_path):
+            # maybe we're in a developer directory?
+            icon_path = os.path.join(udir(), "icons")
 
         #finds the icon and creates the widget
-        self.find_icon(icon_path, icon_name)
+        #we do this in each message, let's do it just once instead.
+        icon_path = os.path.join(icon_path, icon_name)
+        if os.path.exists(icon_path):
+            icon = tk.PhotoImage(file=icon_path)
+            self.image_label = tk.Label(master=parent, image = icon)
+            self.image_label.image = icon
+        else:
+            #default to text if image not available
+            self.image_label = tk.Label(master=parent, text = Application.name())
+        self.set_colors(self.image_label)
 
-        #defines what to do when window is closed
-        self.protocol("WM_DELETE_WINDOW", self._delete_window)
-
-        #callback id
-        self.id = -1
+    def set_colors(self, widget):
+        widget.config(foreground = Common.linden_green)
+        widget.config(background='black') 
 
     def place_message(self, row, column, sticky='EW', **kwds):
         # Empirically, *all three* of sticky='EW', configuring the column
@@ -214,113 +147,213 @@ class InstallerUserMessage(tk.Tk):
         self.text_label.bind("<Configure>",
                              lambda event: self.text_label.config(width=event.width))
 
+    # ---------------------- update the status message -----------------------
     def set_message(self, message):
         self.message.set(message)
-        self.set_colors(self.text_label)
-        self.set_colors(self.image_label)
-        self.update()
 
-    def _delete_window(self):
-        #capture and discard all destroy events before the choice is set
-        if not ((self.choice == None) or (self.choice == "")):
-            try:
-                #initialized value.  If we have an outstanding callback, kill it before killing ourselves
-                if self.id != -1:
-                    self.after_cancel(self.id)
-                self.destroy()
-            except:
-                #tk may try to destroy the same object twice
-                pass
+# ****************************************************************************
+#   CustomDialog
+# ****************************************************************************
+class CustomDialog(Dialog, Common):
+    def __init__(self, parent, message=""):
+        # Dialog's constructor actually waits for user input, so set all
+        # instance attributes BEFORE forwarding the call to base-class
+        # constructor.
+        self.__message = message
+        # The same is necessarily true for any subclass with an __init__()
+        # method of its own: set required attributes, THEN forward.
+        Dialog.__init__(self, parent)
 
-    def set_colors(self, widget):
-        # #487A7B is "Linden Green"
-        widget.config(foreground = InstallerUserMessage.linden_green)
-        widget.config(background='black') 
+    def body(self, parent):
+        # parent is actually a Frame constructed inside the parent Toplevel;
+        # setting the Toplevel geometry doesn't cause the Frame to expand to
+        # fill it without the following call:
+        parent.pack(fill=tk.BOTH, expand=1)
+        Common.__init__(self, parent)
+        self.set_message(self.__message)
+        self.geometry("470x200")
+        # make sure Tk knows where parent is placed so can place us relative
+        self.update_idletasks()
 
-    def find_icon(self, icon_path, icon_name):
-        #we do this in each message, let's do it just once instead.
-        icon_path = os.path.join(icon_path, icon_name)
-        if os.path.exists(icon_path):
-            icon = tk.PhotoImage(file=icon_path)
-            self.image_label = tk.Label(image = icon)
-            self.image_label.image = icon
-        else:
-            #default to text if image not available
-            self.image_label = tk.Label(text = Application.name())
+    def buttonbox(self):
+        # Suppress the standard Dialog buttons.
+        pass
 
-    def auto_resize(self, row_count = 0, column_count = 0, heavy_row = None, heavy_column = None):
-        #auto resize window to fit all rows and columns
-        #"heavy" gets extra weight
-        for x in range(column_count):
-            self.columnconfigure(x, weight=(2 if x == heavy_column else 1))
+# ****************************************************************************
+#   status_message(), StatusMessage
+# ****************************************************************************
+def status_message(text):
+    """
+    Pass a string message. If this is the first status_message() call, this
+    will pop up a new StatusMessage window containing that text and
+    immediately return. If there's already a StatusMessage frame displayed, it
+    will instead update that window with the new text.
 
-        for y in range(row_count):
-            self.rowconfigure(y, weight=(2 if y == heavy_row else 1))
+    Pass None to hide the StatusMessage window.
+    """
+    # Log each status message we display to help diagnose VMP slow operation
+    # -- since each log message gets a timestamp.
+    log = SL_Logging.getLogger('status_message')
+    if text is not None:
+        # display new text
+        log.info(text)
+        root().set_message(text)
 
-    # ---------------------------- basic_message -----------------------------
-    def basic_message(self, message, wait=True):
-        #message: text to be displayed
-        #usage:
-        #   frame = InstallerUserMessage.InstallerUserMessage( ... )
-        #   frame.basic_message("message")
-        #   # ^ waits for user to close message frame
-        #usage for non-interactive status frame:
-        #   frame = InstallerUserMessage.InstallerUserMessage( ... )
-        #   frame.basic_message("initial status", wait=False)
-        #   # ...
-        #   frame.set_message("subsequent status")
-        #   # ...
-        #   frame.destroy()
-        #icon_path: directory holding the icon, defaults to icons subdir of script dir
-        #icon_name: filename of icon to be displayed
-        self.choice.set(True)
-        self.set_message(message)
+    else:
+        # text=None means: make the StatusMessage window go away
+        log.info("(close)")
+        root().hide()
+
+class StatusMessage(tk.Tk, Common):
+    """
+    StatusMessage is our application's main window. It doesn't have any user
+    input controls; it simply displays ongoing progress messages.
+    """
+    # -------------------- construction and configuration --------------------
+    def __init__(self, title=None, width=500, height=230):
+        # initialize base classes -- Tk uses old-style Python classes, which
+        # don't support the super() idiom.
+        tk.Tk.__init__(self)
+        self.grid()
+        Common.__init__(self, self)
+        self.title(title or Application.name())
+
+        #This bit of configuration centers the window on the screen
+        #https://stackoverflow.com/q/3352918/5533635
+        # The constants below are to adjust for typical overhead from the
+        # frame borders.
+        self.xp = (self.winfo_screenwidth()  / 2) - (width  / 2) - 8
+        self.yp = (self.winfo_screenheight() / 2) - (height / 2) - 20
+        self.geometry('{0}x{1}+{2}+{3}'.format(width, height, self.xp, self.yp))
+
+        if platform.system() == 'Windows':
+            self.call('wm', 'iconbitmap', self._w, '-default',
+                      os.path.join(icon_path, 'secondlife.ico'))
+
+        #defines what to do when window is closed
+        self.protocol("WM_DELETE_WINDOW", self._delete_window)
+
         #pad, direction and weight are all experimentally derived by retrying various values
         self.image_label.grid(row = 1, column = 0, sticky = 'W')
         self.place_message(row = 2, column = 0, padx = 100)
-        self.update()
-        if wait:
-            self.mainloop()
 
-    # ------------------------ binary_choice_message -------------------------
-    def binary_choice_message(self, message, true = 'Yes', false = 'No', wait=True):
+        # Best effort attempt at a real progress bar
+        #  This is what Tk calls "determinate mode" rather than "indeterminate mode"
+        self.progress = ttk.Progressbar(self, style = 'black.Horizontal.TProgressbar',
+                                        orient="horizontal", length=100, mode="determinate")
+        self.progress.grid(row = 3, column = 0, sticky = 'NSEW', pady = 25, padx=25)
+        # always create a progress bar, just hide it when not in use
+        # https://stackoverflow.com/a/10268076
+        self.progress.grid_remove()
+
+    def _delete_window(self):
+        try:
+            self.destroy()
+        except:
+            #tk may try to destroy the same object twice
+            pass
+
+    # --------- display and step the (normally hidden) progress bar ----------
+    def progress_bar(self, message, size):
+        #size: denominator of percent complete
+        self.set_message(message)
+        # make hidden progress bar visible
+        self.progress.grid()
+        self.progress["maximum"] = size
+
+    def step(self, value):
+        self.progress.step(value)
+
+    def progress_done(self):
+        self.progress.grid_remove()
+
+    # --------------------- hide our application window ----------------------
+    def hide(self):
+        # Although we want our own window to make way for the child viewer, we
+        # don't want to destroy our window outright -- instead, leave an
+        # invisible window. Its purpose is to provide the Taskbar/Dock icon,
+        # allowing us to detect when the user clicks on said icon.
+        ##self.withdraw()
+        # It's actually important to use this incantation to hide the root
+        # window: withdraw() leaves the Taskbar/Dock icon insensitive to
+        # clicks, versus this alpha trick.
+        self.attributes("-alpha", 0.0)
+
+# ****************************************************************************
+#   basic_message(), BasicMessage
+# ****************************************************************************
+def basic_message(*args, **kwds):
+    """
+    basic_message(text) just pops up a message box which the user must clear.
+    """
+    BasicMessage(root(), *args, **kwds)
+
+class BasicMessage(CustomDialog):
+    def body(self, parent):
+        CustomDialog.body(self, parent)
+        self.image_label.grid(row = 1, column = 1, columnspan = 2)
+        self.place_message(row = 2, column = 1, columnspan = 3, pady = 40)
+
+# ****************************************************************************
+# binary_choice_message(), BinaryChoiceMessage
+# ****************************************************************************
+def binary_choice_message(*args, **kwds):
+    dlg = BinaryChoiceMessage(root(), *args, **kwds)
+    return dlg.result.get()
+
+class BinaryChoiceMessage(CustomDialog):
+    def __init__(self, parent, message, true = 'Yes', false = 'No'):
         #true: first option, returns True
         #false: second option, returns False
-        #usage:
-        #   frame = InstallerUserMessage.InstallerUserMessage( ... )
-        #   result = frame.binary_choice_message( ... )
+        self.true   = true
+        self.false  = false
+        CustomDialog.__init__(self, parent, message)
 
-        self.set_message(message)
-        #command registers the callback to the method named.  We want the frame to go away once clicked.
-        #button 1 returns True/1, button 2 returns False/0
-        self.button_one = ttk.Radiobutton(text = true, variable = self.choice, value = True, 
-            command = self._delete_window, style = 'Linden.TButton')
-        self.button_two = ttk.Radiobutton(text = false, variable = self.choice, value = False, 
-            command = self._delete_window, style = 'Linden.TButton')
+    def body(self, parent):
+        CustomDialog.body(self, parent)
+        #command registers the callback to the method named. We want the frame
+        #to go away once clicked. button 1 returns True, button 2 returns
+        #False
+        self.result = tk.BooleanVar()
+        self.button_one = ttk.Radiobutton(master=parent, text = self.true, variable = self.result,
+                                          value = True, command = self.cancel,
+                                          style = 'Linden.TButton')
+        self.button_two = ttk.Radiobutton(master=parent, text = self.false, variable = self.result,
+                                          value = False, command = self.cancel,
+                                          style = 'Linden.TButton')
         #pads are all experimentally derived by retrying various values
         self.image_label.grid(row = 1, column = 1, columnspan = 2)
         self.place_message(row = 2, column = 1, columnspan = 3, pady = 40)
         self.button_one.grid(row = 3, column = 2, padx = 30)
         self.button_two.grid(row = 3, column = 3, padx = 30)
-        self.update()
-        if wait:
-            self.mainloop()
-            return self.choice.get()
+        return self.button_one
 
-    # ------------------------ trinary_choice_message ------------------------
-    def trinary_choice_message(self, message, one = 1, two = 2, three = 3, wait=True):
+# ****************************************************************************
+#   trinary_choice_message(), TrinaryChoiceMessage
+# ****************************************************************************
+def trinary_choice_message(*args, **kwds):
+    dlg = TrinaryChoiceMessage(root(), *args, **kwds)
+    return dlg.result.get()
+
+class TrinaryChoiceMessage(CustomDialog):
+    def __init__(self, parent, message, url=None, one = 1, two = 2, three = 3):
+        #url is hypertext for message
         #one: first option, returns 1
         #two: second option, returns 2
         #three: third option, returns 3
-        #usage:
-        #   frame = InstallerUserMessage.InstallerUserMessage( ... )
-        #   result = frame.trinary_choice_message( ... )
+        self.url     = url
+        self.choices = (one, two, three)
+        CustomDialog.__init__(self, parent, message)
 
-        self.set_message(message)
-        #command registers the callback to the method named.  We want the frame to go away once clicked.
-        self.button = [ttk.Radiobutton(text = text, variable = self.choice3, value = v0+1,
-                                       command = self._delete_window, style = 'Linden.TButton')
-                       for v0, text in enumerate((one, two, three))]
+    def body(self, parent):
+        CustomDialog.body(self, parent)
+        #command registers the callback to the method named. We want the frame
+        #to go away once clicked.
+        self.result = tk.IntVar()
+        self.button = [ttk.Radiobutton(master=parent, text = text, variable = self.result,
+                                       value = v0+1, command = self.cancel,
+                                       style = 'Linden.TButton')
+                       for v0, text in enumerate(self.choices)]
         #pads are all experimentally derived by retrying various values
         self.image_label.grid(row = 1, column = 0, columnspan = 3)
         self.place_message(row = 2, column = 0, columnspan = 4, pady = 40)
@@ -328,69 +361,17 @@ class InstallerUserMessage(tk.Tk):
         # automatically: that's what place_message() does. So, don't put the
         # buttons into column 0 -- put them in 1, 2, 3 -- and make the message
         # widget span all 4 columns.
-        for b in range(len(self.button)):
-            self.button[b].grid(row = 3, column = b+1, padx = 10, pady = 10)
-        self.update()
-        if wait:
-            self.mainloop()
-            return self.choice3.get()
+        for b, button in enumerate(self.button):
+            button.grid(row = 3, column = b+1, padx = 10, pady = 10)
 
-    # --------------------- trinary_choice_link_message ----------------------
-    def trinary_choice_link_message(self, message, url, one = 1, two = 2, three = 3, wait=True):
-        #url is hypertext for message
-        #one: first option, returns 1
-        #two: second option, returns 2
-        #three: third option, returns 3
-        #usage:
-        #   frame = InstallerUserMessage.InstallerUserMessage( ... )
-        #   result = frame.trinary_choice_link_message( ... )
-        #store url for callback, pick a failsafe default in case we get crap
-        self.url = url or 'http://www.secondlife.com'
-        #stay on top even when browser is invoked
-        self.attributes("-topmost", True)
-        #bind the hyperlink text to the open action, "Button-1" is assigned by Tkinter
-        self.text_label.bind("<Button-1>", self.link_callback)
-        return self.trinary_choice_message(message, one=one, two=two, three=three, wait=wait)
-        
-    def link_callback(self, event):
-        webbrowser.open_new(self.url)   
+        # if URL was passed as action for clicking the message
+        if self.url:
+            #stay on top even when browser is invoked
+            self.attributes("-topmost", True)
+            #bind the hyperlink text to the open action, "Button-1" is assigned by Tkinter
+            self.text_label.bind("<Button-1>", lambda event: webbrowser.open_new(self.url))
 
-    def progress_bar(self, message, size):
-        #Best effort attempt at a real progress bar
-        #  This is what Tk calls "determinate mode" rather than "indeterminate mode"
-        #size: denominator of percent complete
-        self.set_message(message)
-        self.image_label.grid(row = 1, column = 1, sticky = 'NSEW')
-        self.place_message(row = 2, column = 1, sticky = 'NSEW')
-        self.progress = ttk.Progressbar(self, style = 'black.Horizontal.TProgressbar', orient="horizontal", length=100, mode="determinate")
-        self.progress.grid(row = 3, column = 1, sticky = 'NSEW', pady = 25)
-        self.progress["maximum"] = size
-        self.auto_resize(row_count = 1, column_count = 3)
-        self.update()
-
-    def step(self, value):
-        self.progress.step(value)
-        self.update()
-
-# ****************************************************************************
-#   StatusMessage
-# ****************************************************************************
-class StatusMessage(InstallerUserMessage):
-    def __init__(self, *args, **kwds):
-        # forward the call to base class constructor
-        InstallerUserMessage.__init__(self, *args, **kwds)
-
-        # set ourselves as canonical instance
-        global _status_frame
-        _status_frame = self
-
-    def _delete_window(self):
-        # canonical instance is going away
-        global _status_frame
-        _status_frame = None
-
-        # forward the call to base class deletion handler
-        InstallerUserMessage._delete_window(self)
+        return self.button[0]
 
 # ****************************************************************************
 #   Testing

@@ -241,7 +241,7 @@ class Application(object):
     def executable():
         """Return the pathname of the viewer executable"""
         if platform.system() == "Darwin":
-            # the viewer executable is found inside the companion bundled
+            # the viewer executable is found inside the bundled
             # Viewer.app/Contents/MacOS
             return os.path.join(Application._darwin_viewer_app_contents_path(),
                                 "MacOS", Application.name())
@@ -293,30 +293,14 @@ class Application(object):
 
         elif platform.system() == "Darwin":
             # On Darwin, what do we mean by the install directory? Is that the
-            # embedded VMP app, or the embedded viewer app, or the outer
-            # Second Life.app? Is it the Contents directory, or MacOS, or
-            # Resources?
-            # We choose to return the outer Second Life.app directory -- not
-            # its Contents, or MacOS, or Resources, but the .app directory
-            # itself. __file__ should be:
-            # somepath/Second Life.app/Contents/Resources/Launcher.app/Contents/MacOS/vmp_util.py
-            pieces = os.abspath(ufile()).rsplit(os.sep, 6)
-            try:
-                if (pieces[-7].endswith(".app")
-                    and pieces[-6] == "Contents"
-                    and pieces[-5] == "Resources"
-                    and pieces[-4].endswith(".app")
-                    and pieces[-3] == "Contents"
-                    and pieces[-2] == "MacOS"):
-                    # because we limited rsplit() to 6 splits, pieces[-7] is
-                    # "somepath/Second Life.app"
-                    return pieces[-7]
-                # developer work area: we're not in the embedded Launcher.app
-                # in the outer Second Life.app at all
-            except IndexError:
-                # developer work area: there just aren't that many path
-                # components in __file__
-                pass
+            # embedded viewer app or the outer Second Life.app? Is it the
+            # Contents directory, or MacOS, or Resources?
+            # We choose to return Second Life.app/Contents/MacOS: the
+            # directory in which these scripts are found. That's because, when
+            # we're running (or testing) in a developer work area rather than
+            # an installed app bundle, we still want it to be correct just to
+            # return the containing directory.
+            pass
 
         # Here we're either not on Windows or Mac, or just running developer
         # tests rather than the packaged application.
@@ -331,8 +315,8 @@ class Application(object):
             pass
         # this is the normal case in the installed app
         if (platform.system() == 'Darwin'):
-            # On macOS, we're running in the bundled Launcher.app. Find its
-            # sibling Viewer.app and point to its Resources directory.
+            # On macOS, find the bundled Viewer.app and point to its Resources
+            # directory.
             app_data_dir = os.path.join(
                 Application._darwin_viewer_app_contents_path(), "Resources")
         else:
@@ -342,33 +326,23 @@ class Application(object):
 
     @staticmethod
     def _darwin_viewer_app_contents_path():
-        # This is a little tricky because on macOS, we're running in one of
-        # two separate app bundles nested under the top-level
-        # Second Life.app/Contents/Resources directory. Because the name of
-        # each nested app bundle determines the flyover text for its Dock
-        # icon, we want Product to be able to change those names -- but we
-        # don't want to have to come back here to tweak this logic whenever
-        # they do! Most likely we'll forget, and Bad Things will happen. So
-        # instead, rely on our knowledge that we're one of the two .app
-        # bundles under a common parent -- and we're trying to find the other.
-        # This file lives under $myapp/Contents/MacOS. dirname(__file__) is
-        # MacOS; realpath(MacOS/../..) should get us myapp.
-        parent, myapp = \
-            os.path.split(os.path.realpath(os.path.join(udir(),
-                                                        os.pardir,
-                                                        os.pardir)))
-        # find all the app bundles under parent, keeping only basenames
-        bundles = set(os.path.basename(f)
-                      for f in glob.glob(os.path.join(parent, "*.app")))
-        # cancel out our own
-        bundles.discard(myapp)
-        # there had better be exactly one other one!
-        if len(bundles) != 1:
-            raise Error("%s viewer .app under %r: found %s" %
-                        (("Ambiguous" if bundles else "Missing"),
-                         parent, bundles))
-        # pop the other and return it
-        return os.path.join(parent, bundles.pop(), "Contents")
+        # This is a little tricky because on macOS, we need to find the viewer
+        # app bundle nested under the top-level Second Life.app/Contents/
+        # Resources directory. Because the name of the nested app bundle would
+        # determine the flyover text for its Dock icon, we want Product to be
+        # able to change that name -- but we don't want to have to come back
+        # here to tweak this logic whenever they do! Most likely we'll forget,
+        # and Bad Things will happen. So instead, rely on our knowledge that
+        # it's the only .app bundle under Resources.
+        pattern = os.path.join(udir(), os.pardir, "Resources", "*.app", "Contents")
+        Contents = glob.glob(pattern)
+        # there had better be exactly one!
+        if len(Contents) != 1:
+            raise Error("%s viewer .app matching %r: found %s" %
+                        (("Ambiguous" if Contents else "Missing"),
+                         pattern, Contents))
+        # Extract the only matching pathname; eliminate os.pardir from path.
+        return os.path.realpath(Contents[0])
 
     @staticmethod
     def userpath():

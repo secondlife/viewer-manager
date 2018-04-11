@@ -128,7 +128,11 @@ class PopenRunner(Runner):
                                 ("LOCALAPPDATA", Application.CSIDL_LOCAL_APPDATA))})
 
         with self.error_trap(log):
-            viewer_process = self.Popen(self.command, env=env)
+            # Pass a PIPE so that, by attempting to read from that pipe and
+            # getting EOF, the viewer can detect VMP termination (e.g. from
+            # user right-clicking on Dock icon and selecting Quit).
+            viewer_process = self.Popen(self.command, env=env,
+                                        stdin=subprocess.PIPE)
 
         log.info("Successfully launched %s", self.command)
         return viewer_process

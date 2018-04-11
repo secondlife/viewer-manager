@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+
 """\
 $LicenseInfo:firstyear=2006&license=viewerlgpl$
 Second Life Viewer Source Code
@@ -29,6 +31,7 @@ $/LicenseInfo$
 @date   2016-06-23
 """
 
+from functools import partial
 import os
 import os.path
 import platform
@@ -44,8 +47,18 @@ if __name__ == "__main__":
     # other VMP modules
     SL_Logging.getLogger('SL_Launcher')
 
+import eventlet
+
+if __name__ == "__main__":
+    # We use a number of other modules, including 'requests'. We want every
+    # single module that performs network I/O, or other conventional
+    # operations, to perform it using eventlet magic.
+    eventlet.monkey_patch(os=True, select=True, socket=True, time=True,
+                          builtins=True, subprocess=True)
+
 from runner import PopenRunner
-from InstallerUserMessage import status_message
+from InstallerUserMessage import status_message, root
+from tkeventlet import TkGreenthread
 
 #if for some reason we are running on a POSIX machine with python less than 2.7
 #just give up on VMP and execute the viewer per product.
@@ -99,7 +112,6 @@ from datetime import datetime
 #module globals
 
 #imports of other VMP modules
-import InstallerUserMessage
 import update_manager
 
 def get_cmd_line(cmd_settings_file = None):
@@ -179,6 +191,11 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
 def main():
     #main entry point      
     log = SL_Logging.getLogger('SL_Launcher')
+
+    # right away, start interleaving Tkinter with eventlet
+    app_window = root()
+    eventlet.spawn(TkGreenthread, app_window)
+
     args_list_to_pass = sys.argv[1:]
 
     version=BuildData.get('Version')
@@ -208,22 +225,47 @@ def main():
     # If runner is actually an ExecRunner, or if the launch attempt fails,
     # this run() call won't return.
     viewer_process = runner.run()
+
+    # If it returned, we're running the viewer, not an installer. Be a
+    # responsible parent.
+    # Say hello to our child process.
+    print(llsd.format_notation(None), file=viewer_process.stdin)
+
     if platform.system() == "Darwin":
         # MAINT-8109: try to make the real viewer's window frontmost
-        # derived from https://stackoverflow.com/q/38923478
-        osascript = ['/usr/bin/osascript', '-e',
-                     'tell app "System Events" to set frontmost of every process '
-                     'whose unix id is %s to true' % viewer_process.pid]
-        # Use call() rather than check_call() because this is merely for
-        # convenience: if it doesn't work, user can still manually bring the
-        # viewer window forward.
-        subprocess.call(
-            osascript,
-            **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
+        raise_window(viewer_process)
+
+    # MAINT-8304: when the user clicks on OUR taskbar/Dock icon instead of the
+    # viewer's, raise the viewer window.
+    # Platform-specific event bindings. If we don't recognize the platform,
+    # don't bind anything.
+    bindings = dict(
+        Windows=["<Map>", "<Unmap>"],
+        Darwin =["<Activate>"],
+        ).get(platform.system(), [])
+    for binding in bindings:
+        # Prebind the viewer_process argument to raise_window().
+        app_window.bind(binding, partial(raise_window, viewer_process))
+
     # at the moment, we just wait here.  Later, the crash monitor will be launched at this point
     rc = viewer_process.wait()
     log.info("Viewer terminated with %s" % rc)
     log.info("Launcher exiting after viewer exit.")
+
+def raise_window(viewer_process, event=None):
+    # The idiom we use above, passing partial(raise_window, viewer_process) to
+    # Tk.bind(), passes an extra 'event' param on click. We must be prepared
+    # to receive it, even though we ignore it.
+    # derived from https://stackoverflow.com/q/38923478
+    osascript = ['/usr/bin/osascript', '-e',
+                 'tell app "System Events" to set frontmost of every process '
+                 'whose unix id is %s to true' % viewer_process.pid]
+    # Use call() rather than check_call() because this is merely for
+    # convenience: if it doesn't work, user can still manually bring the
+    # viewer window forward.
+    subprocess.call(
+        osascript,
+        **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
 
 if __name__ == "__main__":
     main()

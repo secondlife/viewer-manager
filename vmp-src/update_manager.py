@@ -763,10 +763,10 @@ def _update_manager(command, cli_overrides = {}):
             script_owner_name = pwd.getpwuid(script_owner_id)[0]
             username = pwd.getpwuid(user_id)[0]
             log.info("Upgrade notification attempted by user " + username)    
-            frame = InstallerUserMessage.InstallerUserMessage(title = "Second Life Installer")
-            frame.binary_choice_message(message = "Second Life was installed by userid " + script_owner_name 
+            yes = InstallerUserMessage.binary_choice_message(
+                message = "Second Life was installed by userid " + script_owner_name 
                 + ".  Do you have privileges to install?", true = "Yes", false = 'No')
-            if not frame.choice.get():
+            if not yes:
                 log.info("Upgrade attempt declined by user " + username)
                 InstallerUserMessage.basic_message(
                     "Please find a system admin to upgrade Second Life")
@@ -851,9 +851,7 @@ def _update_manager(command, cli_overrides = {}):
             else: # INSTALL_MODE_PROMPT_OPTIONAL
                 # ask the user what to do with the optional update
                 log.info("asking the user what to do with the update")
-                skip_frame = InstallerUserMessage.InstallerUserMessage(
-                    title = BuildData.get('Channel Base')+" Installer")
-                skip_frame.trinary_choice_link_message(
+                update_action = InstallerUserMessage.trinary_choice_message(
                     message = "Update %s is ready to install.\n"
                     "Release Notes:\n%s" % (chosen_result['version'],chosen_result['more_info']),
                     url = str(chosen_result['more_info']),
