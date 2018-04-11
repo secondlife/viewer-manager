@@ -246,18 +246,8 @@ def main():
     if platform == 'win64':
         #this is just a warning so that devs can build on w64 boxen
         print('The Windows VMP must be built on a 32-bit python Windows host', sys.stderr)
-    
-    #run nosetests
-    # This MUST be the nosetests we installed in our virtualenv. Otherwise, it
-    # won't find the runtime dependencies we just pip installed.
-    if system() == "Windows":
-        venv = subprocess.check_output(["cygpath", "-m", virtualenv]).rstrip()
-        bindir = "Scripts"
-    else:
-        venv = virtualenv
-        bindir = "bin"
-    nosetests = os.path.join(venv, bindir, "nosetests")
 
+    #run nosetests
     nose_env = os.environ.copy()
     #stupid windows limit:
     # TypeError: encoded string too long (547, maximum length 519)
@@ -266,10 +256,24 @@ def main():
         nose_env['LIB'] = ""
         nose_env['WINDOWSSDK_EXECUTABLEPATH_X64'] = ''
 
+    # If we were to run nosetests installed in system Python, as opposed to
+    # our virtualenv, then the scripts under test won't be able to import
+    # (e.g.) eventlet -- which is only in our virtualenv, not system Python.
+    # The tricky thing is that if system Python already contains an up-to-date
+    # version of nose, 'pip install -U nose' won't actually write anything to
+    # our virtualenv.
+    # So instead, invoke nosetests using the alternate tactic in which we
+    # explicitly run python, the one from our virtualenv, explicitly passing
+    # the nose.core module pathname:
+    # http://nose.readthedocs.io/en/latest/usage.html
+    # Defer importing nose to this point in case we DID pip install it.
+    import nose.core
+    command = [sys.executable, nose.core.__file__, tests]
+    print("About to call %s\n"
+          "from %s" % (command, vmp_src))
     try:
-        print("About to call %s on %s from %s" % (nosetests, tests, vmp_src))
         #print("nose environment: %r" % nose_env)
-        output = subprocess.check_output([nosetests, tests],
+        output = subprocess.check_output(command,
                                          stderr=subprocess.STDOUT, env=nose_env,
                                          cwd=vmp_src)
     except subprocess.CalledProcessError as e:
@@ -278,7 +282,7 @@ def main():
                     "output:\n%s" % (e, e.output))
     except Exception as e:
         #more debug is best effort
-        raise Error("Tests didn't run: %s: %s" % (e.__class__.__name__, e))
+        raise Error("%s didn't run: %s: %s" % (command, e.__class__.__name__, e))
 
     print("Successful nosetest output:")
     print(' '.join(line for line in output.splitlines()
