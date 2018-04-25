@@ -394,6 +394,10 @@ def pyinstaller(pyinstaller_cmd, mainfile, icon, manifest_from_build=None):
     # Also note, in case of need:
     # --debug: produce runtime startup messages about imports and such (may
     #          need --console rather than -w?)
+
+    # Temporary: until hook-eventlet.support.greendns.py makes it into
+    # PyInstaller, use the one in this directory.
+    command.append('--additional-hooks-dir=' + os.path.dirname(__file__))
     try:
         run(*command)
     except Exception as e:
@@ -426,6 +430,7 @@ if __name__ == '__main__':
     tracer = trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix, libs],
                          trace=1, count=0, timing=False)
     try:
-        tracer.run('main()')
+##      tracer.run('main()')
+        main()
     except Error as err:
         sys.exit(str(err))
