@@ -46,6 +46,9 @@ if __name__ == "__main__":
     # do this right away because in the past we've hit crashes even importing
     # other VMP modules
     SL_Logging.getLogger('SL_Launcher')
+    # Any print output from anything along the way should also be logged.
+    sys.stdout = SL_Logging.stream()
+    sys.stderr = sys.stdout
 
 import eventlet
 
