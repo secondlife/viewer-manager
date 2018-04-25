@@ -271,10 +271,11 @@ def make_VVM_UUID_hash(platform_key):
             log.warning(err)
             muuid = None
         else:
-            #outputs in two rows:
+            #outputs two visible rows:
             #UUID
             #XXXXXXX-XXXX...
-            muuid = muuid.splitlines()[1].rstrip()
+            # but splitlines() produces a whole lot of empty strings.
+            muuid = [line for line in muuid.splitlines() if line][-1].rstrip()
             log.debug("result of subprocess call to get win MUUID: %r" % muuid)
             
     if muuid is None:
