@@ -88,7 +88,7 @@ class Common(object):
     #Linden standard green color, from Marketing
     linden_green = "#487A7B"
 
-    def __init__(self, parent, icon_name = "head-sl-logo.gif", icon_path = None):
+    def __init__(self, parent, icon_name = "head-sl-logo.gif"):
         # Use of StringVar allows us to dynamically change the displayed text.
         self.message = tk.StringVar()
         # Use a Message widget for its automatic text reflow:
@@ -110,18 +110,18 @@ class Common(object):
             # vmp_icons are in our own Resources directory rather than the
             # embedded viewer app. So instead of calling
             # Application.app_data_path(), just look relative to __file__.
-            icon_path = os.path.join(udir(), os.pardir, "Resources", "vmp_icons")
+            self.icon_path = os.path.join(udir(), os.pardir, "Resources", "vmp_icons")
         else:
             #not mac, so icons are not in ../Resources, but in a subdir of the app dir
-            icon_path = os.path.join(Application.install_path(), 'vmp_icons')
+            self.icon_path = os.path.join(Application.install_path(), 'vmp_icons')
 
-        if not os.path.exists(icon_path):
+        if not os.path.exists(self.icon_path):
             # maybe we're in a developer directory?
-            icon_path = os.path.join(udir(), "icons")
+            self.icon_path = os.path.join(udir(), "icons")
 
         #finds the icon and creates the widget
         #we do this in each message, let's do it just once instead.
-        icon_path = os.path.join(icon_path, icon_name)
+        icon_path = os.path.join(self.icon_path, icon_name)
         if os.path.exists(icon_path):
             icon = tk.PhotoImage(file=icon_path)
             self.image_label = tk.Label(master=parent, image = icon)
@@ -228,7 +228,7 @@ class StatusMessage(tk.Tk, Common):
 
         if platform.system() == 'Windows':
             self.call('wm', 'iconbitmap', self._w, '-default',
-                      os.path.join(icon_path, 'secondlife.ico'))
+                      os.path.join(self.icon_path, 'secondlife.ico'))
 
         #defines what to do when window is closed
         self.protocol("WM_DELETE_WINDOW", self._delete_window)
