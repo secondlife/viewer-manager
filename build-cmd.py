@@ -50,18 +50,27 @@ linux   = re.compile('linux')
 windows = re.compile('win')
 bit32   = re.compile('32 bit')
 
-# Python packages on which our build depends. Each entry names a package and
-# provides any qualifiers (as strings) supported by pip.
+# Python packages on which our build depends. Each entry maps a package name
+# (the name you would 'import') to the string you would use to 'pip install'
+# that package. That may include any version qualifiers, or whatever,
+# recognized by pip.
 BUILD_DEPS = dict(
-    nose='',
-    pyinstaller='',
+    nose='nose',
+    PyInstaller='pyinstaller',
 )
 
 # Python packages on which the VMP depends at runtime, in the same form.
 RUNTIME_DEPS = dict(
-    eventlet='',
-    llbase='',
-    requests='',
+    # TEMPORARY: We have an outstanding pull request to merge the eventlet
+    # changes we need: https://github.com/eventlet/eventlet/pull/482
+    # Until those get folded in upstream, though, we must name the specific
+    # branch of the source repo for the pull request.
+    # Per https://stackoverflow.com/a/24811490, although we should write:
+    # git+https://github.com/nat-goodspeed/eventlet.git@relative-dns
+    # the .zip form shown below is MUCH faster: e.g. 4 seconds versus 51.
+    eventlet='https://github.com/nat-goodspeed/eventlet/archive/relative-dns.zip',
+    llbase='llbase',
+    requests='requests',
 )
 
 # As of 2018-03-30, these are the packages on which RUNTIME_DEPS depend. It
@@ -79,7 +88,7 @@ RUNTIME_DEPS = dict(
 RUNTIME_DEPS_DEPS = [
     "certifi",
     "chardet",
-    "enum34",
+    "enum",
     "greenlet",
     "idna",
     "urllib3",
@@ -142,7 +151,7 @@ def main():
         BUILD_DEPS.pop("pyinstaller", None)
 
     try:
-        run('pip', 'install', '-U', *(''.join(pair) for pair in BUILD_DEPS.items()))
+        run('pip', 'install', '-U', *BUILD_DEPS.values())
     except RunError as err:
         raise Error(str(err))
 
@@ -174,55 +183,11 @@ def main():
     # Now install the runtime stuff.
     # -U means: even if we already have an older version of (say) requests in
     # the system image, ensure our virtualenv has the version specified in
-    # requirements.txt (or the latest version if not version-locked).
+    # RUNTIME_DEPS (or the latest version if not version-locked).
     try:
-        run('pip', 'install', '-U', *(''.join(pair) for pair in RUNTIME_DEPS.items()))
+        run('pip', 'install', '-U', *RUNTIME_DEPS.values())
     except RunError as err:
         raise Error(str(err))
-
-    # Now that we've installed our dependencies and -- importantly -- all
-    # THEIR dependencies, figure out what we just added.
-    after = set(os.listdir(venvlibs))
-##  print('\n'.join(itertools.chain(["inventory after installing runtime dependencies:"],
-##                                  sorted(after))))
-    installed = after - before
-    print('\n'.join(itertools.chain(["newly-installed runtime dependencies:"],
-                                    sorted(installed))))
-    # As of 2018-03-27, anyway, there's some cruft in that directory
-    tocopy = set(os.path.join(venvlibs, f)
-                 for f in installed
-                 if not (f.endswith(".dist-info") or f.endswith(".egg-info")))
-    # The steps above intentionally capture only stuff added by our 'pip
-    # install' command. But what if one or more of our dependencies was
-    # already present in system Python before we created the virtualenv? In
-    # that case, it wouldn't show up in 'installed' or 'tocopy'. Stir in the
-    # set we started with, plus (what we believe to be) their dependencies,
-    # converting from package name to file or directory name.
-    for pkg in itertools.chain(RUNTIME_DEPS, RUNTIME_DEPS_DEPS):
-        try:
-            modfile = import_module(pkg).__file__
-        except ImportError as err:
-            # This may mean that one of RUNTIME_DEPS_DEPS is no longer
-            # required by any of RUNTIME_DEPS, and hence was not installed.
-            # A developer should remove that item from RUNTIME_DEPS_DEPS, but
-            # we shouldn't fail the build for that reason.
-            # Produce a warning to stderr, but keep going.
-            print("%s: %s" % (err.__class__.__name__, err), file=sys.stderr)
-        else:
-            # splitext()[0] strips off the extension (e.g. .pyc)
-            # split() takes apart the directory path from the simple name
-            moddir, modname = os.path.split(os.path.splitext(modfile)[0])
-            if modname == '__init__':
-                # If an imported module's name is __init__, the name
-                # represents a whole package. Have to copy its entire
-                # directory.
-                tocopy.add(moddir)
-            else:
-                # imported module isn't named __init__, therefore it's a
-                # single file module -- copy just that file
-                tocopy.add(modfile)
-    print('\n'.join(itertools.chain(["packages to copy:"],
-                                    sorted(tocopy))))
 
     # We use copytree() to populate stage_VMP. copytree() doesn't like it when
     # its destination directory already exists.
@@ -295,30 +260,71 @@ def main():
     with open(os.path.join(stage,"VERSION.txt"), 'w') as packageVersionFile:
         packageVersionFile.write("%s.%s" % (sourceVersion, os.getenv('AUTOBUILD_BUILD_ID','0')))
 
-    ignores = ignore_patterns('*.pyc', '*tests*')
-    # start with the parent directory
-    copytree(vmp_src, stage_VMP, ignore=ignores)
-    # Copy packages installed by RUNTIME_DEPS.
-    for srcpath in tocopy:
-        dstpath = os.path.join(stage_VMP, os.path.basename(srcpath))
-        print("Copying %s to %s" % (srcpath, dstpath))
-        if os.path.isdir(srcpath):
-            # srcpath represents a whole package. Have to copy its entire
-            # directory.
-            copytree(srcpath, dstpath, ignore=ignores)
-        else:
-            # it's a single file module -- copy just that file
-            copy(srcpath, dstpath)
-
     sourceLicenseFile = os.path.join(top, "LICENSE")
     copy(sourceLicenseFile, stage)
-        
-    #no else because we would have exited above
-    if darwin.search(platform):
-        pass
-    elif linux.search(platform):
-        #left as a separate clause in case lnx and mac ever diverge
-        pass
+
+    # -------------------------------- Posix ---------------------------------
+    if darwin.search(platform) \
+    or linux.search(platform):
+        # Having installed our dependencies and -- importantly -- all THEIR
+        # dependencies, figure out what we added.
+        after = set(os.listdir(venvlibs))
+    ##  print('\n'.join(itertools.chain(["inventory after installing runtime dependencies:"],
+    ##                                  sorted(after))))
+        installed = after - before
+        print('\n'.join(itertools.chain(["newly-installed runtime dependencies:"],
+                                        sorted(installed))))
+        # As of 2018-03-27, anyway, there's some cruft in that directory
+        tocopy = set(os.path.join(venvlibs, f)
+                     for f in installed
+                     if not (f.endswith(".dist-info") or f.endswith(".egg-info")))
+        # The steps above intentionally capture only stuff added by our 'pip
+        # install' command. But what if one or more of our dependencies was
+        # already present in system Python before we created the virtualenv? In
+        # that case, it wouldn't show up in 'installed' or 'tocopy'. Stir in the
+        # set we started with, plus (what we believe to be) their dependencies,
+        # converting from package name to file or directory name.
+        for pkg in itertools.chain(RUNTIME_DEPS, RUNTIME_DEPS_DEPS):
+            try:
+                modfile = import_module(pkg).__file__
+            except ImportError as err:
+                # This may mean that one of RUNTIME_DEPS_DEPS is no longer
+                # required by any of RUNTIME_DEPS, and hence was not installed.
+                # A developer should remove that item from RUNTIME_DEPS_DEPS, but
+                # we shouldn't fail the build for that reason.
+                # Produce a warning to stderr, but keep going.
+                print("%s: %s" % (err.__class__.__name__, err), file=sys.stderr)
+            else:
+                # splitext()[0] strips off the extension (e.g. .pyc)
+                # split() takes apart the directory path from the simple name
+                moddir, modname = os.path.split(os.path.splitext(modfile)[0])
+                if modname == '__init__':
+                    # If an imported module's name is __init__, the name
+                    # represents a whole package. Have to copy its entire
+                    # directory.
+                    tocopy.add(moddir)
+                else:
+                    # imported module isn't named __init__, therefore it's a
+                    # single file module -- copy just that file
+                    tocopy.add(modfile)
+        print('\n'.join(itertools.chain(["packages to copy:"],
+                                        sorted(tocopy))))
+
+        ignores = ignore_patterns('*.pyc', '*tests*')
+        # start with the parent directory
+        copytree(vmp_src, stage_VMP, ignore=ignores)
+        # Copy packages installed by RUNTIME_DEPS.
+        for srcpath in tocopy:
+            dstpath = os.path.join(stage_VMP, os.path.basename(srcpath))
+            print("Copying %s to %s" % (srcpath, dstpath))
+            if os.path.isdir(srcpath):
+                # srcpath represents a whole package. Have to copy its entire
+                # directory.
+                copytree(srcpath, dstpath, ignore=ignores)
+            else:
+                # it's a single file module -- copy just that file
+                copy(srcpath, dstpath)
+    # ------------------------------- Windows --------------------------------
     elif windows.search(platform):
         #In a typical Windows install, pinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         #BUT that's not true of the virtualenv that autobuild runs in, so
@@ -354,10 +360,13 @@ def main():
         # the new (prepended with dir) pyinstaller_path as last
         pyinstaller_cmd = cmd[:-1] + [pyinstaller_path]
 
-        # to keep things as platform independent as possible, EXEs go into the
-        # same directory as .py files
+        os.mkdir(stage_VMP)
+
         # SL_Launcher is the main entry point for the VMP.
-        pyinstaller(pyinstaller_cmd, os.path.join(stage_VMP, "SL_Launcher"), icon)
+        pyinstaller(pyinstaller_cmd,
+                    mainfile=os.path.join(vmp_src, "SL_Launcher"),
+                    dstdir=stage_VMP,
+                    icon=icon)
 
         #best effort cleanup after pyinstaller
         rmtree(build, ignore_errors=True)
@@ -366,10 +375,11 @@ def main():
                 os.remove(f)
             except:
                 pass
+
     print("Build Succeeded")
 
-def pyinstaller(pyinstaller_cmd, mainfile, icon, manifest_from_build=None):
-    dstdir, basename = os.path.split(mainfile)
+def pyinstaller(pyinstaller_cmd, mainfile, dstdir, icon, manifest_from_build=None):
+    basename = os.path.basename(mainfile)
     print((" %s " % basename).center(72, '='))
     print("target %r exists: %s" % (mainfile, os.path.exists(mainfile)))
     # https://pyinstaller.readthedocs.io/en/stable/usage.html#options
