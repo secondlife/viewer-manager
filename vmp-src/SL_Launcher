@@ -258,7 +258,7 @@ def main():
     log.info("Viewer terminated with %s" % rc)
     log.info("Launcher exiting after viewer exit.")
 
-if platform.system == 'Darwin':
+if platform.system() == 'Darwin':
     def raise_window(viewer_process, event=None):
         # The idiom we use above, passing partial(raise_window, viewer_process) to
         # Tk.bind(), passes an extra 'event' param on click. We must be prepared
@@ -273,7 +273,7 @@ if platform.system == 'Darwin':
         subprocess.call(
             osascript,
             **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
-elif platform.system == 'Windows':
+elif platform.system() == 'Windows':
     def raise_window(viewer_process, event=None):
         pass
 else:
