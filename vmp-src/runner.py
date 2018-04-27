@@ -139,7 +139,8 @@ class PopenRunner(Runner):
             # Pass a PIPE so that, by attempting to read from that pipe and
             # getting EOF, the viewer can detect VMP termination (e.g. from
             # user right-clicking on Dock icon and selecting Quit).
-            kwds.update(env=env, stdin=subprocess.PIPE)
+            # Do NOT let subprocess_args() suppress the viewer window!
+            kwds.update(env=env, stdin=subprocess.PIPE, startupinfo=None)
             viewer_process = self.Popen(self.command, **kwds)
 
         log.info("Successfully launched %s", self.command)
@@ -162,7 +163,9 @@ class ExecRunner(Runner):
             log.info("Running %s", self.command)
             with self.error_trap(log):
                 # see comment about log_stream in PopenRunner.run()
-                self.Popen(self.command, **subprocess_args(log_stream=open(os.devnull, "w")))
+                kwds = subprocess_args(log_stream=open(os.devnull, "w"))
+                kwds.update(startupinfo=None)
+                self.Popen(self.command, **kwds)
 
             # If we succeeded, terminate immediately so installer can replace
             # this running executable.
