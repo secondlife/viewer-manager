@@ -56,8 +56,11 @@ if __name__ == "__main__":
     # We use a number of other modules, including 'requests'. We want every
     # single module that performs network I/O, or other conventional
     # operations, to perform it using eventlet magic.
-    # https://github.com/eventlet/eventlet/issues/483 : but don't pass os=True.
-    eventlet.monkey_patch(select=True, socket=True, time=True,
+    # On Posix, we must pass os=True.
+    # On Windows, we must NOT pass os=True.  :-P
+    # https://github.com/eventlet/eventlet/issues/483
+    eventlet.monkey_patch(os=(platform.system() != 'Windows'),
+                          select=True, socket=True, time=True,
                           builtins=True, subprocess=True)
 
 from runner import PopenRunner
