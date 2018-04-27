@@ -238,9 +238,8 @@ def main():
     # Say hello to our child process.
     print(llsd.format_notation(None), file=viewer_process.stdin)
 
-    if platform.system() == "Darwin":
-        # MAINT-8109: try to make the real viewer's window frontmost
-        raise_window(viewer_process)
+    # MAINT-8109: try to make the real viewer's window frontmost
+    raise_window(viewer_process)
 
     # MAINT-8304: when the user clicks on OUR taskbar/Dock icon instead of the
     # viewer's, raise the viewer window.
@@ -259,20 +258,27 @@ def main():
     log.info("Viewer terminated with %s" % rc)
     log.info("Launcher exiting after viewer exit.")
 
-def raise_window(viewer_process, event=None):
-    # The idiom we use above, passing partial(raise_window, viewer_process) to
-    # Tk.bind(), passes an extra 'event' param on click. We must be prepared
-    # to receive it, even though we ignore it.
-    # derived from https://stackoverflow.com/q/38923478
-    osascript = ['/usr/bin/osascript', '-e',
-                 'tell app "System Events" to set frontmost of every process '
-                 'whose unix id is %s to true' % viewer_process.pid]
-    # Use call() rather than check_call() because this is merely for
-    # convenience: if it doesn't work, user can still manually bring the
-    # viewer window forward.
-    subprocess.call(
-        osascript,
-        **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
+if platform.system == 'Darwin':
+    def raise_window(viewer_process, event=None):
+        # The idiom we use above, passing partial(raise_window, viewer_process) to
+        # Tk.bind(), passes an extra 'event' param on click. We must be prepared
+        # to receive it, even though we ignore it.
+        # derived from https://stackoverflow.com/q/38923478
+        osascript = ['/usr/bin/osascript', '-e',
+                     'tell app "System Events" to set frontmost of every process '
+                     'whose unix id is %s to true' % viewer_process.pid]
+        # Use call() rather than check_call() because this is merely for
+        # convenience: if it doesn't work, user can still manually bring the
+        # viewer window forward.
+        subprocess.call(
+            osascript,
+            **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
+elif platform.system == 'Windows':
+    def raise_window(viewer_process, event=None):
+        pass
+else:
+    def raise_window(viewer_process, event=None):
+        pass
 
 if __name__ == "__main__":
     main()
