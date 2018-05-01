@@ -273,9 +273,51 @@ if platform.system() == 'Darwin':
         subprocess.call(
             osascript,
             **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
+
 elif platform.system() == 'Windows':
+    import win32gui
+    import win32process
+
+    # http://timgolden.me.uk/python/win32_how_do_i/find-the-window-for-my-subprocess.html
+    def _window_callback(hwnd, (pid, hwnds)):
+        if win32gui.IsWindowVisible(hwnd) and win32gui.IsWindowEnabled(hwnd):
+            if win32process.GetWindowThreadProcessId(hwnd)[1] == pid:
+                hwnds.append(hwnd)
+        # EnumWindows() stops unless callback returns True
+        return True        
+
     def raise_window(viewer_process, event=None):
-        pass
+        log = SL_Logging.getLogger("raise_window")
+        log.debug("raise_window(%08X)", viewer_process.pid)
+        # Our first attempt at this cached the HWND we found for
+        # viewer_process.pid. Thing is, the first "window" opened by the
+        # viewer isn't its main window -- it's the little message window that
+        # informs you it's checking VFS and so forth. So rediscover the
+        # relevant window(s) on every call.
+        hwnds = []
+        for i in xrange(20):
+            win32gui.EnumWindows(_window_callback, (viewer_process.pid, hwnds))
+            if hwnds:
+                log.debug("Try %d: viewer process %08X has HWNDs %r",
+                          i+1, viewer_process.pid, hwnds)
+                break
+            # viewer hasn't yet opened its main window; takes a while
+            eventlet.sleep(0.5)
+        else:
+            log.warning("raise_window(%08X) could not detect viewer window in %d tries",
+                        viewer_process.pid, i)
+
+        # Bring forward however many viewer windows we discover, in case they
+        # have overlapping lifespans. If we do the longer-lasting one second,
+        # excellent. If we do it first, the shorter-lasting one will briefly
+        # overlap it -- but then when it goes away, the longer-lasting one
+        # will become frontmost.
+        for hwnd in hwnds:
+            # https://www.blog.pythonlibrary.org/2014/10/20/pywin32-how-to-bring-a-window-to-front/
+            log.debug("ShowWindow(%r); SetForegroundWindow(%r);", hwnd, hwnd)
+            win32gui.ShowWindow(hwnd, 5)
+            win32gui.SetForegroundWindow(hwnd)
+
 else:
     def raise_window(viewer_process, event=None):
         pass
