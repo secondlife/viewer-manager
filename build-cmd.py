@@ -66,9 +66,9 @@ RUNTIME_DEPS = dict(
     # Until those get folded in upstream, though, we must name the specific
     # branch of the source repo for the pull request.
     # Per https://stackoverflow.com/a/24811490, although we should write:
-    # git+https://github.com/nat-goodspeed/eventlet.git@relative-dns
+    # git+https://github.com/nat-goodspeed/eventlet.git@ext-deps
     # the .zip form shown below is MUCH faster: e.g. 4 seconds versus 51.
-    eventlet='https://github.com/nat-goodspeed/eventlet/archive/relative-dns.zip',
+    eventlet='https://github.com/nat-goodspeed/eventlet/archive/ext-deps.zip',
     llbase='llbase',
     requests='requests',
 )
@@ -88,9 +88,12 @@ RUNTIME_DEPS = dict(
 RUNTIME_DEPS_DEPS = [
     "certifi",
     "chardet",
+    "dns",
     "enum",
     "greenlet",
     "idna",
+    "monotonic",
+    "six",
     "urllib3",
 ]
 
@@ -185,7 +188,11 @@ def main():
     # the system image, ensure our virtualenv has the version specified in
     # RUNTIME_DEPS (or the latest version if not version-locked).
     try:
-        run('pip', 'install', '-U', *RUNTIME_DEPS.values())
+        run('pip', 'install',
+            # need this to process the eventlet dependency on a dnspython
+            # version not yet available on PyPI
+            '--process-dependency-links',
+            '-U', *RUNTIME_DEPS.values())
     except RunError as err:
         raise Error(str(err))
 

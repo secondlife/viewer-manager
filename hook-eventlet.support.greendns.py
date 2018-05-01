@@ -1,4 +1,4 @@
-# PyInstaller hook for the dnspython snapshot embedded in eventlet
+# PyInstaller hook for dynamic import of dnspython
 
 from PyInstaller.utils.hooks import collect_submodules
-hiddenimports = collect_submodules('eventlet.support.dns')
+hiddenimports = collect_submodules('dns')
