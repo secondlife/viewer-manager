@@ -62,7 +62,7 @@ BUILD_DEPS = dict(
 # Python packages on which the VMP depends at runtime, in the same form.
 RUNTIME_DEPS = dict(
     # TEMPORARY: We have an outstanding pull request to merge the eventlet
-    # changes we need: https://github.com/eventlet/eventlet/pull/482
+    # changes we need: https://github.com/eventlet/eventlet/pull/486
     # Until those get folded in upstream, though, we must name the specific
     # branch of the source repo for the pull request.
     # Per https://stackoverflow.com/a/24811490, although we should write:
