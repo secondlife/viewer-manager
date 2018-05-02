@@ -274,7 +274,10 @@ if platform.system() == 'Darwin':
             osascript,
             **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
 
-elif platform.system() == 'Windows':
+elif False: ## platform.system() == 'Windows':
+    ## Turns out that the ShowWindow() and SetForegroundWindow() calls below,
+    ## applied to the HWND of our child process, only work for an Admin user.
+    ## For a non-Admin user, they crash the VMP. No idea how to implement this.
     import win32gui
     import win32process
 
