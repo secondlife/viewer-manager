@@ -188,11 +188,7 @@ def main():
     # the system image, ensure our virtualenv has the version specified in
     # RUNTIME_DEPS (or the latest version if not version-locked).
     try:
-        run('pip', 'install',
-            # need this to process the eventlet dependency on a dnspython
-            # version not yet available on PyPI
-            '--process-dependency-links',
-            '-U', *RUNTIME_DEPS.values())
+        run('pip', 'install', '-U', *RUNTIME_DEPS.values())
     except RunError as err:
         raise Error(str(err))
 
