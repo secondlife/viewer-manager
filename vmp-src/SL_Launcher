@@ -47,7 +47,6 @@ if platform.system() != 'Windows' and platform.python_version_tuple() < (2, 7, 0
     absfile = os.path.abspath(__file__)
     if platform.system == 'Darwin':
         import glob
-        executable_name = "Second Life"
         # __file__ is
         # Second Life.app/Contents/Resources/launcher.app/Contents/MacOS/SL_Launcher
         # need to run
@@ -66,7 +65,13 @@ if platform.system() != 'Windows' and platform.python_version_tuple() < (2, 7, 0
             log.error("%s viewer .app, found %s in %s",
                       ("Ambiguous" if apps else "Missing"), apps, pattern)
             sys.exit(1)
-        viewer_binary = os.path.join(apps[0], "Contents", "MacOS", executable_name)
+        pattern = os.path.join(apps[0], "Contents", "MacOS", "*")
+        binaries = glob.glob(pattern)
+        if len(binaries) != 1:
+            log.error("%s viewer executable, found %s in %s",
+                      ("Ambiguous" if binaries else "Missing"), binaries, pattern)
+            sys.exit(1)
+        viewer_binary = binaries[0]
     elif platform.system == "Linux":
         executable_name = "secondlife"
         viewer_binary = os.path.join(os.path.dirname(absfile), executable_name)
