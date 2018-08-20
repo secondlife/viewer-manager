@@ -306,13 +306,21 @@ def wmic(*args):
 
     Breaking this out as a separate function improves testability.
     """
-    log = SL_Logging.getLogger('wmic')
-    wmic_cmd = ("wmic",) + args
     try:
-        return subprocess.check_output(
-            wmic_cmd,
-            **subprocess_args(include_stdout=False,
-                              log_stream=SL_Logging.stream_from_process(wmic_cmd)))
+        # MAINT-9014: There are a couple possibilities for finding wmic.
+        try:
+            # It has a canonical pathname that might or might not be on the PATH.
+            return _wmic("c:/Windows/System32/Wbem/wmic", *args)
+        except WindowsError as err:
+            # Only retry for "not found" -- anything else is a genuine problem.
+            if err.errno != errno.ENOENT:
+                raise
+            # wmic not in usual place -- better hope it's on PATH! Let any
+            # exceptions from this call propagate to outer 'try'.
+            # Tempting though it is to memoize the knowledge that the usual
+            # path doesn't work, the fact is that we only invoke wmic a couple
+            # times.
+            return _wmic("wmic", *args)
     except subprocess.CalledProcessError as err:
         # https://docs.python.org/2/library/subprocess.html#subprocess.CalledProcessError
         # When check_output() raises CalledProcessError, it stores collected
@@ -322,6 +330,12 @@ def wmic(*args):
         if winerr.errno == errno.ENOENT:
             raise WmicError("No wmic command found - bad Windows install?")
         raise WmicError("wmic command failed; error %s %s" % (winerr.winerror, winerr.strerror))
+
+def _wmic(*wmic_cmd):
+    return subprocess.check_output(
+        wmic_cmd,
+        **subprocess_args(include_stdout=False,
+                          log_stream=SL_Logging.stream_from_process(wmic_cmd)))
 
 def query_vvm(platform_key, settings):
     """
