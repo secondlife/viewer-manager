@@ -10,15 +10,19 @@ Copyright (c) 2018, Linden Research, Inc.
 $/LicenseInfo$
 """
 
+import glob
 import subprocess
 import sys
 
 class Error(Exception):
     pass
 
-def main(viewer_executable):
-    # don't wait for the viewer to terminate, return immediately
-    subprocess.Popen([viewer_executable])
+# called with the arguments we should pass to the viewer,
+# the first of which is the viewer executable itself
+def main(*args):
+    # Happily, that means 'args' is already a suitable subprocess command.
+    # Don't wait for the viewer to terminate, return immediately.
+    subprocess.Popen(args)
 
 if __name__ == "__main__":
     try:
