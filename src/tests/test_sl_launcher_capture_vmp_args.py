@@ -46,7 +46,7 @@ SLL = imp.load_source('SL_Launcher',launcher)
 
 #the {Resources}/app_settings dir is a sibling of the parent of the script dir
 source_dir = os.path.dirname(os.path.dirname(launcher))
-golden_cmd_xml = os.path.join(source_dir, 'vmp-src', 'tests', 'data', 'cmd_line.xml')
+golden_cmd_xml = os.path.join(source_dir, 'src', 'tests', 'data', 'cmd_line.xml')
 plat = platform.system()
 path_dict = {'Darwin':os.path.join(source_dir, 'Resources', 'app_settings', 'cmd_line.xml'),
                'Linux':os.path.join(source_dir, 'app_settings', 'cmd_line.xml'),

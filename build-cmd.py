@@ -93,7 +93,7 @@ def main():
     #if we decide we need to copy yet another directory tree, just add the source and dest to this dict
     # each value in iter_paths is a (src, dst) pair in that order
     src, dst = range(2)
-    iter_paths = {'vmp': (os.path.join(top, 'vmp-src'), stage_VMP), 
+    iter_paths = {'vmp': (os.path.join(top, 'src'), stage_VMP), 
                   'llb': (llbasedir, os.path.join(stage_VMP, 'llbase'))
     }
     print "iterpaths: %r" % iter_paths
@@ -196,7 +196,7 @@ def main():
         dstdir = iter_paths['vmp'][dst]
         # SL_Launcher is the main entry point for the VMP.
         vmp_files = [os.path.join(dstdir, f)
-                     for f in ("SL_Launcher",)]
+                     for f in ("SL_Launcher", "updater.py")]
         print "Manifest of files to be compiled by pyinstaller: %s" % repr(vmp_files)
 
         #In a typical Windows install, pinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
