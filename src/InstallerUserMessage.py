@@ -106,11 +106,11 @@ class Common(object):
 
         #find a few things
         if platform.system() == "Darwin":
-            # Unlike almost everything else we look for in Resources, the
-            # vmp_icons are in our own Resources directory rather than the
-            # embedded viewer app. So instead of calling
-            # Application.app_data_path(), just look relative to __file__.
-            self.icon_path = os.path.join(udir(), os.pardir, "Resources", "vmp_icons")
+            # Unlike almost everything else we look for, our icons are in
+            # our own updater/icons directory rather than the containing
+            # viewer app. So instead of calling Application.app_data_path(),
+            # just look relative to __file__.
+            self.icon_path = os.path.join(udir(), "icons")
         else:
             #not mac, so icons are not in ../Resources, but in a subdir of the app dir
             self.icon_path = os.path.join(Application.install_path(), 'vmp_icons')
