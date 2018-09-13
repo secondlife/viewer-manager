@@ -312,9 +312,11 @@ def main():
                 copy(srcpath, dstpath)
     # ------------------------------- Windows --------------------------------
     elif system() == 'Windows':
-        #In a typical Windows install, pinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
-        #BUT that's not true of the virtualenv that autobuild runs in, so
-        #search.
+        # In a typical Windows install, pyinstaller lives in
+        # C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the
+        # python executable.
+        # BUT that's not true of the virtualenv that autobuild runs in, so
+        # search.
         pyinstaller_runners = [
             # If what we find is pyinstaller-script.py, need to run it with
             # our own interpreter.
