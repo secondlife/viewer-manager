@@ -345,7 +345,7 @@ def main():
         os.mkdir(stage_VMP)
 
         pyinstaller(pyinstaller_cmd,
-                    mainfile=os.path.join(src, "updater"),
+                    mainfile=os.path.join(src, "updater.py"),
                     dstdir=stage_VMP,
                     icon=icon)
 
