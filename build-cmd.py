@@ -132,9 +132,9 @@ def main():
     # various places things go and come from.  
     print("sys.argv: %r" % sys.argv)
     top, scriptname = os.path.split(os.path.realpath(sys.argv[0]))
-    vmp_src = os.path.join(top, 'vmp-src')
-    icon = os.path.join(vmp_src, 'icons', 'secondlife.ico')
-    tests = os.path.join(vmp_src,'tests')
+    src = os.path.join(top, 'src')
+    icon = os.path.join(src, 'icons', 'secondlife.ico')
+    tests = os.path.join(src,'tests')
     stage = os.path.join(top, 'stage')
     stage_VMP = os.path.join(stage, "VMP")
     build = os.path.join(top, 'build')
@@ -238,12 +238,12 @@ def main():
     import nose.core
     command = [sys.executable, nose.core.__file__, tests]
     print("About to call %s\n"
-          "from %s" % (command, vmp_src))
+          "from %s" % (command, src))
     try:
         #print("nose environment: %r" % nose_env)
         output = subprocess.check_output(command,
                                          stderr=subprocess.STDOUT, env=nose_env,
-                                         cwd=vmp_src)
+                                         cwd=src)
     except subprocess.CalledProcessError as e:
         #exception attribute only exists on CalledProcessError
         raise Error("Tests failed: %s\n"
@@ -315,7 +315,7 @@ def main():
 
         ignores = ignore_patterns('*.pyc', '*tests*')
         # start with the parent directory
-        copytree(vmp_src, stage_VMP, ignore=ignores)
+        copytree(src, stage_VMP, ignore=ignores)
         # Copy packages installed by RUNTIME_DEPS.
         for srcpath in tocopy:
             dstpath = os.path.join(stage_VMP, os.path.basename(srcpath))
@@ -365,9 +365,8 @@ def main():
 
         os.mkdir(stage_VMP)
 
-        # SL_Launcher is the main entry point for the VMP.
         pyinstaller(pyinstaller_cmd,
-                    mainfile=os.path.join(vmp_src, "SL_Launcher"),
+                    mainfile=os.path.join(src, "updater"),
                     dstdir=stage_VMP,
                     icon=icon)
 
