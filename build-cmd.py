@@ -56,14 +56,7 @@ BUILD_DEPS = dict(
 
 # Python packages on which the VMP depends at runtime, in the same form.
 RUNTIME_DEPS = dict(
-    # TEMPORARY: We have an outstanding pull request to merge the eventlet
-    # changes we need: https://github.com/eventlet/eventlet/pull/486
-    # Until those get folded in upstream, though, we must name the specific
-    # branch of the source repo for the pull request.
-    # Per https://stackoverflow.com/a/24811490, although we should write:
-    # git+https://github.com/nat-goodspeed/eventlet.git@ext-deps
-    # the .zip form shown below is MUCH faster: e.g. 4 seconds versus 51.
-    eventlet='https://github.com/nat-goodspeed/eventlet/archive/ext-deps.zip',
+    eventlet='eventlet',
     llbase='llbase',
     requests='requests',
 )
@@ -127,14 +120,15 @@ def main():
         virtualenv = os.environ["VIRTUAL_ENV"]
     except KeyError:
         raise Error('Run %s within a virtualenv: it uses pip install' % scriptname)
-    # iterating over a dict produces just its keys
-    print("Installing %s into virtualenv: %s" %
-          (', '.join(itertools.chain(BUILD_DEPS, RUNTIME_DEPS)), virtualenv))
 
     # First, install the stuff on which this build depends.
     # ...but only bother with pyinstaller on Windows
     if system() != 'Windows':
-        BUILD_DEPS.pop("pyinstaller", None)
+        BUILD_DEPS.pop("PyInstaller", None)
+
+    # iterating over a dict produces just its keys
+    print("Installing %s into virtualenv: %s" %
+          (', '.join(itertools.chain(BUILD_DEPS, RUNTIME_DEPS)), virtualenv))
 
     try:
         run('pip', 'install', '-U', *BUILD_DEPS.values())
