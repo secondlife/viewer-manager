@@ -45,11 +45,6 @@ import trace
 # set this up early to report crashes in anything that follows
 cgitb.enable(format='text')
 
-darwin  = re.compile('darwin')
-linux   = re.compile('linux')
-windows = re.compile('win')
-bit32   = re.compile('32 bit')
-
 # Python packages on which our build depends. Each entry maps a package name
 # (the name you would 'import') to the string you would use to 'pip install'
 # that package. That may include any version qualifiers, or whatever,
@@ -100,34 +95,22 @@ RUNTIME_DEPS_DEPS = [
 class Error(Exception):
     pass
 
-#unify platform names and correctly return bitness
-def getPlatform():
-    plat = sys.platform.lower()
-    bitness = '32'
-    if sys.maxsize > 2**32:
-        bitness = '64'
-    if darwin.search(plat) is not None:
-        return 'darwin' + bitness
-    elif linux.search(plat):
-        return 'linux' + bitness
-    elif windows.search(plat):
-        print("sys.version: %s" % repr(sys.version))
-        #sadly, most of the ways that python uses to determine bitness
-        #in the end rely on the CPU/memory bitness and all return 64
-        #scraping sys.version is the only reliable method
-        if bit32.search(sys.version):
-            bitness = '32'
-        else:
-            bitness = '64'
-        return 'win' + bitness
-    else:
-        return None
+#correctly return bitness
+def getAddressSize():
+    if system() != 'Windows':
+        # We only support 64-bit operating systems ... except for Windows.
+        return 64
+
+    # Sadly, most of the ways that python uses to determine bit width in the
+    # end rely on the CPU/memory/Python build bit width and all return 64.
+    # Scraping sys.version is the only reliable method to discover whether
+    # we're running 32-bit Windows, e.g. on 64-bit-capable hardware.
+    return 32 if '32 bit' in sys.version else 64
     
 def main():
     print("Python version string: %s" % sys.version)
     print("Using python from: %s" % sys.executable)
     autobuild = os.environ.get('AUTOBUILD')
-    platform = getPlatform()
 
     # various places things go and come from.  
     print("sys.argv: %r" % sys.argv)
@@ -209,10 +192,11 @@ def main():
             raise
 
     #We ship a 32 bit VMP with 64 bit viewers
-    if platform is None: 
-        raise Error('No valid platform found')         
-    if platform == 'win64':
-        #this is just a warning so that devs can build on w64 boxen
+    if system() == 'Windows' and getAddressSize() == 64:
+        # The production updater must be 32-bit, but this is only a warning so
+        # that devs can build even with 64-bit Python. (The address size of the
+        # executable produced by PyInstaller depends on the address size of the
+        # Python interpreter.)
         print('The Windows VMP must be built on a 32-bit python Windows host', sys.stderr)
 
     #run nosetests
@@ -220,7 +204,7 @@ def main():
     #stupid windows limit:
     # TypeError: encoded string too long (547, maximum length 519)
     #so nuke a few env vars we aren't using for this
-    if platform == 'win32':
+    if system() == 'Windows' and getAddressSize() == 32:
         nose_env['LIB'] = ""
         nose_env['WINDOWSSDK_EXECUTABLEPATH_X64'] = ''
 
@@ -267,8 +251,7 @@ def main():
     copy(sourceLicenseFile, stage)
 
     # -------------------------------- Posix ---------------------------------
-    if darwin.search(platform) \
-    or linux.search(platform):
+    if system() in ('Darwin', 'Linux'):
         # Having installed our dependencies and -- importantly -- all THEIR
         # dependencies, figure out what we added.
         after = set(os.listdir(venvlibs))
@@ -328,7 +311,7 @@ def main():
                 # it's a single file module -- copy just that file
                 copy(srcpath, dstpath)
     # ------------------------------- Windows --------------------------------
-    elif windows.search(platform):
+    elif system() == 'Windows':
         #In a typical Windows install, pinstaller lives in C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the python executable
         #BUT that's not true of the virtualenv that autobuild runs in, so
         #search.
