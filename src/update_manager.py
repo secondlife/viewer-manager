@@ -320,7 +320,7 @@ def wmic(*args):
         # output into err.output.
         raise WmicError("wmic error: %s\n%s" % (err, err.output))
     except WindowsError as winerr:
-        if err.errno == errno.ENOENT:
+        if winerr.errno == errno.ENOENT:
             raise WmicError("No wmic command found - bad Windows install?")
         raise WmicError("wmic command failed; error %s %s" % (winerr.winerror, winerr.strerror))
 
