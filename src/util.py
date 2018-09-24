@@ -1,5 +1,6 @@
 import cgitb
 import errno
+import functools
 import json
 import logging
 import os
@@ -46,6 +47,38 @@ def udir(file=__file__):
     than util.py.
     """
     return os.path.dirname(ufile(file))
+
+# ****************************************************************************
+#   pass_logger
+# ****************************************************************************
+def pass_logger(func):
+    """
+    This is a convenience interface for SL_Logging.getLogger('function_name').
+    Specifically, you can replace this sequence:
+
+    def myfunc(first, second):
+        log = SL_Logging.getLogger('myfunc')
+        # ... use first, second, log ...
+
+    with this:
+
+    @pass_logger
+    def myfunc(log, first, second):
+        # ... use first, second, log ...
+
+    It's important to note that myfunc()'s caller still passes only 'first'
+    and 'second'. The 'log' parameter is obtained and passed by pass_logger.
+    """
+    # Define a suitable wrapper function, using functools.wraps() to set its
+    # __name__, __module__ and __doc__ from the original func()'s.
+    @functools.wraps(func)
+    def wrapper(*args, **kwds):
+        # Pass the original function's __name__ to getLogger(), as is
+        # conventional. Pass all other arguments unchanged. Return the return
+        # value unchanged.
+        return func(SL_Logging.getLogger(func.__name__), *args, **kwds)
+
+    return wrapper
 
 # ****************************************************************************
 #   SL_Logging
