@@ -32,7 +32,7 @@ $/LicenseInfo$
 from copy import deepcopy
 from datetime import datetime   
 from logging import DEBUG
-from vmp_util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file, \
+from util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file, \
      MergedSettings, ufile
 from llbase import llsd, llrest
 

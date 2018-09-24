@@ -30,7 +30,7 @@ $/LicenseInfo$
 from nose.tools import *
 import sys
 import os
-from vmp_util import Application, BuildData
+from util import Application, BuildData
 import update_manager
 
 def test_make_download_dir():

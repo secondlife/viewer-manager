@@ -14,7 +14,7 @@ import glob
 import subprocess
 import sys
 
-from vmp_util import SL_Logging
+from util import SL_Logging
 if __name__ == '__main__':
     # Do this right away, before even importing our sibling modules, so that
     # even a crash on import will get logged properly.

@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 import InstallerUserMessage
-from vmp_util import SL_Logging, Application, subprocess_args
+from util import SL_Logging, Application, subprocess_args
 
 class Runner(object):
     def __init__(self, *command):

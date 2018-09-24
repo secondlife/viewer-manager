@@ -47,7 +47,7 @@ import requests.packages.urllib3
 requests.packages.urllib3.disable_warnings()
 import tempfile
 import time
-from vmp_util import SL_Logging, Application
+from util import SL_Logging, Application
 
 #module default
 # MAINT-8082: empirically, if this isn't big enough, it can actually slow

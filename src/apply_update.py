@@ -34,7 +34,7 @@ Applies an already downloaded update.
 """
 
 from datetime import datetime
-from vmp_util import subprocess_args, SL_Logging, BuildData
+from util import subprocess_args, SL_Logging, BuildData
 
 import distutils
 from distutils import dir_util

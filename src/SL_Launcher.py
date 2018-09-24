@@ -40,7 +40,7 @@ import sys
 
 # Must be FIRST VMP IMPORT: in case of crash anywhere along the way, try to
 # ensure that at least we'll produce diagnostic output into the log.
-from vmp_util import SL_Logging, Application, BuildData, udir, ufile, subprocess_args
+from util import SL_Logging, Application, BuildData, udir, ufile, subprocess_args
 if __name__ == "__main__":
     # sets up unhandled exception handler in sys.excepthook
     # do this right away because in the past we've hit crashes even importing

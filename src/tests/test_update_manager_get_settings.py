@@ -36,7 +36,7 @@ import tempfile
 import update_manager
 import with_setup_args
 import logging
-from vmp_util import SL_Logging, Application, BuildData
+from util import SL_Logging, Application, BuildData
 
 data_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data')
 BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))

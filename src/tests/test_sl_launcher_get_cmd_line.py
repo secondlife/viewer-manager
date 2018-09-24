@@ -34,7 +34,7 @@ import os
 import os.path
 import platform
 import shutil
-from vmp_util import BuildData
+from util import BuildData
 import SL_Launcher as SLL
 import with_setup_args
 

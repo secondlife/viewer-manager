@@ -63,7 +63,7 @@ import ttk
 from tkSimpleDialog import Dialog
 #for hyperlinks
 import webbrowser
-from vmp_util import Application, SL_Logging, udir
+from util import Application, SL_Logging, udir
 
 # ****************************************************************************
 #   Tk root window

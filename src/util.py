@@ -43,7 +43,7 @@ else:
 def udir(file=__file__):
     """
     Need only pass own __file__ if you suspect you're in a different directory
-    than vmp_util.py.
+    than util.py.
     """
     return os.path.dirname(ufile(file))
 
@@ -240,7 +240,7 @@ class Application(object):
     def executable():
         """Return the pathname of the viewer executable"""
         if platform.system() == "Darwin":
-            # We are at    Mumble.app/Contents/Resources/updater/vmp_util.py
+            # We are at    Mumble.app/Contents/Resources/updater/util.py
             # Need to find Mumble.app/Contents/MacOS/name
             return os.path.join(Application._darwin_viewer_app_contents_path(),
                                 "MacOS", Application.name())
@@ -297,7 +297,7 @@ class Application(object):
             # We choose to return the Second Life.app directory -- not its
             # Contents, or MacOS, or Resources, but the .app directory itself.
             # __file__ should be:
-            # somepath/Second Life.app/Contents/Resources/updater/vmp_util.py
+            # somepath/Second Life.app/Contents/Resources/updater/util.py
             pieces = os.path.abspath(ufile()).rsplit(os.sep, 4)
             try:
                 if (pieces[-5].endswith(".app")

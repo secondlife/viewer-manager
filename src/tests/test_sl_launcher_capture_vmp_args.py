@@ -35,7 +35,7 @@ import os.path
 import platform
 import shutil
 import with_setup_args
-from vmp_util import BuildData
+from util import BuildData
 import SL_Launcher as SLL
 
 #the {Resources}/app_settings dir is a sibling of the parent of the script dir

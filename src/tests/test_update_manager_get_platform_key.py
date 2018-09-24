@@ -30,7 +30,7 @@ $/LicenseInfo$
 from nose.tools import assert_equal
 
 import platform
-from vmp_util import Application
+from util import Application
 
 def test_get_platform_key():
     key = Application.platform_key()

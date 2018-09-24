@@ -32,7 +32,7 @@ from nose.tools import *
 import os
 import with_setup_args
 
-from vmp_util import BuildData
+from util import BuildData
 
 def test_build_data():
     test_build_data_file = os.path.join(os.path.dirname(__file__),'build_data.json')
