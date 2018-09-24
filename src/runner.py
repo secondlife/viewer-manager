@@ -114,9 +114,6 @@ class PopenRunner(Runner):
         log.info("Launching %s", self.command)
 
         env = os.environ.copy()
-        # suppresses warning about not running the viewer directly
-        env["PARENT"] = "SL_Launcher"
-
         if platform.system() == "Windows":
             # MAINT-8087: for a Windows user with a non-ASCII username, the
             # environment variables APPDATA and LOCALAPPDATA are just wrong.
