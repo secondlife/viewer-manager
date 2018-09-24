@@ -26,7 +26,7 @@ $/LicenseInfo$
 """
 
 """
-@file   SL_Launcher
+@file   SL_Launcher.py
 @author coyot
 @date   2016-06-23
 """
@@ -77,7 +77,7 @@ if platform.system() != 'Windows' and platform.python_version_tuple() < (2, 7, 0
         import glob
         executable_name = "Second Life"
         # __file__ is
-        # Second Life.app/Contents/Resources/launcher.app/Contents/MacOS/SL_Launcher
+        # Second Life.app/Contents/Resources/launcher.app/Contents/MacOS/SL_Launcher.py
         # need to run
         # Second Life.app/Contents/Resources/viewer.app/Contents/MacOS/executable_name
         # but we don't know the exact name of either launcher.app or

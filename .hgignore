@@ -4,5 +4,4 @@ syntax: glob
 *.DS_Store
 *.pyc
 stage/
-src/SL_Launcherc
 *.tar.bz2
