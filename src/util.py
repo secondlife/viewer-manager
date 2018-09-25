@@ -146,23 +146,9 @@ class SL_Logging(object):
                 log_name = log_basepath + extension
 
             # If this blows up, we're just hosed.
-            SL_Logging.logStream = open(log_name,'a')
-
-            # from this point forward, any unhandled exceptions go into the
-            # log file
-            # just like cgitb.enable(), except that enable() doesn't support file=
-            sys.excepthook = cgitb.Hook(file=SL_Logging.logStream, format="text")
-
-            log_handler = logging.StreamHandler(SL_Logging.logStream)
-            log_handler.setFormatter(SL_Logging.Formatter())
-
-            SL_Logging.logger=logging.getLogger(basename)
-
-            SL_Logging.logger.addHandler(log_handler)
-
-            SL_Logging.logger.setLevel(verbosity)
-            SL_Logging.logger.info("================ Running %s" % basename)
-            log = SL_Logging.logger
+            stream = open(log_name,'a')
+            log = SL_Logging.set_stream(stream, basename, verbosity)
+            log.info("================ Running %s" % basename)
             # now log any messages we deferred previously
             for line in msgs.getvalue().splitlines():
                 if line:
@@ -173,7 +159,27 @@ class SL_Logging(object):
             log = SL_Logging.logger.getChild(basename)
 
         return log
-        
+
+    @staticmethod
+    def set_stream(stream, basename, verbosity, formatter=None):
+        formatter = formatter or SL_Logging.Formatter()
+        SL_Logging.logStream = stream
+
+        # from this point forward, any unhandled exceptions go into the
+        # log file
+        # just like cgitb.enable(), except that enable() doesn't support file=
+        sys.excepthook = cgitb.Hook(file=SL_Logging.logStream, format="text")
+
+        log_handler = logging.StreamHandler(SL_Logging.logStream)
+        log_handler.setFormatter(formatter)
+
+        logger=logging.getLogger(basename)
+        logger.addHandler(log_handler)
+        logger.setLevel(verbosity)
+        SL_Logging.logger = logger
+
+        return logger
+
     @staticmethod
     def get_verbosity():
         verbosity_env = os.getenv('SL_LAUNCH_LOGLEVEL','DEBUG')
@@ -209,14 +215,15 @@ class SL_Logging(object):
         """
         return SL_Logging.stream(prefix_msg="======== running subcommand %r; any %s follows" % (process, streams))
 
-    class Formatter(logging.Formatter):
+    class TimelessFormatter(logging.Formatter):
         """
-        Makes python logging follow Second Life log file format
+        Makes python logging follow Second Life log file format, in everything
+        but the timestamp
         """
-        def __init__(self):
-            self.sl_format = logging.Formatter("%(asctime)s %(levelname)s: %(filename)s(%(lineno)s) : %(funcName)s: %(message)s",
-                                               "%Y-%m-%dT%H:%M:%SZ"
-                                               )
+        format_string = "%(levelname)s: %(filename)s(%(lineno)s) : %(funcName)s: %(message)s"
+
+        def __init__(self, format_string=format_string):
+            self.sl_format = logging.Formatter(format_string, "%Y-%m-%dT%H:%M:%SZ")
             self.sl_format.converter = time.gmtime
 
         def format(self, record):
@@ -224,6 +231,14 @@ class SL_Logging(object):
 
         def formatTime(self, record):
             return self.sl_format.format(record);
+
+    class Formatter(TimelessFormatter):
+        """
+        Add timestamp to each log line
+        """
+        def __init__(self):
+            super(SL_Logging.Formatter, self).__init__("%(asctime)s " +
+                                            super(SL_Logging.Formatter, self).format_string)
 
     @staticmethod
     def directory():
