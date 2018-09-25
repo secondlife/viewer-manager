@@ -10,35 +10,91 @@ Copyright (c) 2018, Linden Research, Inc.
 $/LicenseInfo$
 """
 
-import glob
+import platform
 import subprocess
 import sys
 
-from util import SL_Logging
+from util import pass_logger, SL_Logging, BuildData
 if __name__ == '__main__':
     # Do this right away, before even importing our sibling modules, so that
     # even a crash on import will get logged properly.
     SL_Logging.getLogger('updater')
 
+import eventlet
+
+from SL_Launcher import capture_vmp_args
+from runner import PopenRunner
+from InstallerUserMessage import status_message, root
+import update_manager
+from tkeventlet import TkGreenthread
+
 class Error(Exception):
     pass
 
 # This subcommand is typically invoked by the Windows NSIS installer upon
-# successful installation. It is passed the arguments we should pass to
-# the viewer, the first of which is the viewer executable itself.
-def precheck(viewer, args):
-    # Don't wait for the viewer to terminate, return immediately.
-    subprocess.Popen([viewer] + list(args))
+# successful installation. It isn't used on Posix at all -- the point is to
+# ensure that the viewer we just installed can run on this system, and if not,
+# to download a viewer that can. We only support viewers built for different
+# address sizes on Windows.
+# precheck() is passed the arguments we should pass to the viewer, the first
+# of which is the viewer executable itself.
+@pass_logger
+def precheck(log, viewer, args):
+    # cf. SL_Launcher.main()
+
+    # We use a number of other modules, including 'requests'. We want every
+    # single module that performs network I/O, or other conventional
+    # operations, to perform it using eventlet magic.
+    # On Posix, we must pass os=True.
+    # On Windows, we must NOT pass os=True.  :-P
+    # https://github.com/eventlet/eventlet/issues/483
+    eventlet.monkey_patch(os=(platform.system() != 'Windows'),
+                          select=True, socket=True, time=True,
+                          builtins=True, subprocess=True)
+
+    # right away, start interleaving Tkinter with eventlet in case we want to
+    # pop up a status_message()
+    eventlet.spawn(TkGreenthread, root())
+
+    log.info("Viewer version {} ({} bit)"
+             .format(BuildData.get('Version'), BuildData.get('Address Size')))
+    log.debug("viewer binary name: {}".format(viewer))
+
+    myargs = capture_vmp_args(args)
+    command = [viewer] + list(args)
+
+    try:
+        # update_manager() returns a Runner instance -- or raises UpdateError.
+        runner = update_manager.update_manager(command, myargs)
+    except update_manager.UpdateError as err:
+        log.error("Update manager raised %r" % err)
+        # use status_message() so the frame will persist until this process
+        # terminates
+        status_message('%s\nViewer will launch momentarily.' % err)
+        runner = PopenRunner(*command)
+
+    # Clear any existing status message: we're about to launch the viewer.
+    status_message(None)
+
+    # If runner is actually an ExecRunner, or if the launch attempt fails,
+    # this run() call won't return.
+    viewer_process = runner.run()
 
 # This subcommand is typically invoked by the viewer itself to check for
 # updates during a run.
 def leap():
+    # If we're run as a LEAP child process, anything we write to stderr goes
+    # into the viewer log -- so set stderr as our preferred output stream.
+    # Because the viewer will timestamp each log line anyway, avoid doubly
+    # timestamping each line.
+    log = SL_Logging.set_stream(sys.stderr, 'updater', SL_Logging.get_verbosity(),
+                                formatter=SL_Logging.TimelessFormatter())
     # Defer importing leap module because its module-level initialization
     # expects LEAP protocol data on sys.stdin
     import leap as _leap
-    print >>sys.stderr, "reply = {!r}".format(_leap.replypump())
-    print >>sys.stderr, "cmd   = {!r}".format(_leap.cmdpump())
-    print >>sys.stderr, "Done"
+    log.info("reply = {!r}".format(_leap.replypump()))
+    log.info("cmd   = {!r}".format(_leap.cmdpump()))
+    log.info("Done")
 
 def main(*raw_args):
     from argparse import ArgumentParser, REMAINDER
