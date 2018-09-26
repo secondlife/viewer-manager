@@ -29,8 +29,6 @@ $/LicenseInfo$
 @date   2016-06-23
 """
 
-from copy import deepcopy
-from datetime import datetime   
 from logging import DEBUG
 from util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file, \
      MergedSettings, ufile
@@ -63,6 +61,7 @@ import urllib
 import urllib3
 import uuid
 import warnings
+from xml.etree import ElementTree
 
 DEFAULT_UPDATE_SERVICE = 'https://update.secondlife.com/update'
 
@@ -695,32 +694,38 @@ def _update_manager(command, cli_overrides = {}):
     # 'settings' is from the settings file. Now apply command-line overrides.
     settings.override_with(cli_overrides.get('set', {}))
 
-    # If a complete download of that update is found, check the update preference:
-    #settings['UpdaterServiceSetting'] =
-    INSTALL_MODE_AUTO=3            # Install each update automatically
-    INSTALL_MODE_PROMPT_OPTIONAL=1 # Ask me when an optional update is ready to install
-    INSTALL_MODE_MANDATORY_ONLY=0  # Install only mandatory updates
-    # (see panel_preferences_setup.xml)
-
+    # Track the real preferences control settings used by the viewer.
+    panel_file = os.path.join(Application.app_data_path(),
+                              'skins', 'default', 'xui', 'en', 'panel_preferences_setup.xml')
+    root = ElementTree.parse(panel_file).getroot()
+    # Look for the combo_box for the UpdaterServiceSetting control,
+    # specifically the items defined for that combo_box.
+    # https://docs.python.org/2/library/xml.etree.elementtree.html#xpath-support
+    # Construct a dict { string_value : (internal_name, user_text) }.
     install_modes = {
-        INSTALL_MODE_AUTO:            "Automatic",
-        INSTALL_MODE_PROMPT_OPTIONAL: "Prompt When Optional",
-        INSTALL_MODE_MANDATORY_ONLY:  "Mandatory Only",
-        }
+        item.get('value'): (item.get('name'), item.get('label'))
+        for item in
+        root.findall('./combo_box[@control_name="UpdaterServiceSetting"]/combo_box.item') }
+
+    # For this one item we must perform a reverse lookup -- but with only a
+    # handful of items, a linear search suffices.
+    Install_automatically = [key for (key, (internal, user)) in install_modes.items()
+                             if internal == 'Install_automatically'][0]
 
     # If cli_overrides['set']['UpdaterServiceSetting'], use that;
     # else if settings['UpdaterServiceSetting']['Value'], use that;
-    # if none of the above, or if value is not valid, default to INSTALL_MODE_AUTO.
-    install_mode_string = settings.get('UpdaterServiceSetting', INSTALL_MODE_AUTO)
+    # if none of the above, or if value is not valid, default to Install_automatically.
+    install_key = settings.get('UpdaterServiceSetting', Install_automatically)
     try:
-        install_mode=int(install_mode_string)
-        install_mode_desc = install_modes[install_mode]
-    except (ValueError, KeyError):
-        log.error("Invalid setting value for UpdaterServiceSetting (%s); falling back to auto (%d)",
-                  install_mode_string, INSTALL_MODE_AUTO)
-        install_mode = INSTALL_MODE_AUTO
-    log.info("Update mode (UpdaterServiceSetting) is %s (%d)",
-             install_modes[install_mode], install_mode)
+        install_modes[install_key]
+    except KeyError:
+        log.error("Invalid setting value for UpdaterServiceSetting (%s); falling back to auto (%s)",
+                  install_key, Install_automatically)
+        install_key = Install_automatically
+    # Now convert to the internal string to defend against possible changes to the
+    # meaning of the value.
+    install_mode, install_desc = install_modes[install_key]
+    log.info("Update mode (UpdaterServiceSetting) is %s (%s)", install_desc, install_key)
 
     # get channel and version
     default_channel = BuildData.get('Channel')
@@ -798,7 +803,7 @@ def _update_manager(command, cli_overrides = {}):
                      background = False)
         # Do the install
         return install(command, platform_key = platform_key, download_dir = download_dir)
-    elif INSTALL_MODE_MANDATORY_ONLY == install_mode:
+    elif 'Install_manual' == install_mode:
         # The user has chosen to install only required updates, and this one is optional,
         # so just run the already-installed viewer. We don't even download the optional
         # viewer, so chances are they will have to wait for the download if it eventually
@@ -845,11 +850,11 @@ def _update_manager(command, cli_overrides = {}):
         elif downloaded == 'done' or downloaded == 'next':
             log.info("Found previously downloaded update in: " + download_dir)
 
-            if INSTALL_MODE_AUTO == install_mode:
+            if 'Install_automatically' == install_mode:
                 log.info("updating automatically")
                 return install(command, platform_key = platform_key, download_dir = download_dir)
 
-            else: # INSTALL_MODE_PROMPT_OPTIONAL
+            else: # 'Install_ask'
                 # ask the user what to do with the optional update
                 log.info("asking the user what to do with the update")
                 update_action = InstallerUserMessage.trinary_choice_message(
