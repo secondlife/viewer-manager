@@ -253,14 +253,14 @@ class Application(object):
     @staticmethod
     def name():
         """Return the conventional application name"""
-        channel_base = BuildData.get('Channel Base')
         running_on = platform.system()
         if running_on == 'Darwin':
-            name = channel_base
+            name = BuildData.get('Channel')
         elif running_on == 'Windows':
             # MAINT-7292: do not infer name from directory; read it from build_data.json as produced by the build
             name = BuildData.get('Executable')
         elif running_on == 'Linux':
+            channel_base = BuildData.get('Channel Base')
             name = ''.join(channel_base.split()) # remove all whitespace
         else:
             #SL doesn't run on VMS or punch cards
