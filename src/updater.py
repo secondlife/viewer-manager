@@ -10,11 +10,13 @@ Copyright (c) 2018, Linden Research, Inc.
 $/LicenseInfo$
 """
 
+# Only packages bundled with Python should be imported here.
 import platform
 import subprocess
 import sys
 
-from util import pass_logger, SL_Logging, BuildData
+# This must be the FIRST imported module that isn't bundled with Python.
+from util import pass_logger, SL_Logging, BuildData, Application
 if __name__ == '__main__':
     # Do this right away, before even importing our sibling modules, so that
     # even a crash on import will get logged properly.
@@ -31,11 +33,14 @@ from tkeventlet import TkGreenthread
 class Error(Exception):
     pass
 
+# ****************************************************************************
+#   precheck()
+# ****************************************************************************
 # This subcommand is typically invoked by the Windows NSIS installer upon
 # successful installation. It isn't used on Posix at all -- the point is to
 # ensure that the viewer we just installed can run on this system, and if not,
-# to download a viewer that can. We only support viewers built for different
-# address sizes on Windows.
+# to download a viewer that can. Only on Windows do we support viewers built
+# for different address sizes.
 # precheck() is passed the arguments we should pass to the viewer, the first
 # of which is the viewer executable itself.
 @pass_logger
@@ -60,6 +65,9 @@ def precheck(log, viewer, args):
              .format(BuildData.get('Version'), BuildData.get('Address Size')))
     log.debug("viewer binary name: {}".format(viewer))
 
+    # Use of capture_vmp_args() may be overcautious: we know the NSIS
+    # installer does not pass any command-line arguments that impact update
+    # processing, and the user has no chance to alter them.
     myargs = capture_vmp_args(args)
     command = [viewer] + list(args)
 
@@ -80,9 +88,25 @@ def precheck(log, viewer, args):
     # this run() call won't return.
     viewer_process = runner.run()
 
+# ****************************************************************************
+#   leap()
+# ****************************************************************************
 # This subcommand is typically invoked by the viewer itself to check for
 # updates during a run.
-def leap():
+def leap(install_mode, channel, testok, vvmurl, width):
+    """
+    Pass:
+    install_mode: one of the values from the UpdaterServiceSetting combo_box
+    channel:      the viewer's actual channel name, as possibly overridden
+                  from the viewer command line
+    testok:       the viewer's actual UpdaterWillingToTest setting, as
+                  possibly overridden from the viewer command line
+    vvmurl:       the URL scheme://hostname/update prefix for the Viewer Version
+                  Manager to query (from UpdaterServiceURL)
+    width:        the ForceAddressSize setting
+    """
+    params = locals().items()
+    params.sort()
     # If we're run as a LEAP child process, anything we write to stderr goes
     # into the viewer log -- so set stderr as our preferred output stream.
     # Because the viewer will timestamp each log line anyway, avoid doubly
@@ -92,10 +116,18 @@ def leap():
     # Defer importing leap module because its module-level initialization
     # expects LEAP protocol data on sys.stdin
     import leap as _leap
-    log.info("reply = {!r}".format(_leap.replypump()))
-    log.info("cmd   = {!r}".format(_leap.cmdpump()))
+
+    platform_key = Application.platform_key() # e.g. "mac"
+
+    varwidth = max(len(var) for var, value in params)
+    for var, value in params:
+        log.info("{} {!r}".format(var.ljust(varwidth), value))
+
     log.info("Done")
 
+# ****************************************************************************
+#   main()
+# ****************************************************************************
 def main(*raw_args):
     from argparse import ArgumentParser, REMAINDER
     parser = ArgumentParser()
@@ -119,6 +151,16 @@ def main(*raw_args):
     # leap subcommand
     subleap = subparsers.add_parser('leap',
         help="""Check for updates as a LEAP viewer child process""")
+    subleap.add_argument('install_mode', type=int,
+                         help='UpdaterServiceSetting value')
+    subleap.add_argument('channel',
+                         help='the running viewer\'s channel name')
+    subleap.add_argument('testok', type=bool,
+                         help='UpdaterWillingToTest setting')
+    subleap.add_argument('vvmurl',
+                         help='UpdaterServiceURL setting')
+    subleap.add_argument('width', type=int,
+                         help='ForceAddressSize setting')
     subleap.set_defaults(func=leap)
 
     # Parse the command line and invoke appropriate subcommand.
