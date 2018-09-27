@@ -30,8 +30,8 @@ $/LicenseInfo$
 """
 
 from logging import DEBUG
-from util import Application, BuildData, SL_Logging, subprocess_args, put_marker_file, \
-     MergedSettings, ufile
+from util import Application, BuildData, SL_Logging, log_calls, pass_logger, subprocess_args, \
+     put_marker_file, MergedSettings, ufile
 from llbase import llsd, llrest
 
 import apply_update
@@ -40,7 +40,6 @@ import errno
 import glob
 import hashlib
 import InstallerUserMessage
-import itertools
 import json
 import os
 import os.path
@@ -658,17 +657,9 @@ def install(command, platform_key, download_dir):
     #this is the path to the new install
     return runner
 
-def update_manager(*args, **kwds):
-    """wrapper that logs entry/exit"""
-    log = SL_Logging.getLogger('update_manager')
-    log.debug("update_manager(%s)" %
-              ", ".join(itertools.chain((repr(arg) for arg in args),
-                                        ("%s=%r" % item for item in kwds.items()))))
-    result = _update_manager(*args, **kwds)
-    log.debug("update_manager() => %r" % result)
-    return result
-
-def _update_manager(command, cli_overrides = {}):
+@log_calls
+@pass_logger
+def update_manager(log, command, cli_overrides = {}):
     """
     Pass:
     command:       list starting with pathname of the existing viewer
@@ -682,7 +673,6 @@ def _update_manager(command, cli_overrides = {}):
 
     Raises UpdateError in various failure cases.
     """
-    log = SL_Logging.getLogger('update_manager')
     InstallerUserMessage.status_message("Checking for updates\n"
                                         "This may take a few moments...")
 
