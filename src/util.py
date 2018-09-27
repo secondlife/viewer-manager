@@ -1,6 +1,7 @@
 import cgitb
 import errno
 import functools
+import itertools
 import json
 import logging
 import os
@@ -81,6 +82,32 @@ def pass_logger(func):
     return wrapper
 
 # ****************************************************************************
+#   log_calls
+# ****************************************************************************
+def log_calls(func):
+    """
+    This decorator interposes a wrapper that logs entry and exit to the
+    decorated 'func', with its parameters and return value (or exception).
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwds):
+        log = SL_Logging.getLogger(func.__name__)
+        log.debug("{}({})".format(func.__name__,
+                                  ", ".join(itertools.chain((repr(arg) for arg in args),
+                                                            ("%s=%r" % item
+                                                             for item in kwds.items())))))
+        try:
+            result = func(*args, **kwds)
+        except Exception as err:
+            log.debug("{}() raised {}: {}".format(func.__name__, err.__class__.__name__, err))
+            raise
+        else:
+            log.debug("%s() => %r", func.__name__, result)
+            return result
+
+    return wrapper
+
+# ****************************************************************************
 #   SL_Logging
 # ****************************************************************************
 class SL_Logging(object):
@@ -94,6 +121,7 @@ class SL_Logging(object):
     """
     logger=None
     logStream=None
+    logHandler=None
 
     @staticmethod
     def getLogger(basename, extension='.log', verbosity=None, maxsize=10*1024):
@@ -170,11 +198,20 @@ class SL_Logging(object):
         # just like cgitb.enable(), except that enable() doesn't support file=
         sys.excepthook = cgitb.Hook(file=SL_Logging.logStream, format="text")
 
-        log_handler = logging.StreamHandler(SL_Logging.logStream)
-        log_handler.setFormatter(formatter)
-
         logger=logging.getLogger(basename)
-        logger.addHandler(log_handler)
+
+        # logger.addHandler() is, as its name suggests, additive. But this
+        # set_stream() function is intended to redirect log output, rather
+        # than sending it to multiple destinations. If we already have a
+        # logHandler, remove it from our logger. (removeHandler(None) is a
+        # no-op.)
+        logger.removeHandler(SL_Logging.logHandler)
+
+        # Capture our StreamHandler solely to support the above
+        # removeHandler() call in any subsequent set_stream() call.
+        SL_Logging.logHandler = logging.StreamHandler(SL_Logging.logStream)
+        SL_Logging.logHandler.setFormatter(formatter)
+        logger.addHandler(SL_Logging.logHandler)
         logger.setLevel(verbosity)
         SL_Logging.logger = logger
 
