@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 """
-@file   test_update_manager_get_platform_key.py
+@file   test_update_manager_make_download_dir.py
 @author coyot
-@date   2016-06-01
+@date   2016-06-03
 
 $LicenseInfo:firstyear=2016&license=viewerlgpl$
 Second Life Viewer Source Code
@@ -27,18 +27,20 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
-from nose.tools import assert_equal
+from nose.tools import *
+import sys
+import os
+from util import Application, BuildData
+import update_manager
 
-import platform
-from vmp_util import Application
-
-def test_get_platform_key():
+def test_make_download_dir():
+    BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
     key = Application.platform_key()
-    if key == 'mac':
-        assert_equal(platform.system(),'Darwin')
-    elif key == 'lnx':
-        assert_equal(platform.system(),'Linux')
-    elif key == 'win':
-        assert_equal(platform.system(),'Windows')
-    else:
-        assert_equal(key, None)
+    version = '1.2.3.456789'
+    try:
+        download_dir = update_manager.make_download_dir(version)
+    except OSError as e:
+        print >>sys.stderr, "make_download_dir failed to eat OSError %s" % str(e)
+        assert False
+
+    assert download_dir, "make_download_dir returned None for version %s" % version

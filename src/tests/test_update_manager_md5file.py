@@ -35,7 +35,7 @@ import os
 import platform
 import shutil
 import tempfile
-from vmp_util import Application
+from util import Application
 import update_manager
 
 license_string = """

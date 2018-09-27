@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<!-- Excerpt from the viewer's panel_preferences_setup.xml file as of
+     2018-09-26. This snapshot is used in standalone updater testing by
+     update_manager._update_manager() to interpret the UpdaterServiceSetting
+     value from the user's settings file. -->
+<panel
+ border="true"
+ follows="left|top|right|bottom"
+ height="408"
+ label="Setup"
+ layout="topleft"
+ left="102"
+ name="Input panel"
+ top="1"
+ width="517">
+  <combo_box
+     control_name="UpdaterServiceSetting"
+     follows="left|top"
+     height="23"
+     layout="topleft"
+     left_delta="50"
+     top_pad="5"
+     name="updater_service_combobox"
+     width="300">
+        <combo_box.item
+         label="Install each update automatically"
+         name="Install_automatically"
+         value="3" />
+        <combo_box.item
+         label="Ask me when an optional update is ready to install"
+         name="Install_ask"
+         value="1" />
+        <combo_box.item
+         label="Install only mandatory updates"
+         name="Install_manual"
+         value="0" />
+  </combo_box>
+</panel>

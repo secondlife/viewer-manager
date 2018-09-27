@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 import InstallerUserMessage
-from vmp_util import SL_Logging, Application
+from util import SL_Logging, Application, subprocess_args
 
 class Runner(object):
     def __init__(self, *command):
@@ -114,9 +114,6 @@ class PopenRunner(Runner):
         log.info("Launching %s", self.command)
 
         env = os.environ.copy()
-        # suppresses warning about not running the viewer directly
-        env["PARENT"] = "SL_Launcher"
-
         if platform.system() == "Windows":
             # MAINT-8087: for a Windows user with a non-ASCII username, the
             # environment variables APPDATA and LOCALAPPDATA are just wrong.
@@ -128,7 +125,20 @@ class PopenRunner(Runner):
                                 ("LOCALAPPDATA", Application.CSIDL_LOCAL_APPDATA))})
 
         with self.error_trap(log):
-            viewer_process = self.Popen(self.command, env=env)
+            # In the frozen environment constructed by PyInstaller on Windows,
+            # unless we override both stdout and stderr, we get the dreaded
+            # WindowsError(6, 'The handle is invalid') exception. However --
+            # if we pass SL_Logging.stream(), as is customary for other
+            # subprocess calls, the viewer takes that as invitation to
+            # duplicate its voluminous log output into our SL_Launcher.log as
+            # well as its own SecondLife.log.
+            kwds = subprocess_args(log_stream=open(os.devnull, "w"))
+            # Pass a PIPE so that, by attempting to read from that pipe and
+            # getting EOF, the viewer can detect VMP termination (e.g. from
+            # user right-clicking on Dock icon and selecting Quit).
+            # Do NOT let subprocess_args() suppress the viewer window!
+            kwds.update(env=env, stdin=subprocess.PIPE, startupinfo=None)
+            viewer_process = self.Popen(self.command, **kwds)
 
         log.info("Successfully launched %s", self.command)
         return viewer_process
@@ -149,7 +159,10 @@ class ExecRunner(Runner):
             # subprocess.Popen in this scenario too.
             log.info("Running %s", self.command)
             with self.error_trap(log):
-                self.Popen(self.command)
+                # see comment about log_stream in PopenRunner.run()
+                kwds = subprocess_args(log_stream=open(os.devnull, "w"))
+                kwds.update(startupinfo=None)
+                self.Popen(self.command, **kwds)
 
             # If we succeeded, terminate immediately so installer can replace
             # this running executable.

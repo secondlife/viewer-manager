@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+
 """\
 $LicenseInfo:firstyear=2006&license=viewerlgpl$
 Second Life Viewer Source Code
@@ -24,11 +26,12 @@ $/LicenseInfo$
 """
 
 """
-@file   SL_Launcher
+@file   SL_Launcher.py
 @author coyot
 @date   2016-06-23
 """
 
+from functools import partial
 import os
 import os.path
 import platform
@@ -37,61 +40,74 @@ import sys
 
 # Must be FIRST VMP IMPORT: in case of crash anywhere along the way, try to
 # ensure that at least we'll produce diagnostic output into the log.
-from vmp_util import SL_Logging, Application, BuildData, udir, ufile, subprocess_args
+from util import pass_logger, SL_Logging, Application, BuildData, udir, ufile, subprocess_args
 if __name__ == "__main__":
     # sets up unhandled exception handler in sys.excepthook
     # do this right away because in the past we've hit crashes even importing
     # other VMP modules
     SL_Logging.getLogger('SL_Launcher')
+    # Any print output from anything along the way should also be logged.
+    sys.stdout = SL_Logging.stream()
+    sys.stderr = sys.stdout
+
+import eventlet
+
+if __name__ == "__main__":
+    # We use a number of other modules, including 'requests'. We want every
+    # single module that performs network I/O, or other conventional
+    # operations, to perform it using eventlet magic.
+    # On Posix, we must pass os=True.
+    # On Windows, we must NOT pass os=True.  :-P
+    # https://github.com/eventlet/eventlet/issues/483
+    eventlet.monkey_patch(os=(platform.system() != 'Windows'),
+                          select=True, socket=True, time=True,
+                          builtins=True, subprocess=True)
 
 from runner import PopenRunner
-from InstallerUserMessage import status_message
+from InstallerUserMessage import status_message, root
+from tkeventlet import TkGreenthread
 
 #if for some reason we are running on a POSIX machine with python less than 2.7
 #just give up on VMP and execute the viewer per product.
-if platform.system() != 'Windows' and platform.python_version_tuple() < (2, 7, 0):
-    log = SL_Logging.getLogger('SL_Launcher')
-    log.error("Computer is below minimum specifications. Python version needs to be 2.7, but is %r" % platform.python_version())
-    absfile = os.path.abspath(ufile(__file__))
-    if platform.system == 'Darwin':
-        import glob
-        executable_name = "Second Life"
-        # __file__ is
-        # Second Life.app/Contents/Resources/launcher.app/Contents/MacOS/SL_Launcher
-        # need to run
-        # Second Life.app/Contents/Resources/viewer.app/Contents/MacOS/executable_name
-        # but we don't know the exact name of either launcher.app or
-        # viewer.app, just that they should (!) be the only two .apps
-        pieces = absfile.rsplit(os.sep, 4)
-        try:
-            pattern = os.path.join(pieces[-5], "*.app")
-        except IndexError:
-            log.error("Can't locate viewer relative to %s", absfile)
-            sys.exit(1)
-        apps = [app for app in glob.glob(pattern)
-                if os.path.basename(app) != pieces[-4]]
-        if len(apps) != 1:
-            log.error("%s viewer .app, found %s in %s",
-                      ("Ambiguous" if apps else "Missing"), apps, pattern)
-            sys.exit(1)
-        viewer_binary = os.path.join(apps[0], "Contents", "MacOS", executable_name)
-    elif platform.system == "Linux":
-        executable_name = "secondlife"
-        viewer_binary = os.path.join(os.path.dirname(absfile), executable_name)
-    log.debug("viewer binary name: %r" % viewer_binary)
+def python_version_check():
+    if platform.system() != 'Windows' and platform.python_version_tuple() < (2, 7, 0):
+        log = SL_Logging.getLogger('SL_Launcher')
+        log.error("Computer is below minimum specifications. Python version needs to be 2.7, but is %r" % platform.python_version())
+        absfile = os.path.abspath(ufile(__file__))
+        if platform.system == 'Darwin':
+            import glob
+            executable_name = "Second Life"
+            # __file__ is
+            # Second Life.app/Contents/Resources/launcher.app/Contents/MacOS/SL_Launcher.py
+            # need to run
+            # Second Life.app/Contents/Resources/viewer.app/Contents/MacOS/executable_name
+            # but we don't know the exact name of either launcher.app or
+            # viewer.app, just that they should (!) be the only two .apps
+            pieces = absfile.rsplit(os.sep, 4)
+            try:
+                pattern = os.path.join(pieces[-5], "*.app")
+            except IndexError:
+                log.error("Can't locate viewer relative to %s", absfile)
+                sys.exit(1)
+            apps = [app for app in glob.glob(pattern)
+                    if os.path.basename(app) != pieces[-4]]
+            if len(apps) != 1:
+                log.error("%s viewer .app, found %s in %s",
+                          ("Ambiguous" if apps else "Missing"), apps, pattern)
+                sys.exit(1)
+            viewer_binary = os.path.join(apps[0], "Contents", "MacOS", executable_name)
+        elif platform.system == "Linux":
+            executable_name = "secondlife"
+            viewer_binary = os.path.join(os.path.dirname(absfile), executable_name)
+        log.debug("viewer binary name: %r" % viewer_binary)
 
-    command = [viewer_binary] + sys.argv[1:]
-    #note that we are now using the 2.6 version of subprocess 
-    log.warning("Attempting to launch viewer without update check: %r" % command)
-    viewer_process = subprocess.Popen(command)
-    sys.exit(0)
+        command = [viewer_binary] + sys.argv[1:]
+        #note that we are now using the 2.6 version of subprocess 
+        log.warning("Attempting to launch viewer without update check: %r" % command)
+        viewer_process = subprocess.Popen(command)
+        sys.exit(0)
 
 import collections
-#NOTA BENE: 
-#   For POSIX platforms, llsd.py will be imported from the same directory.  
-#   For Windows, llsd.py will be compiled into the executable by pyinstaller
-#make sure we find our local llbase, which is in a subdir
-sys.path.insert(0, os.path.join(udir(), 'llbase'))
 from llbase import llsd
 
 from datetime import datetime
@@ -99,11 +115,10 @@ from datetime import datetime
 #module globals
 
 #imports of other VMP modules
-import InstallerUserMessage
 import update_manager
 
-def get_cmd_line(cmd_settings_file = None):
-    log=SL_Logging.getLogger('get_cmd_line')
+@pass_logger
+def get_cmd_line(log, cmd_settings_file = None):
     if cmd_settings_file is None:
         cmd_settings_file = os.path.join(Application.app_data_path(),
                                          'app_settings', 'cmd_line.xml')
@@ -117,11 +132,11 @@ def get_cmd_line(cmd_settings_file = None):
 
     return cmd_line
 
-def capture_vmp_args(arg_list = None, cmd_line = None):
+@pass_logger
+def capture_vmp_args(log, arg_list, cmd_line = None):
     # expected input format: arg_list = ['--set', 'foo', 'bar', '-X', '-Y', 'qux']
     # take a copy of the viewer parameters that are of interest to VMP.
     # the regex for a parameter is --<param> {opt1} {opt2}
-    log=SL_Logging.getLogger('capture_vmp_args')
     cli_overrides = {}   
     if cmd_line is None:
         cmd_line = get_cmd_line()
@@ -176,10 +191,13 @@ def capture_vmp_args(arg_list = None, cmd_line = None):
 
     return cli_overrides
 
-def main():
+@pass_logger
+def main(log, arg_list):
     #main entry point      
-    log = SL_Logging.getLogger('SL_Launcher')
-    args_list_to_pass = sys.argv[1:]
+
+    # right away, start interleaving Tkinter with eventlet
+    app_window = root()
+    eventlet.spawn(TkGreenthread, app_window)
 
     version=BuildData.get('Version')
     address_size=int(BuildData.get('Address Size'))
@@ -189,8 +207,8 @@ def main():
     viewer_binary = Application.executable()
     log.debug("viewer binary name: %r" % viewer_binary)
 
-    vmp_args = capture_vmp_args(args_list_to_pass)
-    command = [viewer_binary] + args_list_to_pass
+    vmp_args = capture_vmp_args(arg_list)
+    command = [viewer_binary] + arg_list
 
     try:
         # update_manager() returns a Runner instance -- or raises UpdateError.
@@ -208,22 +226,12 @@ def main():
     # If runner is actually an ExecRunner, or if the launch attempt fails,
     # this run() call won't return.
     viewer_process = runner.run()
-    if platform.system() == "Darwin":
-        # MAINT-8109: try to make the real viewer's window frontmost
-        # derived from https://stackoverflow.com/q/38923478
-        osascript = ['/usr/bin/osascript', '-e',
-                     'tell app "System Events" to set frontmost of every process '
-                     'whose unix id is %s to true' % viewer_process.pid]
-        # Use call() rather than check_call() because this is merely for
-        # convenience: if it doesn't work, user can still manually bring the
-        # viewer window forward.
-        subprocess.call(
-            osascript,
-            **subprocess_args(log_stream=SL_Logging.stream_from_process(osascript)))
+
     # at the moment, we just wait here.  Later, the crash monitor will be launched at this point
     rc = viewer_process.wait()
     log.info("Viewer terminated with %s" % rc)
     log.info("Launcher exiting after viewer exit.")
 
 if __name__ == "__main__":
-    main()
+    python_version_check()
+    main(sys.argv[1:])

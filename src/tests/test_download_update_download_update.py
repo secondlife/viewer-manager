@@ -39,7 +39,7 @@ import shutil
 import sys
 import tempfile
 import logging
-from vmp_util import SL_Logging, Application, BuildData
+from util import SL_Logging, Application, BuildData
 from argparse import Namespace
 import with_setup_args
 import requests

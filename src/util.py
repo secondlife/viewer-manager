@@ -1,6 +1,6 @@
 import cgitb
 import errno
-import glob
+import functools
 import json
 import logging
 import os
@@ -44,9 +44,41 @@ else:
 def udir(file=__file__):
     """
     Need only pass own __file__ if you suspect you're in a different directory
-    than vmp_util.py.
+    than util.py.
     """
     return os.path.dirname(ufile(file))
+
+# ****************************************************************************
+#   pass_logger
+# ****************************************************************************
+def pass_logger(func):
+    """
+    This is a convenience interface for SL_Logging.getLogger('function_name').
+    Specifically, you can replace this sequence:
+
+    def myfunc(first, second):
+        log = SL_Logging.getLogger('myfunc')
+        # ... use first, second, log ...
+
+    with this:
+
+    @pass_logger
+    def myfunc(log, first, second):
+        # ... use first, second, log ...
+
+    It's important to note that myfunc()'s caller still passes only 'first'
+    and 'second'. The 'log' parameter is obtained and passed by pass_logger.
+    """
+    # Define a suitable wrapper function, using functools.wraps() to set its
+    # __name__, __module__ and __doc__ from the original func()'s.
+    @functools.wraps(func)
+    def wrapper(*args, **kwds):
+        # Pass the original function's __name__ to getLogger(), as is
+        # conventional. Pass all other arguments unchanged. Return the return
+        # value unchanged.
+        return func(SL_Logging.getLogger(func.__name__), *args, **kwds)
+
+    return wrapper
 
 # ****************************************************************************
 #   SL_Logging
@@ -114,23 +146,9 @@ class SL_Logging(object):
                 log_name = log_basepath + extension
 
             # If this blows up, we're just hosed.
-            SL_Logging.logStream = open(log_name,'a')
-
-            # from this point forward, any unhandled exceptions go into the
-            # log file
-            # just like cgitb.enable(), except that enable() doesn't support file=
-            sys.excepthook = cgitb.Hook(file=SL_Logging.logStream, format="text")
-
-            log_handler = logging.StreamHandler(SL_Logging.logStream)
-            log_handler.setFormatter(SL_Logging.Formatter())
-
-            SL_Logging.logger=logging.getLogger(basename)
-
-            SL_Logging.logger.addHandler(log_handler)
-
-            SL_Logging.logger.setLevel(verbosity)
-            SL_Logging.logger.info("================ Running %s" % basename)
-            log = SL_Logging.logger
+            stream = open(log_name,'a')
+            log = SL_Logging.set_stream(stream, basename, verbosity)
+            log.info("================ Running %s" % basename)
             # now log any messages we deferred previously
             for line in msgs.getvalue().splitlines():
                 if line:
@@ -141,7 +159,27 @@ class SL_Logging(object):
             log = SL_Logging.logger.getChild(basename)
 
         return log
-        
+
+    @staticmethod
+    def set_stream(stream, basename, verbosity, formatter=None):
+        formatter = formatter or SL_Logging.Formatter()
+        SL_Logging.logStream = stream
+
+        # from this point forward, any unhandled exceptions go into the
+        # log file
+        # just like cgitb.enable(), except that enable() doesn't support file=
+        sys.excepthook = cgitb.Hook(file=SL_Logging.logStream, format="text")
+
+        log_handler = logging.StreamHandler(SL_Logging.logStream)
+        log_handler.setFormatter(formatter)
+
+        logger=logging.getLogger(basename)
+        logger.addHandler(log_handler)
+        logger.setLevel(verbosity)
+        SL_Logging.logger = logger
+
+        return logger
+
     @staticmethod
     def get_verbosity():
         verbosity_env = os.getenv('SL_LAUNCH_LOGLEVEL','DEBUG')
@@ -177,14 +215,15 @@ class SL_Logging(object):
         """
         return SL_Logging.stream(prefix_msg="======== running subcommand %r; any %s follows" % (process, streams))
 
-    class Formatter(logging.Formatter):
+    class TimelessFormatter(logging.Formatter):
         """
-        Makes python logging follow Second Life log file format
+        Makes python logging follow Second Life log file format, in everything
+        but the timestamp
         """
-        def __init__(self):
-            self.sl_format = logging.Formatter("%(asctime)s %(levelname)s: %(filename)s(%(lineno)s) : %(funcName)s: %(message)s",
-                                               "%Y-%m-%dT%H:%M:%SZ"
-                                               )
+        format_string = "%(levelname)s: %(filename)s(%(lineno)s) : %(funcName)s: %(message)s"
+
+        def __init__(self, format_string=format_string):
+            self.sl_format = logging.Formatter(format_string, "%Y-%m-%dT%H:%M:%SZ")
             self.sl_format.converter = time.gmtime
 
         def format(self, record):
@@ -192,6 +231,14 @@ class SL_Logging(object):
 
         def formatTime(self, record):
             return self.sl_format.format(record);
+
+    class Formatter(TimelessFormatter):
+        """
+        Add timestamp to each log line
+        """
+        def __init__(self):
+            super(SL_Logging.Formatter, self).__init__("%(asctime)s " +
+                                            super(SL_Logging.Formatter, self).format_string)
 
     @staticmethod
     def directory():
@@ -241,8 +288,8 @@ class Application(object):
     def executable():
         """Return the pathname of the viewer executable"""
         if platform.system() == "Darwin":
-            # the viewer executable is found inside the companion bundled
-            # Viewer.app/Contents/MacOS
+            # We are at    Mumble.app/Contents/Resources/updater/util.py
+            # Need to find Mumble.app/Contents/MacOS/name
             return os.path.join(Application._darwin_viewer_app_contents_path(),
                                 "MacOS", Application.name())
         else:
@@ -293,26 +340,21 @@ class Application(object):
 
         elif platform.system() == "Darwin":
             # On Darwin, what do we mean by the install directory? Is that the
-            # embedded VMP app, or the embedded viewer app, or the outer
-            # Second Life.app? Is it the Contents directory, or MacOS, or
+            # Second Life.app, or the Contents directory, or MacOS, or
             # Resources?
-            # We choose to return the outer Second Life.app directory -- not
-            # its Contents, or MacOS, or Resources, but the .app directory
-            # itself. __file__ should be:
-            # somepath/Second Life.app/Contents/Resources/Launcher.app/Contents/MacOS/vmp_util.py
-            pieces = os.abspath(ufile()).rsplit(os.sep, 6)
+            # We choose to return the Second Life.app directory -- not its
+            # Contents, or MacOS, or Resources, but the .app directory itself.
+            # __file__ should be:
+            # somepath/Second Life.app/Contents/Resources/updater/util.py
+            pieces = os.path.abspath(ufile()).rsplit(os.sep, 4)
             try:
-                if (pieces[-7].endswith(".app")
-                    and pieces[-6] == "Contents"
-                    and pieces[-5] == "Resources"
-                    and pieces[-4].endswith(".app")
-                    and pieces[-3] == "Contents"
-                    and pieces[-2] == "MacOS"):
-                    # because we limited rsplit() to 6 splits, pieces[-7] is
+                if (pieces[-5].endswith(".app")
+                    and pieces[-4:-1] == ["Contents", "Resources", "updater"]):
+                    # because we limited rsplit() to 4 splits, pieces[-5] is
                     # "somepath/Second Life.app"
-                    return pieces[-7]
-                # developer work area: we're not in the embedded Launcher.app
-                # in the outer Second Life.app at all
+                    return pieces[-5]
+                # developer work area: we're not in the Resources/updater
+                # subdirectory at all
             except IndexError:
                 # developer work area: there just aren't that many path
                 # components in __file__
@@ -331,8 +373,7 @@ class Application(object):
             pass
         # this is the normal case in the installed app
         if (platform.system() == 'Darwin'):
-            # On macOS, we're running in the bundled Launcher.app. Find its
-            # sibling Viewer.app and point to its Resources directory.
+            # On macOS, find the Resources directory.
             app_data_dir = os.path.join(
                 Application._darwin_viewer_app_contents_path(), "Resources")
         else:
@@ -342,33 +383,11 @@ class Application(object):
 
     @staticmethod
     def _darwin_viewer_app_contents_path():
-        # This is a little tricky because on macOS, we're running in one of
-        # two separate app bundles nested under the top-level
-        # Second Life.app/Contents/Resources directory. Because the name of
-        # each nested app bundle determines the flyover text for its Dock
-        # icon, we want Product to be able to change those names -- but we
-        # don't want to have to come back here to tweak this logic whenever
-        # they do! Most likely we'll forget, and Bad Things will happen. So
-        # instead, rely on our knowledge that we're one of the two .app
-        # bundles under a common parent -- and we're trying to find the other.
-        # This file lives under $myapp/Contents/MacOS. dirname(__file__) is
-        # MacOS; realpath(MacOS/../..) should get us myapp.
-        parent, myapp = \
-            os.path.split(os.path.realpath(os.path.join(udir(),
-                                                        os.pardir,
-                                                        os.pardir)))
-        # find all the app bundles under parent, keeping only basenames
-        bundles = set(os.path.basename(f)
-                      for f in glob.glob(os.path.join(parent, "*.app")))
-        # cancel out our own
-        bundles.discard(myapp)
-        # there had better be exactly one other one!
-        if len(bundles) != 1:
-            raise Error("%s viewer .app under %r: found %s" %
-                        (("Ambiguous" if bundles else "Missing"),
-                         parent, bundles))
-        # pop the other and return it
-        return os.path.join(parent, bundles.pop(), "Contents")
+        # On macOS, we're running in an 'updater' directory nested under the
+        # Second Life.app/Contents/Resources directory.
+        # This file lives under $myapp/Contents/Resources/updater. udir() is
+        # updater; realpath(updater/../..) should get us Contents.
+        return os.path.realpath(os.path.join(udir(), os.pardir, os.pardir))
 
     @staticmethod
     def userpath():
@@ -381,7 +400,8 @@ class Application(object):
 
         running_on = platform.system()
         if (running_on == 'Darwin'):
-            base_dir = os.path.join(os.path.expanduser('~'),'Library','Application Support',app_element_nowhite)
+            base_dir = os.path.join(os.path.expanduser('~'),
+                                    'Library','Application Support',app_element_nowhite)
         elif (running_on == 'Linux'): 
             base_dir = os.path.join(os.path.expanduser('~'), app_element_nowhite)
         elif (running_on == 'Windows'):
@@ -507,8 +527,6 @@ class BuildData(object):
     @staticmethod
     def read(build_data_file=None):      
         #get the contents of the build_data.json file.
-        #for linux and windows this file is in the same directory as the script
-        #for mac, the script is in ../Contents/MacOS/ and the file is in ../Contents/Resources/
         if not build_data_file:
             build_data_dir = Application.app_data_path()
             build_data_file = os.path.join(build_data_dir,"build_data.json")

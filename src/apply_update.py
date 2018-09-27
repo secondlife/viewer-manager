@@ -34,7 +34,7 @@ Applies an already downloaded update.
 """
 
 from datetime import datetime
-from vmp_util import subprocess_args, SL_Logging, BuildData
+from util import subprocess_args, SL_Logging, BuildData
 
 import distutils
 from distutils import dir_util
@@ -163,7 +163,7 @@ def apply_linux_update(command, installable):
 
     # replace the original executable in the command, but pass through all
     # remaining command-line arguments
-    return ExecRunner(os.path.join(install_dir, "SL_Launcher"), *command[1:])
+    return ExecRunner(os.path.join(install_dir, "SL_Launcher.py"), *command[1:])
 
 def apply_mac_update(command, installable):
     log = SL_Logging.getLogger("SL_Apply_Update")
@@ -286,7 +286,7 @@ def apply_mac_update(command, installable):
     # we can't just exec the .app
     return ExecRunner('/usr/bin/open', deploy_path, '--args', *command[1:])
     # Alternatively:
-    # return ExecRunner(os.path.join(deploy_path, "Contents", "MacOS", "SL_Launcher"),
+    # return ExecRunner(os.path.join(deploy_path, "Contents", "MacOS", "SL_Launcher.py"),
     #                   *command[1:])
 
 def apply_windows_update(command, installable):

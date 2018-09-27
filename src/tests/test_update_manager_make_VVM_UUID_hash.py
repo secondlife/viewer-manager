@@ -31,7 +31,7 @@ $/LicenseInfo$
 from nose.tools import *
 
 import update_manager
-from vmp_util import Application
+from util import Application
 
 def test_make_VVM_UUID_hash():
     #because the method returns different results on different hosts

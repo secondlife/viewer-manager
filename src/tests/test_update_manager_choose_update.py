@@ -42,7 +42,7 @@ from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import update_manager
-from vmp_util import BuildData
+from util import BuildData
 
 VVM_RESULT = { 'required'  : False
               ,'version'   : '4.0.1.310054'

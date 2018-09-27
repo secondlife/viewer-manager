@@ -47,7 +47,7 @@ import requests.packages.urllib3
 requests.packages.urllib3.disable_warnings()
 import tempfile
 import time
-from vmp_util import SL_Logging, Application
+from util import SL_Logging, Application
 
 #module default
 # MAINT-8082: empirically, if this isn't big enough, it can actually slow
@@ -58,7 +58,7 @@ class DummyProgressBar(object):
     def step(self, value):
         pass
 
-    def destroy(self):
+    def progress_done(self):
         pass
 
 #Note: No exception handling here! Response to exceptions is the responsibility of the caller
@@ -85,12 +85,12 @@ def download_update(url, download_dir, size, progressbar = False, chunk_size = C
     req = requests.get(url, stream=True)
 
     if progressbar:
-        frame = IUM.InstallerUserMessage(title = Application.name()+" Downloader")
-        frame.progress_bar(message = "Download Progress", size = size)
+        progress = IUM.root()
+        progress.progress_bar(message = "Download Progress", size = size)
     else:
-        frame = DummyProgressBar()
+        progress = DummyProgressBar()
 
-    # ensure that we clean up the progress bar frame, no matter how we leave
+    # ensure that we clean up the progress bar, no matter how we leave
     try:
         start = time.time()
         completed = 0
@@ -102,7 +102,7 @@ def download_update(url, download_dir, size, progressbar = False, chunk_size = C
                 fd.write(chunk)
                 completed += len(chunk)
                 #this will increment the progress bar by len(chunk)/size units
-                frame.step(len(chunk))
+                progress.step(len(chunk))
 
                 # Add periodic download log messages. When we start a background
                 # download on a separate thread, the main thread might complete --
@@ -130,7 +130,7 @@ def download_update(url, download_dir, size, progressbar = False, chunk_size = C
                     log.info("downloaded %s bytes; %s%% complete; ETA %s",
                              completed, int(100*float(completed)/size), eta)
     finally:
-        frame.destroy()
+        progress.progress_done()
 
     #on success remove .next file if any
     for fname in glob.glob(os.path.join(download_dir, "*" + '.next')):
