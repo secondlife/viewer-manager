@@ -678,13 +678,77 @@ def update_manager(log, command, cli_overrides = {}):
 
     # It is reported that on Windows 10, some graphics cards cannot deal with
     # our viewer's video benchmarking -- but that if we skip it, things run
-    # okay. Test this now because we prepare a default PopenRunner for the
-    # various cases in which we decide to launch the existing viewer.
+    # okay.
     if WindowsVideo.onNo64Windows() \
       and int(BuildData.get('Address Size')) == 64 \
       and WindowsVideo.isUnsupported():
-        log.info("Windows 8.1 and 10 do not support the video card; setting option to skip video benchmarking")
-        command = command + ['--set', 'SkipBenchmark', '1']
+        log.info("Windows 8.1 and 10 do not support the video card; "
+                 "setting option to skip video benchmarking")
+        # Set SkipBenchmark = True in user_settings/settings.xml.
+        user_settings_file = Application.user_settings_path()
+        try:
+            # Does this user already have a user_settings file?
+            with open(user_settings_file) as inf:
+                user_settings = llsd.parse(inf.read())
+        except (IOError, OSError, llsd.LLSDParseError) as err:
+            # The viewer has not yet run, there's no such file; OR the file
+            # exists but is garbled. So we'll have to write it from scratch --
+            # no prior settings.
+            user_settings = {}
+            log.debug("No previous user settings file, proceeding: %s: %s",
+                      err.__class__.__name__, err)
+        else:
+            log.debug("Read existing user settings file at %s", user_settings_file)
+
+        try:
+            # Get the previously-saved SkipBenchmark setting.
+            SkipBenchmark = user_settings['SkipBenchmark']
+        except KeyError:
+            # That setting has never yet been saved. Retrieve the definition
+            # for the SkipBenchmark setting from app_settings/settings.xml.
+            app_settings_file  = os.path.join(Application.app_data_path(),
+                                              'app_settings', 'settings.xml')
+            log.debug("No previous SkipBenchmark setting; trying %s",
+                      app_settings_file)
+            try:
+                with open(app_settings_file) as inf:
+                    SkipBenchmark = llsd.parse(inf.read())['SkipBenchmark']
+            except (IOError, OSError, llsd.LLSDParseError, KeyError) as err:
+                # This is more serious: can't read app_settings/settings.xml?!
+                # Or it's garbled, or there's no such setting? Fake it.
+                SkipBenchmark = dict(
+                    Comment='if true, disables running the GPU benchmark at startup\n'
+                    '      (default to class 1)',
+                    Type='Boolean',
+                    Value=True)
+                log.debug("Can't get SkipBenchmark definition: %s: %s; "
+                          "using fake SkipBenchmark: %s",
+                          err.__class__.__name__, err, SkipBenchmark)
+            else:
+                # We DID retrieve SkipBenchmark from app_settings. The one
+                # difference between a setting in app_settings/settings.xml
+                # and the corresponding one in user_settings/settings.xml is
+                # that the Persist key is missing -- since its very presence
+                # in user_settings/settings.xml implies Persist=True.
+                SkipBenchmark.pop('Persist', None)
+                log.debug("Using SkipBenchmark from app_settings: %s", SkipBenchmark)
+        else:
+            log.debug("Using SkipBenchmark from user_settings: %s", SkipBenchmark)
+
+        # By hook or by crook, we now have a plausible definition for the
+        # SkipBenchmark setting. Set it True for this user.
+        SkipBenchmark['Value'] = True
+        # Set this modified SkipBenchmark setting into user_settings.
+        user_settings['SkipBenchmark'] = SkipBenchmark
+        # (re)write the user_settings file
+        try:
+            with open(user_settings_file, 'w') as outf:
+                outf.write(llsd.format_pretty_xml(user_settings))
+        except (OSError, IOError) as err:
+            log.debug("Can't update %s: %s: %s", user_settings_file,
+                      err.__class__.__name__, err)
+        else:
+            log.debug("Wrote updated settings to %s", user_settings_file)
 
     # we end up running the existing viewer in many cases
     existing_viewer = PopenRunner(*command)
