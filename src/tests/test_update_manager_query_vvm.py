@@ -123,7 +123,7 @@ def test_query_vvm():
 
     # This test CANNOT succeed with $http_proxy in the environment.
     os.environ.pop("http_proxy", None)
-    results = update_manager.query_vvm(
+    results = update_manager.query_vvm_from_settings(
         platform_key=Application.platform_key(),
         settings=dict(UpdaterServiceURL='http://localhost:%s/update' % port))
 

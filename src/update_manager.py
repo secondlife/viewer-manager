@@ -336,34 +336,18 @@ def _wmic(*wmic_cmd):
         **subprocess_args(include_stdout=False,
                           log_stream=SL_Logging.stream_from_process(wmic_cmd)))
 
-def query_vvm(platform_key, settings):
+@pass_logger
+def query_vvm_from_settings(log, platform_key, settings):
     """
     Ask the viewer version manager what builds are available for me
     given my platform and version.
     Returns a map of all responses.
     """
-    result_data = None
-
-    log=SL_Logging.getLogger('query_vvm')
-
     # URI template /update/v1.2/channelname/version/platform/platformversion/willing-to-test/uniqueid
     # https://lindenlab.atlassian.net/wiki/spaces/SLT/pages/71106564/Viewer+Version+Manager+REST+API
     # See https://lindenlab.atlassian.net/wiki/spaces/SLT/pages/466081/Viewer+Version+Manager+in+AWS
-
-    version = BuildData.get('Version')
     channelname = BuildData.get('Channel')
-    if channelname.endswith(" Test"):
-        # The priority order is:
-        # 1. If the user specified --set UpdaterWillingToTest, that rules.
-        # 2. If the user didn't override, but it's a Second Life Test build,
-        #    not willing to test.
-        # 3. Consult settings.xml.
-        # The tricky part is priority 2: 1 and 3 are implicitly handled by
-        # MergedSettings. Use overrides.setdefault(). Then if the user
-        # specified --set UpdaterWillingToTest, setdefault() leaves it alone.
-        # Otherwise it sets overrides['UpdaterWillingToTest']=0, which takes
-        # priority over anything from settings.xml.
-        settings.overrides.setdefault('UpdaterWillingToTest', 0)
+
     UpdaterWillingToTest = settings.get('UpdaterWillingToTest', 1)
     try:
         # convert "0" or "1" to corresponding integer
@@ -377,14 +361,20 @@ def query_vvm(platform_key, settings):
             UpdaterWillingToTest = 1
             log.error("Invalid value for UpdaterWillingToTest, assuming %s: %r",
                       UpdaterWillingToTest, bad)
-    # now that we have UpdaterWillingToTest either 0 or 1...
-    test_ok = 'testok' if UpdaterWillingToTest else 'testno'
-    log.debug("UpdaterWillingToTest = %r, test_ok = %r", UpdaterWillingToTest, test_ok)
 
     UpdaterServiceURL = settings.get('UpdaterServiceURL')
     if not UpdaterServiceURL:
         UpdaterServiceURL=os.getenv('SL_UPDATE_SERVICE',
             BuildData.get('Update Service', DEFAULT_UPDATE_SERVICE))
+
+    return query_vvm(platform_key=platform_key,
+                     channel=channelname,
+                     UpdaterWillingToTest=UpdaterWillingToTest,
+                     UpdaterServiceURL=UpdaterServiceURL)
+
+@pass_logger
+def query_vvm(log, platform_key, channel, UpdaterWillingToTest, UpdaterServiceURL):
+    version = BuildData.get('Version')
 
     #suppress warning we get in dev env for altname cert 
     if UpdaterServiceURL != DEFAULT_UPDATE_SERVICE:
@@ -405,11 +395,16 @@ def query_vvm(platform_key, settings):
         platform_version = platform.release()
     #this will always return something usable, error handling in method
     UUID = str(make_VVM_UUID_hash(platform_key))
+
+    # UpdaterWillingToTest is either 0 or 1
+    test_ok = 'testok' if UpdaterWillingToTest else 'testno'
+    log.debug("UpdaterWillingToTest = %r, test_ok = %r", UpdaterWillingToTest, test_ok)
     
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
-             (channelname, version, VVM_platform, platform_version, test_ok, UUID))
-    update_urlpath =  urllib.quote('/'.join(['v1.2', channelname, version, VVM_platform, platform_version, test_ok, UUID]))
-    debug_param= {'explain': 1} if log.isEnabledFor(DEBUG) else {} # if debugging, ask the VVM to say how it got the response 
+             (channel, version, VVM_platform, platform_version, test_ok, UUID))
+    update_urlpath =  urllib.quote('/'.join(['v1.2', channel, version, VVM_platform, platform_version, test_ok, UUID]))
+    # if debugging, ask the VVM to explain how it got the response
+    debug_param= {'explain': 1} if log.isEnabledFor(DEBUG) else {}
     log.debug("Sending query to VVM: query %s/%s%s",
               UpdaterServiceURL, update_urlpath,
               (" with explain requested" if debug_param else ""))
@@ -417,15 +412,16 @@ def query_vvm(platform_key, settings):
     
     try:
         result_data = VVMService.get(update_urlpath, params=debug_param)
-        log.debug("received result from VVM: %r" % result_data)
-        result_data.pop('explain', None) # logging the explanation above is enough, not needed elsewhere
     except llrest.RESTError as res:
         if res.status == 404: # 404 is how the Viewer Version Manager indicates that the channel is unmanaged
             log.info("Update service returned 'not found'; normally this means the channel is unmanaged (and allowed)")
         else:
-            log.warning("Update service %s/%s failed: %s" % (UpdaterServiceURL, update_urlpath, res))
-        result_data = None
+            log.warning("Update service %s/%s failed: %s", UpdaterServiceURL, update_urlpath, res)
+        return None
 
+    log.debug("received result from VVM: %r" % result_data)
+    # logging the explanation above is enough, not needed elsewhere
+    result_data.pop('explain', None)
     return result_data
 
 class WindowsVideo(object):
@@ -511,7 +507,8 @@ class WindowsVideo(object):
 
         return WindowsVideo.hasOnlyUnsupported
 
-def choose_update(platform_key, settings, vvm_response):
+@pass_logger
+def choose_update(log, platform_key, ForceAddressSize, vvm_response):
     """
     This is where we do the hard stuff - picking which result applies to this system
 
@@ -520,7 +517,6 @@ def choose_update(platform_key, settings, vvm_response):
     or, if no update is chosen, an empty dict
     """
     chosen_result = dict()
-    log = SL_Logging.getLogger('choose_update')
 
     current_build = "%s%d" % (BuildData.get('Platform'), int(BuildData.get('Address Size')))
     target_platform = "%s%d" % (platform_key, getBitness(platform_key))
@@ -538,7 +534,6 @@ def choose_update(platform_key, settings, vvm_response):
             target_platform = 'win32'
 
     # We could have done this check earlier, but by waiting we can make the warnings more specific
-    ForceAddressSize = settings.get('ForceAddressSize')
     if ForceAddressSize:
         try:
             forced_bitness = int(ForceAddressSize)
@@ -565,28 +560,33 @@ def choose_update(platform_key, settings, vvm_response):
             chosen_result[key] = vvm_response[key]
         except KeyError:
             log.error("Viewer Version Manager response is missing '%s'; not updating" % key)
-            return dict()
+            return {}
 
     if target_platform != current_build:
-        log.info("Current build platform is '%s', but we need '%s', so update is required" % (current_build, target_platform))
+        log.info("Current build platform is '%s', but we need '%s', so update is required",
+                 current_build, target_platform)
         chosen_result['required'] = True
 
     elif vvm_response['version'] == BuildData.get('Version'):
         log.info("Current version and platform matches this build; no update")
-        return dict()
+        return {}
 
     # We believe we have at least an optional update, so fill in the rest of chosen_result
-    # See if the VVM gave us a result for the target_platform
-    target_result = vvm_response.get('platforms', {}).get(target_platform, {})
-    if not target_result:
-        # check to see if a result not qualified by address_size is in the results
-        target_result = vvm_response.get('platforms', {}).get(platform_key, {})
-        if target_result:
-            log.warning("No update result found for '%s' but found '%s', so updating to that" % (target_platform, platform_key))
-            target_platform = platform_key
-        else:
+    platforms = vvm_response.get('platforms', {})
+    # See if the VVM gave us a result for the target_platform; if not, check
+    # to see if a result not qualified by address_size is in the results
+    try:
+        target_result = platforms[target_platform]
+    except KeyError:
+        try:
+            target_result = platforms[platform_key]
+        except KeyError:
             log.warning("No update result found for '%s' or '%s'" % (target_platform, platform_key))
-            return dict()
+            return {}
+        else:
+            log.warning("No update result found for '%s' but found '%s', so updating to that",
+                        target_platform, platform_key)
+            target_platform = platform_key
 
     # add the target we picked
     chosen_result['platform'] = target_platform
@@ -767,42 +767,14 @@ def update_manager(log, command, cli_overrides = {}):
     # 'settings' is from the settings file. Now apply command-line overrides.
     settings.override_with(cli_overrides.get('set', {}))
 
-    # Track the real preferences control settings used by the viewer.
-    panel_file = os.path.join(Application.app_data_path(),
-                              'skins', 'default', 'xui', 'en', 'panel_preferences_setup.xml')
-    root = ElementTree.parse(panel_file).getroot()
-    # Look for the combo_box for the UpdaterServiceSetting control,
-    # specifically the items defined for that combo_box.
-    # https://docs.python.org/2/library/xml.etree.elementtree.html#xpath-support
-    # Construct a dict { string_value : (internal_name, user_text) }.
-    install_modes = {
-        item.get('value'): (item.get('name'), item.get('label'))
-        for item in
-        root.findall('./combo_box[@control_name="UpdaterServiceSetting"]/combo_box.item') }
+    # If cli_overrides['set']['UpdaterServiceSetting'], use that; else if
+    # settings['UpdaterServiceSetting']['Value'], use that; if none of the
+    # above, or if value is not valid, use default from decode_install_mode().
+    install_key = settings.get('UpdaterServiceSetting')
+    install_mode = decode_install_mode(install_key)
 
-    # For this one item we must perform a reverse lookup -- but with only a
-    # handful of items, a linear search suffices.
-    Install_automatically = [key for (key, (internal, user)) in install_modes.items()
-                             if internal == 'Install_automatically'][0]
-
-    # If cli_overrides['set']['UpdaterServiceSetting'], use that;
-    # else if settings['UpdaterServiceSetting']['Value'], use that;
-    # if none of the above, or if value is not valid, default to Install_automatically.
-    install_key = settings.get('UpdaterServiceSetting', Install_automatically)
-    try:
-        install_modes[install_key]
-    except KeyError:
-        log.error("Invalid setting value for UpdaterServiceSetting (%s); falling back to auto (%s)",
-                  install_key, Install_automatically)
-        install_key = Install_automatically
-    # Now convert to the internal string to defend against possible changes to the
-    # meaning of the value.
-    install_mode, install_desc = install_modes[install_key]
-    log.info("Update mode (UpdaterServiceSetting) is %s (%s)", install_desc, install_key)
-
-    # get channel and version
+    # get channel
     default_channel = BuildData.get('Channel')
-    # we send the override to the VVM, but retain the default_channel version for in_place computations
     channel = cli_overrides.get('channel')
     if channel and channel != default_channel:
         log.info("Overriding channel '%s' with '%s' from command line" %
@@ -812,19 +784,20 @@ def update_manager(log, command, cli_overrides = {}):
     #log.debug("Pre query settings:\n%s", pformat(settings)) # too big to leave this in all the time
 
     #  On launch, the Viewer Manager should query the Viewer Version Manager update api.
-    result_data = query_vvm(platform_key=platform_key,
-                            settings=settings)
+    result_data = query_vvm_from_settings(platform_key=platform_key,
+                                          settings=settings)
 
     #nothing to do or error
     if not result_data:
         log.info("No update.")
-        cleanup_previous_download(log, platform_key)
+        cleanup_previous_download(platform_key)
         # run already-installed viewer
         return existing_viewer
 
-    chosen_result = choose_update(platform_key, settings, result_data)
+    ForceAddressSize = settings.get('ForceAddressSize')
+    chosen_result = choose_update(platform_key, ForceAddressSize, result_data)
     if not chosen_result:
-        cleanup_previous_download(log, platform_key)
+        cleanup_previous_download(platform_key)
         # We didn't find anything better than what we've got, so run that
         return existing_viewer
 
@@ -832,32 +805,16 @@ def update_manager(log, command, cli_overrides = {}):
 
     # Here we believe we need an update.
     # check to see if user has install rights
-    # get the owner of the install and the current user
-    # none of this is supported by Python on Windows
-    if platform.system() != "Windows":
-        script_owner_id = os.stat(os.path.realpath(ufile(__file__))).st_uid
-        user_id = os.getuid()
-        if script_owner_id != user_id:
-            import pwd
-            script_owner_name = pwd.getpwuid(script_owner_id)[0]
-            username = pwd.getpwuid(user_id)[0]
-            log.info("Upgrade notification attempted by user " + username)    
-            yes = InstallerUserMessage.binary_choice_message(
-                message = "Second Life was installed by userid " + script_owner_name 
-                + ".  Do you have privileges to install?", true = "Yes", false = 'No')
-            if not yes:
-                log.info("Upgrade attempt declined by user " + username)
-                InstallerUserMessage.basic_message(
-                    "Please find a system admin to upgrade Second Life")
-                return existing_viewer
+    if not check_install_privs():
+        return existing_viewer
 
     #get download directory, if there are perm issues or similar problems, give up
     try:
         download_dir = make_download_dir(chosen_result['version'])
     except Exception as e:
-        log.error("Error trying to make download dir %r" % e)
+        log.error("Error trying to make download dir: %s: %s", e.__class__.__name__, e)
         return existing_viewer
-    
+
     # determine if we've tried this download before
     downloaded = check_for_completed_download(download_dir, chosen_result['size'])
 
@@ -896,14 +853,6 @@ def update_manager(log, command, cli_overrides = {}):
         log.info("Found optional update. Download directory is: " + download_dir)
         if downloaded is None:
             # start a background download           
-            try:
-                os.makedirs(download_dir)
-            except OSError as err:
-                if err.errno == errno.EEXIST and os.path.isdir(download_dir):
-                    pass
-                else:
-                    raise
-                
             log.info("Found optional update. Downloading in background to: " + download_dir)
             # Create and launch a background thread. Because we do NOT set
             # this thread as daemon, the process won't terminate until the
@@ -961,6 +910,69 @@ def update_manager(log, command, cli_overrides = {}):
                         downloaded)
             return existing_viewer
 
+def decode_install_mode(install_key):
+    """
+    Given (the string form of) one of the numeric codes representing an
+    install_mode choice on the Preferences floater, return the corresponding
+    internal name string, one of:
+
+    Install_automatically
+    Install_ask
+    Install_manual
+
+    If you pass None (or an invalid key), you get the default: Install_automatically.
+    """
+    # Track the real preferences control settings used by the viewer.
+    panel_file = os.path.join(Application.app_data_path(),
+                              'skins', 'default', 'xui', 'en', 'panel_preferences_setup.xml')
+    root = ElementTree.parse(panel_file).getroot()
+    # Look for the combo_box for the UpdaterServiceSetting control,
+    # specifically the items defined for that combo_box.
+    # https://docs.python.org/2/library/xml.etree.elementtree.html#xpath-support
+    # Construct a dict { string_value : (internal_name, user_text) }.
+    install_modes = {
+        item.get('value'): (item.get('name'), item.get('label'))
+        for item in
+        root.findall('./combo_box[@control_name="UpdaterServiceSetting"]/combo_box.item') }
+
+    # Look up key in install_modes
+    try:
+        install_modes[install_key]
+    except KeyError:
+        # For this one item we must perform a reverse lookup -- but with only a
+        # handful of items, a linear search suffices.
+        Install_automatically = next(key for (key, (internal, user)) in install_modes.items()
+                                     if internal == 'Install_automatically')
+        # install_key can be passed as None if nobody has tried to set it. We
+        # know None is an invalid setting; it's only an error if somebody set
+        # some other invalid value.
+        logfunc = log.info if install_key is None else log.error
+        logfunc("Invalid setting value for UpdaterServiceSetting (%s); falling back to auto (%s)",
+                install_key, Install_automatically)
+        install_key = Install_automatically
+    # Now convert to the internal string to defend against possible changes to the
+    # meaning of the value.
+    install_mode, install_desc = install_modes[install_key]
+    log.info("Update mode (UpdaterServiceSetting) is %s (%s)", install_desc, install_key)
+    return install_mode
+
+@pass_logger
+def check_install_privs(log):
+    # Can the current user overwrite the viewer executable?
+    # (We don't test __file__ because, in a PyInstaller environment, __file__
+    # is a Python script unpacked into a temp directory, to which the current
+    # process can certainly write -- since it already did! -- regardless of
+    # the question of whether it has permissions to update the viewer install.)
+    executable = Application.executable()
+    if os.access(executable, os.W_OK):
+        return True
+
+    log.info("Current user does NOT have permission to update %s", executable)
+    InstallerUserMessage.basic_message(
+        "Please find a system admin to upgrade Second Life")
+    return False
+
+@pass_logger
 def cleanup_previous_download(log, platform_key):
     # clean up any previous download dir on windows, see apply_update.apply_update()
     if platform_key == 'win':
