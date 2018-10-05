@@ -60,6 +60,9 @@ class ProtocolError(Exception):
         Exception.__init__(self, msg)
         self.data = data
 
+class ViewerShutdown(ProtocolError):
+    pass
+
 class ParseError(ProtocolError):
     pass
 
@@ -103,7 +106,7 @@ def _get(f):
         hdr += f.read(1)
         if not hdr:
             # Here if read(1) returned empty string, i.e. EOF
-            sys.exit(0)
+            raise ViewerShutdown()
 ##         print >>sys.stderr, "_get(): hdr = %r" % hdr
     if not hdr.endswith(':'):
         raise ProtocolError('Expected len:data, got %r' % hdr, hdr)
@@ -150,5 +153,5 @@ def send(pump, data, f=None):
 def request(pump, data, f=None):
     # we expect 'data' is a dict
     xdata = data.copy()
-    xdata['reply'] = _reply
+    xdata.setdefault('reply', _reply)
     send(pump, xdata, f=f)
