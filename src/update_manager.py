@@ -910,7 +910,8 @@ def update_manager(log, command, cli_overrides = {}):
                         downloaded)
             return existing_viewer
 
-def decode_install_mode(install_key):
+@pass_logger
+def decode_install_mode(log, install_key):
     """
     Given (the string form of) one of the numeric codes representing an
     install_mode choice on the Preferences floater, return the corresponding
