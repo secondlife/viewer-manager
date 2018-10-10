@@ -38,6 +38,7 @@ import os
 import sys
 import platform
 import time
+import traceback
 
 # MAINT-8087: There is an unfortunate interaction between Pyinstaller and
 # Tkinter. On Windows, Tkinter imports a helper module FixTk.py to set
@@ -76,10 +77,55 @@ _root = None
 def root():
     global _root
     if _root is None:
-        # StatusMessage is our main window. Pop that up, even if there's no
-        # message yet.
-        _root = StatusMessage()
+        try:
+            # StatusMessage is our main window. Pop that up, even if there's no
+            # message yet.
+            _root = StatusMessage()
+        except Exception:
+            # We've seen cases in which Tkinter swallows exceptions. This
+            # clause helps with debugging.
+            traceback.print_exc()
+            raise
     return _root
+
+# ****************************************************************************
+#   ModalRoot
+# ****************************************************************************
+class ModalRoot(tk.Tk):
+    """
+    This class attempts to unify the two major Tkinter use cases: as the
+    framework for a UI application that calls mainloop(), and as 'side effect'
+    UI for a console script that does not.
+
+    From a console script, after creating or changing any widget, you must
+    call update() to cause Tkinter to refresh the display in realtime. If you
+    don't, either nothing is displayed, or the user sees a snapshot from some
+    previous moment in time. (Empirically, update_idletasks() isn't enough.)
+
+    But if you run mainloop(), you should NOT call update():
+    http://effbot.org/tkinterbook/widget.htm#Tkinter.Widget.update-method
+    'This method should be used with care, since it may lead to really nasty
+    race conditions if called from the wrong place (from within an event
+    callback, for example, or from a function that can in any way be called
+    from an event callback, etc.).'
+
+    This class presents a flush_display() method intended to properly update
+    the display in either mode. Sprinkle calls to flush_display() after
+    each change you want to make visible.
+    """
+    def __init__(self, *args, **kwds):
+        tk.Tk.__init__(self, *args, **kwds)
+        # set up flush_display() in console mode: nobody has called mainloop()
+        self.flush_display = self.update
+
+    def mainloop(self, *args, **kwds):
+        flush_prev = self.flush_display
+        # During any mainloop() call, flush_display() is a no-op
+        self.flush_display = lambda: None
+        try:
+            return tk.Tk.mainloop(self, *args, **kwds)
+        finally:
+            self.flush_display = flush_prev
 
 # ****************************************************************************
 #   Methods common to main Tk window and auxiliary Dialogs
@@ -124,6 +170,7 @@ class Common(object):
         icon_path = os.path.join(self.icon_path, icon_name)
         if os.path.exists(icon_path):
             icon = tk.PhotoImage(file=icon_path)
+            # empirically, we must *both* pass image= *and* set .image?!
             self.image_label = tk.Label(master=parent, image = icon)
             self.image_label.image = icon
         else:
@@ -150,6 +197,7 @@ class Common(object):
     # ---------------------- update the status message -----------------------
     def set_message(self, message):
         self.message.set(message)
+        self.flush_display()
 
 # ****************************************************************************
 #   CustomDialog
@@ -179,6 +227,11 @@ class CustomDialog(Dialog, Common):
         # Suppress the standard Dialog buttons.
         pass
 
+    def flush_display(self):
+        # Dialog uses wait_window() as its message loop. We need not (SHOULD
+        # not) call update().
+        pass
+
 # ****************************************************************************
 #   status_message(), StatusMessage
 # ****************************************************************************
@@ -204,7 +257,7 @@ def status_message(text):
         log.info("(close)")
         root().hide()
 
-class StatusMessage(tk.Tk, Common):
+class StatusMessage(ModalRoot, Common):
     """
     StatusMessage is our application's main window. It doesn't have any user
     input controls; it simply displays ongoing progress messages.
@@ -213,7 +266,7 @@ class StatusMessage(tk.Tk, Common):
     def __init__(self, title=None, width=500, height=230):
         # initialize base classes -- Tk uses old-style Python classes, which
         # don't support the super() idiom.
-        tk.Tk.__init__(self)
+        ModalRoot.__init__(self)
         self.grid()
         Common.__init__(self, self)
         self.title(title or Application.name())
@@ -260,12 +313,17 @@ class StatusMessage(tk.Tk, Common):
         # make hidden progress bar visible
         self.progress.grid()
         self.progress["maximum"] = size
+        self.flush_display()
 
-    def step(self, value):
+    def step(self, value, message=None):
         self.progress.step(value)
+        if message:
+            self.set_message(message)
+        self.flush_display()
 
     def progress_done(self):
         self.progress.grid_remove()
+        self.flush_display()
 
     # --------------------- hide our application window ----------------------
     def hide(self):
