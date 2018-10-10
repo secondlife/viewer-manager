@@ -11,6 +11,7 @@ $/LicenseInfo$
 """
 
 # Only packages bundled with Python should be imported here.
+import os
 import platform
 import subprocess
 import sys
@@ -26,10 +27,9 @@ import eventlet
 
 from SL_Launcher import capture_vmp_args
 from runner import PopenRunner
-from InstallerUserMessage import status_message, root
+from InstallerUserMessage import status_message
 import update_manager
 from leapcomm import ViewerClient, RedirectUnclaimedReqid
-from tkeventlet import TkGreenthread
 
 # These definitions depend on the viewer's llstartup.h: if EStartupState
 # changes, so must they. Much as we would prefer to rely on string names
@@ -65,10 +65,6 @@ def precheck(log, viewer, args):
     eventlet.monkey_patch(os=(platform.system() != 'Windows'),
                           select=True, socket=True, time=True,
                           builtins=True, subprocess=True)
-
-    # right away, start interleaving Tkinter with eventlet in case we want to
-    # pop up a status_message()
-    eventlet.spawn(TkGreenthread, root())
 
     log.info("Viewer version {} ({} bit)"
              .format(BuildData.get('Version'), BuildData.get('Address Size')))
@@ -117,10 +113,13 @@ def leap(install_key, channel, testok, vvmurl, width):
     params = locals().items()
     params.sort()
     # If we're run as a LEAP child process, anything we write to stderr goes
-    # into the viewer log -- so set stderr as our preferred output stream.
+    # into the viewer log -- so add stderr as another logging stream. (Note:
+    # we continue writing to our log file anyway for when the updater process
+    # must manage a viewer update; in that case the updater must survive the
+    # viewer process.)
     # Because the viewer will timestamp each log line anyway, avoid doubly
     # timestamping each line.
-    log = SL_Logging.set_stream(sys.stderr, 'updater', SL_Logging.get_verbosity(),
+    log = SL_Logging.add_stream(sys.stderr,
                                 formatter=SL_Logging.TimelessFormatter())
     # This is where we engage LEAP protocol communications, processing the
     # viewer's initialization data.
@@ -133,6 +132,13 @@ def leap(install_key, channel, testok, vvmurl, width):
         log.info("{} {!r}".format(var.ljust(varwidth), value))
 
     install_mode = update_manager.decode_install_mode(install_key)
+
+    vvm_override = os.getenv("SL_UPDATE_SERVICE")
+    if vvm_override and vvm_override != vvmurl:
+        vvmurl = vvm_override
+        var = "vvmurl"
+        value = vvmurl
+        log.info("{} {!r}".format(var.ljust(varwidth), value))
 
     result = update_manager.query_vvm(platform_key=platform_key,
                                       channel=channel,
@@ -161,7 +167,7 @@ def leap(install_key, channel, testok, vvmurl, width):
         return
 
     # determine if we've tried this download before
-    downloaded = update_manager.check_for_completed_download(download_dir, chosen_result['size'])
+    downloaded = update_manager.check_for_completed_download(download_dir, result['size'])
 
     if result['required']:
         log.info("Required update to %s version %s", result['platform'], result['version'])
@@ -222,6 +228,9 @@ def leap(install_key, channel, testok, vvmurl, width):
         # TODO: That means that a user who always clicks Login really quickly
         # could go for several sessions before being prompted to install an
         # already-downloaded optional update.
+        # It's important to let the receive coroutine catch up before we check
+        # startup_state.
+        eventlet.sleep(0)
         if viewer.startup_state.enum > STATE_LOGIN_WAIT:
             log.info("User already clicked Login (%s, %s), deferring",
                      viewer.startup_state.str, viewer.startup_state.enum)
@@ -255,6 +264,7 @@ def leap(install_key, channel, testok, vvmurl, width):
 
         if update_action == "Yes":
             log.info("User chose 'Install'")
+            viewer.shutdown()
             runner = update_manager.install(command=[],
                                             platform_key=platform_key,
                                             download_dir=download_dir)
@@ -281,6 +291,8 @@ def leap(install_key, channel, testok, vvmurl, width):
 # ****************************************************************************
 @pass_logger
 def catch_viewer_before_login(log, viewer, version, notification):
+    # Let the receive coroutine catch up first.
+    eventlet.sleep(0)
     log.info("Viewer in %s (%s)", viewer.startup_state.str, viewer.startup_state.enum)
     # In what state is the viewer? It matters whether the user has clicked
     # Login yet.

@@ -121,7 +121,6 @@ class SL_Logging(object):
     """
     logger=None
     logStream=None
-    logHandler=None
 
     @staticmethod
     def getLogger(basename, extension='.log', verbosity=None, maxsize=10*1024):
@@ -174,8 +173,16 @@ class SL_Logging(object):
                 log_name = log_basepath + extension
 
             # If this blows up, we're just hosed.
-            stream = open(log_name,'a')
-            log = SL_Logging.set_stream(stream, basename, verbosity)
+            SL_Logging.logStream = open(log_name,'a')
+            SL_Logging.logger=logging.getLogger(basename)
+            SL_Logging.logger.setLevel(verbosity)
+
+            # from this point forward, any unhandled exceptions go into the
+            # log file
+            # just like cgitb.enable(), except that enable() doesn't support file=
+            sys.excepthook = cgitb.Hook(file=SL_Logging.logStream, format="text")
+
+            log = SL_Logging.add_stream(SL_Logging.logStream)
             log.info("================ Running %s" % basename)
             # now log any messages we deferred previously
             for line in msgs.getvalue().splitlines():
@@ -189,33 +196,11 @@ class SL_Logging(object):
         return log
 
     @staticmethod
-    def set_stream(stream, basename, verbosity, formatter=None):
-        formatter = formatter or SL_Logging.Formatter()
-        SL_Logging.logStream = stream
-
-        # from this point forward, any unhandled exceptions go into the
-        # log file
-        # just like cgitb.enable(), except that enable() doesn't support file=
-        sys.excepthook = cgitb.Hook(file=SL_Logging.logStream, format="text")
-
-        logger=logging.getLogger(basename)
-
-        # logger.addHandler() is, as its name suggests, additive. But this
-        # set_stream() function is intended to redirect log output, rather
-        # than sending it to multiple destinations. If we already have a
-        # logHandler, remove it from our logger. (removeHandler(None) is a
-        # no-op.)
-        logger.removeHandler(SL_Logging.logHandler)
-
-        # Capture our StreamHandler solely to support the above
-        # removeHandler() call in any subsequent set_stream() call.
-        SL_Logging.logHandler = logging.StreamHandler(SL_Logging.logStream)
-        SL_Logging.logHandler.setFormatter(formatter)
-        logger.addHandler(SL_Logging.logHandler)
-        logger.setLevel(verbosity)
-        SL_Logging.logger = logger
-
-        return logger
+    def add_stream(stream, formatter=None):
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(formatter or SL_Logging.Formatter())
+        SL_Logging.logger.addHandler(handler)
+        return SL_Logging.logger
 
     @staticmethod
     def get_verbosity():
