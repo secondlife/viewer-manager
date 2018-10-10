@@ -228,12 +228,10 @@ def leap(install_key, channel, testok, vvmurl, width):
         # TODO: That means that a user who always clicks Login really quickly
         # could go for several sessions before being prompted to install an
         # already-downloaded optional update.
-        # It's important to let the receive coroutine catch up before we check
-        # startup_state.
-        eventlet.sleep(0)
-        if viewer.startup_state.enum > STATE_LOGIN_WAIT:
-            log.info("User already clicked Login (%s, %s), deferring",
-                     viewer.startup_state.str, viewer.startup_state.enum)
+        startup_state = viewer.get_startup_state()
+        if startup_state.enum > STATE_LOGIN_WAIT:
+            log.info("User already clicked Login ({}), deferring"
+                     .format(startup_state))
             return
 
         # If we're still sitting at the login screen, produce a popup and
@@ -291,12 +289,11 @@ def leap(install_key, channel, testok, vvmurl, width):
 # ****************************************************************************
 @pass_logger
 def catch_viewer_before_login(log, viewer, version, notification):
-    # Let the receive coroutine catch up first.
-    eventlet.sleep(0)
-    log.info("Viewer in %s (%s)", viewer.startup_state.str, viewer.startup_state.enum)
+    startup_state = viewer.get_startup_state()
+    log.info("Viewer in {}".format(startup_state))
     # In what state is the viewer? It matters whether the user has clicked
     # Login yet.
-    if viewer.startup_state.enum <= STATE_LOGIN_WAIT:
+    if startup_state.enum <= STATE_LOGIN_WAIT:
         # User hasn't yet clicked Login. Pop up a modal viewer
         # notification, pre-empting his/her ability to do that.
         log.info("popping up %s", notification)
@@ -337,13 +334,12 @@ def catch_viewer_before_login(log, viewer, version, notification):
                 return True
             # If the startup_state ever gets to STATE_WORLD_INIT or
             # beyond, login is progressing -- we won't ever get an ack.
-            # startupWait updates viewer.startup_state before posting to
-            # its queue, so if what arrives on the queue is a StartupState
-            # update, we don't literally have to examine the queued event.
-            if viewer.startup_state.enum >= STATE_WORLD_INIT:
-                log.info("Viewer logging in anyway: %s (%s)",
-                         viewer.startup_state.str, viewer.startup_state.enum)
-                return False
+            if event.get("pump") == "StartupState":
+                data = event.get("data", {})
+                startup_state = viewer.State(enum=data.get("enum", 0), str=data.get("str"))
+                if startup_state.enum >= STATE_WORLD_INIT:
+                    log.info("Viewer logging in anyway: (%s)".format(startup_state))
+                    return False
 
 # ****************************************************************************
 #   background_download()

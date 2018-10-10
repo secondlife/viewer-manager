@@ -118,6 +118,18 @@ class ViewerClient(object):
         # them, there seems little point.
         pass
 
+    def get_startup_state(self):
+        self.log.debug("yielding to pick up StartupState events")
+        # Empirically, eventlet.sleep(0) does NOT suffice here, though that's
+        # the canonical way to yield to other eventlet greenthreads. This may
+        # be due to the use of eventlet.tpool.Proxy (in other words, an actual
+        # separate Python thread) for sys.stdin. While sleep(0.1) also seems
+        # to work, the need for ANY actual real-time delay makes me nervous
+        # about the robustness of making it too short. Stick with 0.5 for now;
+        # should still be imperceptible from the user's point of view.
+        eventlet.sleep(0.5)
+        return self.startup_state
+
     def shutdown(self):
         """
         Send event to ask the viewer to shutdown nicely. Raise
@@ -608,7 +620,7 @@ class RedirectUnclaimedReqid(Redirect, WaitForUnclaimedReqid):
     """
     def __init__(self, other, vclient, priority, reqid):
         Redirect.__init__(self, other)
-        WaitForUnclaimedReqid.__init__(vclient, priority, reqid)
+        WaitForUnclaimedReqid.__init__(self, vclient, priority, reqid)
 
 class WaitForReqid(WaitFor):
     """
