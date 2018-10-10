@@ -16,8 +16,11 @@ $/LicenseInfo$
 
 from collections import namedtuple
 import itertools
+import time
 import weakref
+
 import eventlet
+
 from util import SL_Logging
 
 class TimeoutError(Exception):
@@ -52,7 +55,7 @@ class ViewerClient(object):
         # input an eventlet coroutine of its own. (Requests are sent out
         # synchronously by the calling coroutine -- we don't have a problem with a
         # request blocking if the socket send() call blocks.)
-        eventlet.spawn(self._receive)
+        eventlet.spawn_n(self._receive)
         # Each outstanding request() or generate() call has a corresponding
         # WaitForReqid object (later in this module) to handle the
         # response(s). If an incoming event contains an echoed ["reqid"] key,
@@ -132,7 +135,11 @@ class ViewerClient(object):
             # How long should it reasonably take for a healthy viewer to
             # respond to shutdown?
             end = time.time() + 60
-            while self.connected and time.time() < end:
+            while time.time() < end:
+                if not self.connected:
+                    # Yay, just what we wanted!
+                    self.log.debug("viewer shutdown confirmed.")
+                    return
                 # Wait a bit. It's unreasonable to check many times a second,
                 # but we don't want to wait too many extra seconds once the
                 # viewer actually does shut down.
@@ -142,9 +149,6 @@ class ViewerClient(object):
             raise ViewerWontShutdown("viewer seems to be ignoring shutdown() request")
         except TimeoutError:
             raise ViewerWontShutdown("shutdown() request seems to have hung the viewer")
-        except leap.ViewerShutdown:
-            # Yay, just what we wanted!
-            self.log.debug("viewer shutdown confirmed.")
 
     def send(self, pump, data):
         """
@@ -276,11 +280,13 @@ class ViewerClient(object):
             # Forward the exception to everyone listening either on
             # self.pending or self.waitfors.
             for waitfor in self.pending.itervalues():
+                self.log.debug("sending %s to %s", e.__class__.__name__, waitfor)
                 waitfor._exception(e)
             for p, w in self.waitfors:
                 waitfor = w()
                 # Still can't count on any given waitfor being live.
                 if waitfor is not None:
+                    self.log.debug("sending %s to %s", e.__class__.__name__, waitfor)
                     waitfor._exception(e)
 
     def _dispatch(self, event):
