@@ -55,7 +55,10 @@ from util import SL_Logging, Application
 CHUNK_SIZE = 1024*1024
 
 class DummyProgressBar(object):
-    def step(self, value):
+    def set_message(self, message):
+        pass
+
+    def step(self, value, message=None):
         pass
 
     def progress_done(self):
@@ -84,9 +87,10 @@ def download_update(url, download_dir, size, progressbar = False, chunk_size = C
     log.info("downloading to: %s" % filename)
     req = requests.get(url, stream=True)
 
+    message = "Download Progress"
     if progressbar:
         progress = IUM.root()
-        progress.progress_bar(message = "Download Progress", size = size)
+        progress.progress_bar(message=message, size = size)
     else:
         progress = DummyProgressBar()
 
@@ -101,36 +105,43 @@ def download_update(url, download_dir, size, progressbar = False, chunk_size = C
             for chunk in req.iter_content(chunk_size):
                 fd.write(chunk)
                 completed += len(chunk)
-                #this will increment the progress bar by len(chunk)/size units
-                progress.step(len(chunk))
+
+                # once we've downloaded even the first chunk, we can
+                # start to make wild guesses about completion
+                fraction = float(completed)/size
+                percent  = int(100*fraction)
+                now = time.time()
+                elapsed = now - start
+                # completed/size predicts elapsed/totaltime
+                # totaltime * (completed/size) = elapsed
+                # totaltime = elapsed / (completed / size)
+                totaltime = elapsed / fraction
+                eta = start + totaltime
+                timeleft = int(eta - now)
+                mins,  secs = divmod(timeleft, 60)
+                hours, mins = divmod(mins, 60)
+                timeleft = "%2d:%02d:%02d" % (hours, mins, secs)
+
+                #increment the progress bar by len(chunk)/size units
+                progress.step(len(chunk),
+                              message="%s: %s%%, %s left" % (message, percent, timeleft))
 
                 # Add periodic download log messages. When we start a background
                 # download on a separate thread, the main thread might complete --
                 # and produce log output to that effect -- yet the process lives
                 # on. Occasional log messages help the curious user remember that.
-                now = time.time()
                 if now >= log_next:
                     log_next = now + log_interval
-                    if completed == 0:
-                        # still nothing?! no prediction possible
-                        eta = "---"
-                    else:
-                        # once we've downloaded even the first chunk, we can
-                        # start to make wild guesses about completion
-                        elapsed = now - start
-                        # completed/size predicts elapsed/totaltime
-                        # totaltime * (completed/size) = elapsed
-                        # totaltime = elapsed / (completed / size)
-                        # totaltime = elapsed * size / completed
-                        totaltime = elapsed * float(size) / completed
-                        eta = start + totaltime
-                        # use gmtime and the same time format as
-                        # SL_Logging.Formatter.sl_format
-                        eta = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(eta))
+                    # For logging, use gmtime and the same time format as
+                    # SL_Logging.Formatter.sl_format. We're likely to be
+                    # looking at logs after the fact, so timeleft isn't as
+                    # interesting as our ETA prediction converging.
+                    eta = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(eta))
                     log.info("downloaded %s bytes; %s%% complete; ETA %s",
-                             completed, int(100*float(completed)/size), eta)
+                             completed, percent, eta)
     finally:
         progress.progress_done()
+        progress.set_message("Download Complete")
 
     #on success remove .next file if any
     for fname in glob.glob(os.path.join(download_dir, "*" + '.next')):
