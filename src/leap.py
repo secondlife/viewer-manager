@@ -61,7 +61,8 @@ class ProtocolError(Exception):
         self.data = data
 
 class ViewerShutdown(ProtocolError):
-    pass
+    def __init__(self):
+        super(ViewerShutdown, self).__init__("Viewer shutdown detected", None)
 
 class ParseError(ProtocolError):
     pass
