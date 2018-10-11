@@ -15,6 +15,7 @@ import os
 import platform
 import subprocess
 import sys
+import threading
 
 # This must be the FIRST imported module that isn't bundled with Python.
 from util import pass_logger, SL_Logging, BuildData, Application
@@ -29,7 +30,7 @@ from SL_Launcher import capture_vmp_args
 from runner import PopenRunner
 from InstallerUserMessage import status_message
 import update_manager
-from leapcomm import ViewerClient, RedirectUnclaimedReqid
+from leapcomm import ViewerClient, RedirectUnclaimedReqid, ViewerShutdown
 
 # These definitions depend on the viewer's llstartup.h: if EStartupState
 # changes, so must they. Much as we would prefer to rely on string names
@@ -319,27 +320,33 @@ def catch_viewer_before_login(log, viewer, version, notification):
     # StartupState change, redirect the possible ack to the
     # WaitForStartup queue. Use a priority that ensures this redirect
     # will see the ack first.
-    with RedirectUnclaimedReqid(viewer.startupWait, viewer, 10, reqid):
-        # Now post to the rendezvous point.
-        log.info("Posting to LoginSync")
-        viewer.send(pump="LoginSync", data=dict(reqid=reqid))
-        # Monitor startupWait's queue. Though it seems imprudent to wait
-        # without a timeout, the viewer may actually end up prompting
-        # the user with PauseForUpdate -- and there's no telling how
-        # long it might take the user to acknowledge.
-        for event in viewer.startupWait.iterate():
-            if event.get("reqid") == reqid:
-                # Oh good, we caught the viewer before login.
-                log.info("got ack from viewer")
-                return True
-            # If the startup_state ever gets to STATE_WORLD_INIT or
-            # beyond, login is progressing -- we won't ever get an ack.
-            if event.get("pump") == "StartupState":
-                data = event.get("data", {})
-                startup_state = viewer.State(enum=data.get("enum", 0), str=data.get("str"))
-                if startup_state.enum >= STATE_WORLD_INIT:
-                    log.info("Viewer logging in anyway: (%s)".format(startup_state))
-                    return False
+    try:
+        with RedirectUnclaimedReqid(viewer.startupWait, viewer, 10, reqid):
+            # Now post to the rendezvous point.
+            log.info("Posting to LoginSync")
+            viewer.send(pump="LoginSync", data=dict(reqid=reqid))
+            # Monitor startupWait's queue. Though it seems imprudent to wait
+            # without a timeout, the viewer may actually end up prompting
+            # the user with PauseForUpdate -- and there's no telling how
+            # long it might take the user to acknowledge.
+            for event in viewer.startupWait.iterate():
+                if event["data"].get("reqid") == reqid:
+                    # Oh good, we caught the viewer before login.
+                    log.info("got ack from viewer")
+                    return True
+                # If the startup_state ever gets to STATE_WORLD_INIT or
+                # beyond, login is progressing -- we won't ever get an ack.
+                if event["pump"] == "StartupState":
+                    data = event["data"]
+                    startup_state = viewer.State(enum=data.get("enum", 0), str=data.get("str"))
+                    if startup_state.enum >= STATE_WORLD_INIT:
+                        log.info("Viewer logging in anyway: ({})".format(startup_state))
+                        return False
+    except ViewerShutdown:
+        # It's possible we missed all the cues... but if the next thing we see
+        # is ViewerShutdown, that's not an error; don't splash it all over the
+        # log file. Just quietly go away.
+        pass
 
 # ****************************************************************************
 #   background_download()
