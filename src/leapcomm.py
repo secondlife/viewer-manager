@@ -21,6 +21,8 @@ import weakref
 
 import eventlet
 
+import leap
+from leap import ProtocolError, ViewerShutdown, ParseError
 from util import SL_Logging
 
 class TimeoutError(Exception):
@@ -43,10 +45,8 @@ class ViewerClient(object):
         """
         Set up housekeeping.
         """
-        # Defer importing leap module until initialization because its
-        # module-scope logic waits on stdin for initialization data from viewer.
-        global leap
-        import leap
+        # Read initialization data from viewer.
+        leap.__init__()
         # If that worked, we're connected.
         self.connected = True
 
@@ -97,26 +97,29 @@ class ViewerClient(object):
         self.send(pump="LLStartUp", data=dict(op="postStartupState"))
 
     # Override any of these next five methods to change the communication
-    # mechanism. (Note that because we defer importing leap until __init__(),
-    # we can't just write 'cmdpump = leap.cmdpump'et al. at class scope.)
-
-    def cmdpump(self):
-        return leap.cmdpump()
-
-    def replypump(self):
-        return leap.replypump()
-
-    def send(self, *args, **kwds):
-        # always salt send() events with replypump; why not?
-        return leap.request(*args, **kwds)
-
-    def get(self):
-        return leap.get()
+    # mechanism.
+    cmdpump   = staticmethod(leap.cmdpump)
+    replypump = staticmethod(leap.replypump)
+    get       = staticmethod(leap.get)
 
     def close(self):
         # LEAP uses sys.stdin and sys.stdout. While it's possible to close
         # them, there seems little point.
         pass
+
+    def send(self, pump, data):
+        """
+        Fire and forget. Send the specified request LLSD, expecting no reply.
+        In fact, should the request produce an eventual reply, it will be
+        treated as an unsolicited event.
+
+        See also request(), generate().
+        """
+        # leap.request() is a bit of a misnomer; it's only at this layer that
+        # we try to match requests with responses. What leap.request() does
+        # over and above leap.send() is to stamp the outgoing data with our
+        # reply pump. No reason not to do that for every event.
+        leap.request(pump, data)
 
     def get_startup_state(self):
         self.log.debug("yielding to pick up StartupState events")
@@ -161,18 +164,6 @@ class ViewerClient(object):
             raise ViewerWontShutdown("viewer seems to be ignoring shutdown() request")
         except TimeoutError:
             raise ViewerWontShutdown("shutdown() request seems to have hung the viewer")
-
-    def send(self, pump, data):
-        """
-        Fire and forget. Send the specified request LLSD, expecting no reply.
-        In fact, should the request produce an eventual reply, it will be
-        treated as an unsolicited event.
-        """
-        # leap.request() is a bit of a misnomer; it's only at this layer that
-        # we try to match requests with responses. What leap.request() does
-        # over and above leap.send() is to stamp the outgoing data with our
-        # reply pump.
-        leap.request(pump, data)
 
     def request(self, pump, data, timeout=None):
         """
@@ -279,7 +270,7 @@ class ViewerClient(object):
             # than what we explicitly raise -- e.g. MemoryError, which we've
             # seen but whose origin remains mysterious -- then print the
             # stack trace as well as forwarding the exception.
-            if not isinstance(e, leap.ProtocolError):
+            if not isinstance(e, ProtocolError):
                 self.log.exception(" sending exception ".center(72, '='))
             # This structure assumes that an exception from self.get() (e.g.
             # ProtocolError) is unrecoverable. That is, there's no point in
@@ -307,7 +298,7 @@ class ViewerClient(object):
         try:
             event.pop
         except AttributeError:
-            raise leap.ProtocolError("Incoming packet not a dict: %s" % event)
+            raise ProtocolError("Incoming packet not a dict: %s" % event)
         pump = event.pop("pump", None)
         data = event.pop("data", None)
         if event:
@@ -339,6 +330,8 @@ class ViewerClient(object):
             # We don't remember sending a request with any such reqid. Treat
             # it as an unsolicited event.
             self.log.debug("_dispatch() found no WaitForReqid with reqid %s", reqid)
+            # stick reqid back in, in case any WaitFor cares
+            data["reqid"] = reqid
             return self._unsolicited(pump, data)
         # Okay, we've found the right WaitForReqid object, let it process the
         # event.
@@ -491,7 +484,7 @@ class WaitFor(object):
         # matter because we can retrieve those items.
         if self.queue.empty() and not self.vclient.connected:
             # ViewerClient has disconnected and the queue has been drained.
-            raise leap.ViewerShutdown("Viewer disconnected")
+            raise ViewerShutdown()
         # Here, either the viewer is still connected or there are remaining
         # items in our queue.
         # Use canonical eventlet.Timeout() idiom. Happily, the documented

@@ -50,11 +50,6 @@ import sys
 from llbase import llsd
 from eventlet import tpool
 
-# It's important to wrap sys.stdin in a tpool.Proxy. We want to be able to
-# block one eventlet coroutine waiting for data on stdin, WITHOUT blocking the
-# whole process.
-sys.stdin = tpool.Proxy(sys.stdin)
-
 class ProtocolError(Exception):
     def __init__(self, msg, data):
         Exception.__init__(self, msg)
@@ -66,6 +61,47 @@ class ViewerShutdown(ProtocolError):
 
 class ParseError(ProtocolError):
     pass
+
+# String name of reply LLEventPump. Any events the viewer posts to this pump
+# will be serialized to our stdin. We usually specify it as the reply pump for
+# requests to internal viewer services.
+_reply = None
+# String name of command LLEventPump. Any events we post to this pump
+# (serialized over our stdout) will engage LLLeapListener operations such as
+# listening on a specified other LLEventPump, etc.
+_command = None
+# Dict of features added to the LEAP protocol since baseline implementation.
+# Before engaging a new feature that might break an older viewer, we can check
+# for the presence of that feature key. This table is solely about the LEAP
+# protocol itself, the way we communicate with the viewer over stdin/stdout.
+# To discover whether a given listener exists, or supports a particular
+# operation, use _command's "getAPI" operation.
+_features = None
+
+# deal with initial stdin message
+def __init__():
+    # guard against duplicate calls
+    if _reply is not None:
+        return
+    # It's important to wrap sys.stdin in a tpool.Proxy. We want to be able to
+    # block one eventlet coroutine waiting for data on stdin, WITHOUT blocking the
+    # whole process.
+    sys.stdin = tpool.Proxy(sys.stdin)
+    # This will throw if the initial write to stdin doesn't follow len:data
+    # protocol, or if the viewer doesn't send a dict in the form we expect.
+    # Note that no matter what features have been added to the LEAP protocol,
+    # this initial message MUST be in baseline LEAP protocol.
+    global _reply, _command, _features
+    initial   = get()
+    _reply    = initial['pump']
+    _command  = initial['data']['command']
+    _features = initial['data']['features']
+
+def replypump():
+    return _reply
+
+def cmdpump():
+    return _command
 
 def get(f=None):
     """Read LLSD from the passed open file-like object (default sys.stdin)"""
@@ -126,21 +162,6 @@ def _get(f):
     data = ''.join(parts)
     assert len(data) == length
     return data
-
-# deal with initial stdin message
-# this will throw if the initial write to stdin doesn't
-# follow len:data protocol, or if we couldn't find 'pump'
-# in the dict
-_initial  = get()
-_reply    = _initial['pump']
-_features = _initial['data']['features']
-_command  = _initial['data']['command']
-
-def replypump():
-    return _reply
-
-def cmdpump():
-    return _command
 
 def put(req, f=None):
     if f is None:
