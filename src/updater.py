@@ -15,7 +15,6 @@ import os
 import platform
 import subprocess
 import sys
-import threading
 
 # This must be the FIRST imported module that isn't bundled with Python.
 from util import pass_logger, SL_Logging, BuildData, Application
@@ -26,6 +25,7 @@ if __name__ == '__main__':
 
 import eventlet
 
+import apply_update
 from SL_Launcher import capture_vmp_args
 from runner import PopenRunner
 from InstallerUserMessage import status_message
@@ -178,26 +178,21 @@ def leap(install_key, channel, testok, vvmurl, width):
             if downloaded is None:
                 # We haven't yet downloaded the required update -- do so right
                 # now, in the foreground, with a progress bar.
-                update_manager.download(url=result['url'],
-                                        version=result['version'],
-                                        download_dir=download_dir,
-                                        hash=result['hash'],
-                                        size=result['size'],
-                                        background=False)
+                installer = download(
+                    which="required", download_dir=download_dir, result=result, ui=True)
+            else:
+                installer = apply_update.get_filename(download_dir)
             # Presumably we've just downloaded the new installer.
-            # TODO: Wouldn't it make sense for check_for_completed_download()
-            # and download() to return the full pathname of the downloaded
-            # installer, and for install() to accept that?
-            runner = update_manager.install(command=[],
-                                            platform_key=platform_key,
-                                            download_dir=download_dir)
-            runner.run()
+            install(platform_key=platform_key, installer=installer)
 
         else:
             # We did NOT catch the viewer before login.
             if downloaded is None:
-                # At least download it before the next viewer run.
-                background_download("required", download_dir, result)
+                # At least download it before the next viewer run. Download it
+                # inline on this same thread -- we're not doing anything else
+                # anyway.
+                installer = download(which="required", download_dir=download_dir,
+                                     result=result, ui=False)
 
         # Either way, done handling required update.
         return
@@ -209,80 +204,36 @@ def leap(install_key, channel, testok, vvmurl, width):
         return
 
     # Yes the user is willing to accept optional updates. Have we already
-    # downloaded this one?
-    if downloaded is None:
-        # no, download it
-        background_download("optional", download_dir, result)
-        # and that's all we can do for now, we'll check for completion next run
-        return
-
+    # prompted? Did the user direct us to skip this particular version?
     if downloaded == 'skip':
         log.info("Skipping this update per previous choice. "
                  "Delete the .skip file in %s to change this.", download_dir)
         return
 
+    # Have we already downloaded this one?
+    if downloaded is None:
+        # no, download it inline on this same thread -- we're not doing
+        # anything else anyway.
+        installer = download(which="optional", download_dir=download_dir,
+                             result=result, ui=False)
+        # If we're still sitting at the Login screen, may as well proceed.
+        process_optional_update(
+            viewer=viewer, installer=installer, version=result['version'],
+            install_mode=install_mode, platform_key=platform_key, download_dir=download_dir)
+        return
+
     if downloaded in ('done', 'next'):
         # found a completed previous download of this optional update
         log.info("Found previously downloaded update in: %s", download_dir)
-        # It matters whether the user has clicked Login yet. If we've already
-        # logged in, just wait until next time.
-        # TODO: That means that a user who always clicks Login really quickly
-        # could go for several sessions before being prompted to install an
-        # already-downloaded optional update.
-        startup_state = viewer.get_startup_state()
-        if startup_state.enum > STATE_LOGIN_WAIT:
-            log.info("User already clicked Login ({}), deferring"
-                     .format(startup_state))
-            return
-
-        # If we're still sitting at the login screen, produce a popup and
-        # then, once the user closes it, shut down the running viewer and
-        # install the new viewer.
-        if 'Install_automatically' == install_mode:
-            response = viewer.request(
-                pump="LLNotifications",
-                data=dict(op="requestAdd", name="OptionalUpdateReady",
-                          substitutions=dict(VERSION=result['version']),
-                          payload={}))
-            return
-
-        # 'Install_ask'
-        # ask the user what to do with the optional update
-        log.info("asking the user what to do with the update")
-        response = viewer.request(
-            pump="LLNotifications",
-            data=dict(op="requestAdd", name="PromptOptionalUpdate",
-                      substitutions=dict(VERSION=result['version']),
-                      payload={}))
-        # The response sent by LLNotifications (packaged as ['response']) is a
-        # dict with keys for every button name in the form, one of whose
-        # values is True. Trust that only one will be true.
-        update_action = next(key for key, value in response['response'].items()
-                             if value)
-        log.debug("Picked %s from %s", update_action, response['response'])
-
-        if update_action == "Yes":
-            log.info("User chose 'Install'")
-            viewer.shutdown()
-            runner = update_manager.install(command=[],
-                                            platform_key=platform_key,
-                                            download_dir=download_dir)
-            runner.run()
-            return
-
-        if update_action == "No":
-            log.info("User chose 'Skip'")
-            put_marker_file(download_dir, ".skip")
-            return
-
-        # Not Now
-        log.info("User chose 'Not Now'")
-        put_marker_file(download_dir, ".next")
+        installer = apply_update.get_filename(download_dir)
+        process_optional_update(
+            viewer=viewer, installer=installer, version=result['version'],
+            install_mode=install_mode, platform_key=platform_key, download_dir=download_dir)
         return
 
     # should never get here
-    log.error("Found nonempty download dir but no marker file. Check returned: %r",
-              downloaded)
+    log.error("Found nonempty download dir '%s' but no marker file. Check returned: %r",
+              download_dir, downloaded)
     return
 
 # ****************************************************************************
@@ -299,14 +250,19 @@ def catch_viewer_before_login(log, viewer, version, notification):
         # notification, pre-empting his/her ability to do that.
         log.info("popping up %s", notification)
         # No timeout; we're waiting for a human being. Patience.
-        response = viewer.request(
-            pump="LLNotifications",
-            data=dict(op="requestAdd", name=notification,
-                      substitutions=dict(VERSION=version),
-                      payload={}))
-        # Presumably it doesn't much matter what's in 'response' ...
-        log.info("User acknowledged")
-        return True
+        try:
+            response = viewer.request(
+                pump="LLNotifications",
+                data=dict(op="requestAdd", name=notification,
+                          substitutions=dict(VERSION=version),
+                          payload={}))
+        except ViewerShutdown:
+            log.info("User closed the viewer")
+            return True
+        else:
+            # Presumably it doesn't much matter what's in 'response' ...
+            log.info("User acknowledged")
+            return True
 
     # User was too quick on the draw: s/he already clicked Login. Try
     # to intercept at the point of login failure.
@@ -330,14 +286,15 @@ def catch_viewer_before_login(log, viewer, version, notification):
             # the user with PauseForUpdate -- and there's no telling how
             # long it might take the user to acknowledge.
             for event in viewer.startupWait.iterate():
-                if event["data"].get("reqid") == reqid:
+                data = event["data"]
+                if data.get("reqid") == reqid:
                     # Oh good, we caught the viewer before login.
-                    log.info("got ack from viewer")
-                    return True
+                    log.info("got ack from viewer: %s", data)
+                    # The viewer indicates whether we should proceed.
+                    return data.get("update", False)
                 # If the startup_state ever gets to STATE_WORLD_INIT or
                 # beyond, login is progressing -- we won't ever get an ack.
                 if event["pump"] == "StartupState":
-                    data = event["data"]
                     startup_state = viewer.State(enum=data.get("enum", 0), str=data.get("str"))
                     if startup_state.enum >= STATE_WORLD_INIT:
                         log.info("Viewer logging in anyway: ({})".format(startup_state))
@@ -349,25 +306,99 @@ def catch_viewer_before_login(log, viewer, version, notification):
         pass
 
 # ****************************************************************************
-#   background_download()
+#   process_optional_update()
 # ****************************************************************************
 @pass_logger
-def background_download(log, which, download_dir, result):
-    log.info("Found %s update to version %s. Downloading in background to: %s",
-             which, result['version'], download_dir)
-    # Create and launch a background thread. Because we do NOT set this
-    # thread as daemon, the updater process won't terminate until the
-    # thread completes.
-    background = threading.Thread(
-        name="downloader",
-        target=update_manager.download,
-        kwargs=dict(url=result['url'],
-                    version=result['version'],
-                    download_dir=download_dir,
-                    hash=result['hash'],
-                    size=result['size'],
-                    background=True))
-    background.start()
+def process_optional_update(log, viewer, installer, version, install_mode, platform_key):
+    # It matters whether the user has clicked Login yet. If we've already
+    # logged in, just wait until next time.
+    # TODO: That means that a user who always clicks Login really quickly
+    # could go for several sessions before being prompted to install an
+    # already-downloaded optional update.
+    startup_state = viewer.get_startup_state()
+    if startup_state.enum > STATE_LOGIN_WAIT:
+        log.info("User already clicked Login ({}), deferring"
+                 .format(startup_state))
+        return
+
+    # We're still sitting at the login screen. At this point, our response
+    # depends on install_mode.
+    if 'Install_automatically' == install_mode:
+        # produce a popup and then, once the user closes it, shut down the
+        # running viewer and install the new viewer.
+        try:
+            response = viewer.request(
+                pump="LLNotifications",
+                data=dict(op="requestAdd", name="OptionalUpdateReady",
+                          substitutions=dict(VERSION=version), payload={}))
+        except ViewerShutdown:
+            # User closed the viewer instead of clicking OK -- same thing.
+            pass
+        else:
+            viewer.shutdown()
+        install(platform_key=platform_key, installer=installer)
+        return
+
+    if 'Install_ask' == install_mode:
+        # ask the user what to do with the optional update
+        log.info("asking the user what to do with the update")
+        try:
+            response = viewer.request(
+                pump="LLNotifications",
+                data=dict(op="requestAdd", name="PromptOptionalUpdate",
+                          substitutions=dict(VERSION=version), payload={}))
+        except ViewerShutdown:
+            # User closed the viewer. In this context, let's take that as "Go
+            # ahead and install the update."
+            install(platform_key=platform_key, installer=installer)
+            return
+
+        # The response sent by LLNotifications (packaged as ['response']) is a
+        # dict with keys for every button name in the form, one of whose
+        # values is True. Trust that exactly one will be true.
+        update_action = next(key for key, value in response['response'].items()
+                             if value)
+        log.debug("Picked %s from %s", update_action, response['response'])
+
+        if update_action == "Yes":
+            log.info("User chose 'Install'")
+            viewer.shutdown()
+            install(platform_key=platform_key, installer=installer)
+            return
+
+        if update_action == "No":
+            log.info("User chose 'Skip'")
+            update_manager.put_marker_file(os.path.dirname(installer), ".skip")
+            return
+
+        # Not Now
+        log.info("User chose 'Not Now'")
+        update_manager.put_marker_file(os.path.dirname(installer), ".next")
+        return
+
+    log.warning("Unrecognized install_mode: %r", install_mode)
+
+# ****************************************************************************
+#   download()
+# ****************************************************************************
+@pass_logger
+def download(log, which, download_dir, result, ui=True):
+    log.info("Found %s update to version %s. Downloading%s to: %s",
+             which, result['version'], ("" if ui else " in background"), download_dir)
+    return update_manager.download(url=result['url'],
+                                   version=result['version'],
+                                   download_dir=download_dir,
+                                   hash=result['hash'],
+                                   size=result['size'],
+                                   ui=ui)
+
+# ****************************************************************************
+#   install()
+# ****************************************************************************
+def install(platform_key, installer):
+    runner = update_manager.install(command=[], platform_key=platform_key,
+                                    installer=installer)
+    runner.run()
 
 # ****************************************************************************
 #   main()

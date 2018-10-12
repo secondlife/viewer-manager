@@ -129,6 +129,7 @@ def check_for_completed_download(download_dir, expected_size = 0):
     #next is second and skip is highest.  That is, if the resident said skip, never ask again.  
     #Recall that this download_dir is specific to this viewer version.
     #List marker-file extensions in the order in which we care about them.
+    # TODO: It's not clear what value .next actually adds.
     priority = ['.winstall', '.skip', '.next', '.done']
 
     # return the highest-priority marker we have
@@ -594,35 +595,34 @@ def choose_update(log, platform_key, ForceAddressSize, vvm_response):
 
     return chosen_result
 
-def download(url, version, download_dir, size, hash, background):
+def download(url, version, download_dir, size, hash, ui):
     log=SL_Logging.getLogger('download')
 
-    ground = "background" if background else "foreground"
+    ground = "foreground" if ui else "background"
 
-    #three strikes and you're out
     log.info("Preparing to download new version %s to %s in %s",
              version, download_dir, ground)
+    #three strikes and you're out
     for download_tries in xrange(3):
         download_args = dict(url = url, download_dir = download_dir, size = size,
-                             progressbar = (not background))
+                             progressbar=ui)
         log.debug("%s%s downloader args: %r",
                   ("trying again -- " if download_tries else ""),
                   ground, download_args)
-        # If (not background), we're asking download_update() to put up a
+        # If ui, we're asking download_update() to put up a
         # progress bar. Don't also put up a status message; it would only
         # flicker briefly before the progress bar frame is displayed.
         try:
             filename = download_update.download_update(**download_args)
         except Exception as e:
-            log.warning("Failed to download new version %s in %s downloader.",
-                        version, ground)
-            log.error("%s download exception: %r", ground, e)
+            log.error("Failed to download new version %s in %s downloader: %s: %s",
+                      version, ground, e.__class__.__name__, e)
         else:
             #check to make sure the downloaded file is correct
             down_hash = md5file(filename)
             if down_hash == hash:
                 # once we succeed, stop (re)trying
-                break
+                return filename
             #try again
             log.warning("Hash mismatch: Expected: %s Received: %s" % (hash, down_hash))
 
@@ -630,21 +630,23 @@ def download(url, version, download_dir, size, hash, background):
         # we got through the whole for loop without once succeeding
         message = "Failed to download new version %s from %s. Please check connectivity." % \
                   (version, url)
-        log.warning(message)
-        if not background:
+        log.error(message)
+        if ui:
             InstallerUserMessage.basic_message(message)
-            # We only raise this exception for foreground processing because
-            # on a background thread, what good would it do us? We'd only have
-            # to inject a top-level thread function to eat the exception.
-            raise UpdateError(message)
 
-def install(command, platform_key, download_dir):
-    log=SL_Logging.getLogger('install')
+        raise UpdateError(message)
+
+@pass_logger
+def install(log, command, platform_key, installer):
     InstallerUserMessage.status_message("New version downloaded.\n"
                                         "Installing now, please wait.")
+    # We expect the new installer to be located in a directory whose name is
+    # the version to which we're updating. That's okay because we only use
+    # 'version' for informational messages anyway.
+    download_dir = os.path.dirname(installer)
     version = os.path.basename(download_dir)
     try:
-        runner = apply_update.apply_update(command, download_dir, platform_key)
+        runner = apply_update.apply_update(command, installer, platform_key)
     except apply_update.ApplyError as err:
         InstallerUserMessage.basic_message("Failed to apply " + version)
         log.warning("Failed to update viewer to " + version)
@@ -681,7 +683,7 @@ def update_manager(log, command, cli_overrides = {}):
     # okay.
     # TODO: If we suppress this on the initial run, but the user subsequently
     # updates their OS or graphics card so that we can and should perform
-    # graphics benchmarking, need to rerun in leap() so we can unsuppress.
+    # graphics benchmarking, need to rerun in updater.leap() so we can unsuppress.
     if WindowsVideo.onNo64Windows() \
       and int(BuildData.get('Address Size')) == 64 \
       and WindowsVideo.isUnsupported():
@@ -825,14 +827,16 @@ def update_manager(log, command, cli_overrides = {}):
         #  If [optional download and] Install Automatically: display an alert, install the update and launch updated viewer.
         if downloaded is None:
             # start the download, exception if we fail
-            download(url = chosen_result['url'],
-                     version = chosen_result['version'],
-                     download_dir = download_dir,
-                     hash = chosen_result['hash'],
-                     size = chosen_result['size'],
-                     background = False)
+            installer = download(url = chosen_result['url'],
+                                 version = chosen_result['version'],
+                                 download_dir = download_dir,
+                                 hash = chosen_result['hash'],
+                                 size = chosen_result['size'],
+                                 ui = True)
+        else:
+            installer = apply_update.get_filename(download_dir)
         # Do the install
-        return install(command, platform_key = platform_key, download_dir = download_dir)
+        return install(command, platform_key = platform_key, installer=installer)
     elif 'Install_manual' == install_mode:
         # The user has chosen to install only required updates, and this one is optional,
         # so just run the already-installed viewer. We don't even download the optional
@@ -852,7 +856,7 @@ def update_manager(log, command, cli_overrides = {}):
         # Install and launch now: do it.
         log.info("Found optional update. Download directory is: " + download_dir)
         if downloaded is None:
-            # start a background download           
+            # start a background download
             log.info("Found optional update. Downloading in background to: " + download_dir)
             # Create and launch a background thread. Because we do NOT set
             # this thread as daemon, the process won't terminate until the
@@ -865,16 +869,17 @@ def update_manager(log, command, cli_overrides = {}):
                             download_dir = download_dir,
                             hash = chosen_result['hash'],
                             size = chosen_result['size'],
-                            background = True))
+                            ui=False))
             background.start()
             # run the previously-installed viewer
             return existing_viewer
         elif downloaded == 'done' or downloaded == 'next':
             log.info("Found previously downloaded update in: " + download_dir)
+            installer = apply_update.get_filename(download_dir)
 
             if 'Install_automatically' == install_mode:
                 log.info("updating automatically")
-                return install(command, platform_key = platform_key, download_dir = download_dir)
+                return install(command, platform_key = platform_key, installer=installer)
 
             else: # 'Install_ask'
                 # ask the user what to do with the optional update
@@ -887,7 +892,7 @@ def update_manager(log, command, cli_overrides = {}):
                 update_action = skip_frame.choice3.get()
                 if update_action == 1:
                     log.info("User chose 'Install'")
-                    return install(command, platform_key = platform_key, download_dir = download_dir)
+                    return install(command, platform_key = platform_key, installer=installer)
                 elif update_action == 2:
                     log.info("User chose 'Skip'")
                     put_marker_file(download_dir, ".skip")

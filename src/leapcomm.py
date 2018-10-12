@@ -138,6 +138,10 @@ class ViewerClient(object):
         Send event to ask the viewer to shutdown nicely. Raise
         ViewerWontShutdown if it doesn't seem to respond to the request.
         """
+        # Permit multiple calls without ill effect.
+        if not self.connected:
+            self.log.debug("viewer already shut down")
+            return
         # Send the request. We used to use the "File.Quit" operation invoked
         # by the viewer's UI. The trouble is that -- unless the user has
         # previously checked "never ask me again" -- this pops up "Are you

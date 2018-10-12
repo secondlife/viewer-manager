@@ -34,17 +34,17 @@ Applies an already downloaded update.
 """
 
 from datetime import datetime
-from util import subprocess_args, SL_Logging, BuildData
+from util import subprocess_args, pass_logger, SL_Logging, BuildData
 
 import distutils
 from distutils import dir_util
 
 import ctypes
 import errno
-import fnmatch
 import glob
 import imp
 import InstallerUserMessage as IUM
+import itertools
 import os
 import os.path
 import plistlib
@@ -64,22 +64,26 @@ class ApplyError(Exception):
         log.error(message)
 
 #fnmatch expressions
-LNX_GLOB = '*' + '.bz2'
-MAC_GLOB = '*' + '.dmg'
-MAC_APP_GLOB = '*' + '.app'
-WIN_GLOB = '*' + '.exe'
+LNX_GLOB     = '*.bz2'
+MAC_GLOB     = '*.dmg'
+MAC_APP_GLOB = '*.app'
+WIN_GLOB     = '*.exe'
 
-def get_filename(download_dir):
+@pass_logger
+def get_filename(log, download_dir):
     #given a directory that supposedly has the download, find the installable
     #if you are on platform X and you give the updater a directory with an installable  
     #for platform Y, you are either trying something fancy or get what you deserve
     #or both
-    for filename in os.listdir(download_dir):
-        for glob in LNX_GLOB, MAC_GLOB, WIN_GLOB:
-            if (fnmatch.fnmatch(filename, glob)):
-                return os.path.join(download_dir, filename)
-    #someone gave us a bad directory
-    return None  
+    matches = list(itertools.chain(*(glob.glob(os.path.join(download_dir, pattern))
+                                     for pattern in (LNX_GLOB, MAC_GLOB, WIN_GLOB))))
+    if len(matches) == 1:
+        # perfect, just what we wanted!
+        return matches[0]
+
+    log.error("%s installers in '%s': %s",
+              ("Ambiguous" if matches else "No"), download_dir, matches)
+    return None
           
 def try_dismount(installable, tmpdir):
     log = SL_Logging.getLogger("SL_Apply_Update")
@@ -121,25 +125,18 @@ def try_dismount(installable, tmpdir):
         except Exception, e:
             log.error("Could not umount dmg file %s.  Error messages: %s" % (installable, e.message))    
 
-def apply_update(command, download_dir, platform_key):
-    # returns Runner instance for newly installed viewer
-    # throws an exception on failure for all three
-    installable = get_filename(download_dir)
-    if not installable:
-        #could not find the download
-        raise ValueError("Could not find installable in " + download_dir)
-    
+def apply_update(command, installable, platform_key):
     #apply update using the platform specific tools
-    if platform_key == 'lnx':
-        installed = apply_linux_update(command, installable)
-    elif platform_key == 'mac':
-        installed = apply_mac_update(command, installable)
-    elif platform_key == 'win':
-        installed = apply_windows_update(command, installable)
-    else:
-        raise ValueError("Unknown Platform: " + platform_key)
-        
-    return installed
+    try:
+        apply_platform_update = dict(
+            lnx=apply_linux_update,
+            mac=apply_mac_update,
+            win=apply_windows_update,
+            )[platform_key]
+    except KeyError:
+        raise ApplyError("Unknown Platform: " + platform_key)
+
+    return apply_platform_update(command, installable)
 
 def apply_linux_update(command, installable):
     # UNTESTED
