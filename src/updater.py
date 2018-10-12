@@ -189,8 +189,8 @@ def leap(install_key, channel, testok, vvmurl, width):
             # We did NOT catch the viewer before login.
             if downloaded is None:
                 # At least download it before the next viewer run. Download it
-                # inline on this same thread -- we're not doing anything else
-                # anyway.
+                # silently (no UI), inline on this same thread -- we're not
+                # doing anything else anyway.
                 installer = download(which="required", download_dir=download_dir,
                                      result=result, ui=False)
 
@@ -212,14 +212,14 @@ def leap(install_key, channel, testok, vvmurl, width):
 
     # Have we already downloaded this one?
     if downloaded is None:
-        # no, download it inline on this same thread -- we're not doing
-        # anything else anyway.
+        # no, silently download it inline on this same thread -- we're not
+        # doing anything else anyway.
         installer = download(which="optional", download_dir=download_dir,
                              result=result, ui=False)
         # If we're still sitting at the Login screen, may as well proceed.
         process_optional_update(
             viewer=viewer, installer=installer, version=result['version'],
-            install_mode=install_mode, platform_key=platform_key, download_dir=download_dir)
+            install_mode=install_mode, platform_key=platform_key)
         return
 
     if downloaded in ('done', 'next'):
@@ -228,7 +228,7 @@ def leap(install_key, channel, testok, vvmurl, width):
         installer = apply_update.get_filename(download_dir)
         process_optional_update(
             viewer=viewer, installer=installer, version=result['version'],
-            install_mode=install_mode, platform_key=platform_key, download_dir=download_dir)
+            install_mode=install_mode, platform_key=platform_key)
         return
 
     # should never get here
