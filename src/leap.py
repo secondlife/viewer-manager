@@ -44,6 +44,7 @@ Copyright (c) 2012, Linden Research, Inc.
 $/LicenseInfo$
 """
 
+import errno
 import re
 import os
 import sys
@@ -56,8 +57,8 @@ class ProtocolError(Exception):
         self.data = data
 
 class ViewerShutdown(ProtocolError):
-    def __init__(self):
-        super(ViewerShutdown, self).__init__("Viewer shutdown detected", None)
+    def __init__(self, msg="Viewer shutdown detected"):
+        super(ViewerShutdown, self).__init__(msg, None)
 
 class ParseError(ProtocolError):
     pass
@@ -166,8 +167,13 @@ def _get(f):
 def put(req, f=None):
     if f is None:
         f = sys.stdout
-    f.write(':'.join((str(len(req)), req)))
-    f.flush()
+    try:
+        f.write(':'.join((str(len(req)), req)))
+        f.flush()
+    except OSError as err:
+        if err.errno != errno.EPIPE:
+            raise
+        raise ViewerShutdown("Viewer shut down; can't send")
 
 def send(pump, data, f=None):
     put(llsd.format_notation(dict(pump=pump, data=data)), f=f)
