@@ -81,6 +81,7 @@ _features = None
 
 # deal with initial stdin message
 def __init__():
+    global _reply, _command, _features
     # guard against duplicate calls
     if _reply is not None:
         return
@@ -91,8 +92,7 @@ def __init__():
     # This will throw if the initial write to stdin doesn't follow len:data
     # protocol, or if the viewer doesn't send a dict in the form we expect.
     # Note that no matter what features have been added to the LEAP protocol,
-    # this initial message MUST be in baseline LEAP protocol.
-    global _reply, _command, _features
+    # this initial message MUST use only baseline LEAP protocol.
     initial   = get()
     _reply    = initial['pump']
     _command  = initial['data']['command']
