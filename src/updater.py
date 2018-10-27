@@ -99,7 +99,7 @@ def precheck(log, viewer, args):
 # ****************************************************************************
 # This subcommand is typically invoked by the viewer itself to check for
 # updates during a run.
-def leap(install_key, channel, testok, vvmurl, width):
+def leap(install_key, channel, testok, width):
     """
     Pass:
     install_key: one of the numeric values from the UpdaterServiceSetting combo_box
@@ -107,12 +107,11 @@ def leap(install_key, channel, testok, vvmurl, width):
                  from the viewer command line
     testok:      the viewer's actual UpdaterWillingToTest setting, as
                  possibly overridden from the viewer command line
-    vvmurl:      the URL scheme://hostname/update prefix for the Viewer Version
-                 Manager to query (from UpdaterServiceURL)
     width:       the ForceAddressSize setting
     """
+    # This first: the only way to capture params is as a snapshot of locals(),
+    # so do that before cluttering locals() with local variable assignments.
     params = locals().items()
-    params.sort()
     # If we're run as a LEAP child process, anything we write to stderr goes
     # into the viewer log -- so add stderr as another logging stream. (Note:
     # we continue writing to our log file anyway for when the updater process
@@ -122,24 +121,25 @@ def leap(install_key, channel, testok, vvmurl, width):
     # timestamping each line.
     log = SL_Logging.add_stream(sys.stderr,
                                 formatter=SL_Logging.TimelessFormatter())
+
+    # Use explicit 'or' rather than getenv()'s default= param so that in the
+    # override case, we don't even have to open or read build_data.json. If we
+    # passed get("Update Service") as getenv()'s default value, we'd have to
+    # evaluate it unconditionally.
+    vvmurl = os.getenv("SL_UPDATE_SERVICE") or BuildData.get("Update Service")
+    params.append(('vvmurl', vvmurl))
+
+    varwidth = max(len(var) for var, value in params)
+    params.sort()
+    for var, value in params:
+        log.info("{} {!r}".format(var.ljust(varwidth), value))
+
     # This is where we engage LEAP protocol communications, processing the
     # viewer's initialization data.
     viewer = ViewerClient()
 
     platform_key = Application.platform_key() # e.g. "mac"
-
-    varwidth = max(len(var) for var, value in params)
-    for var, value in params:
-        log.info("{} {!r}".format(var.ljust(varwidth), value))
-
     install_mode = update_manager.decode_install_mode(install_key)
-
-    vvm_override = os.getenv("SL_UPDATE_SERVICE")
-    if vvm_override and vvm_override != vvmurl:
-        vvmurl = vvm_override
-        var = "vvmurl"
-        value = vvmurl
-        log.info("{} {!r}".format(var.ljust(varwidth), value))
 
     result = update_manager.query_vvm(platform_key=platform_key,
                                       channel=channel,
@@ -432,8 +432,6 @@ def main(*raw_args):
                          help='the running viewer\'s channel name')
     subleap.add_argument('testok', type=bool,
                          help='UpdaterWillingToTest setting')
-    subleap.add_argument('vvmurl',
-                         help='UpdaterServiceURL setting')
     subleap.add_argument('width', type=int,
                          help='ForceAddressSize setting')
     subleap.set_defaults(func=leap)
