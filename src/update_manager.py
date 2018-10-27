@@ -339,14 +339,6 @@ def _wmic(*wmic_cmd):
 
 @pass_logger
 def query_vvm_from_settings(log, platform_key, settings):
-    """
-    Ask the viewer version manager what builds are available for me
-    given my platform and version.
-    Returns a map of all responses.
-    """
-    # URI template /update/v1.2/channelname/version/platform/platformversion/willing-to-test/uniqueid
-    # https://lindenlab.atlassian.net/wiki/spaces/SLT/pages/71106564/Viewer+Version+Manager+REST+API
-    # See https://lindenlab.atlassian.net/wiki/spaces/SLT/pages/466081/Viewer+Version+Manager+in+AWS
     channelname = BuildData.get('Channel')
 
     UpdaterWillingToTest = settings.get('UpdaterWillingToTest', 1)
@@ -363,22 +355,30 @@ def query_vvm_from_settings(log, platform_key, settings):
             log.error("Invalid value for UpdaterWillingToTest, assuming %s: %r",
                       UpdaterWillingToTest, bad)
 
-    UpdaterServiceURL = settings.get('UpdaterServiceURL')
-    if not UpdaterServiceURL:
-        UpdaterServiceURL=os.getenv('SL_UPDATE_SERVICE',
-            BuildData.get('Update Service', DEFAULT_UPDATE_SERVICE))
-
     return query_vvm(platform_key=platform_key,
                      channel=channelname,
-                     UpdaterWillingToTest=UpdaterWillingToTest,
-                     UpdaterServiceURL=UpdaterServiceURL)
+                     UpdaterWillingToTest=UpdaterWillingToTest)
 
 @pass_logger
-def query_vvm(log, platform_key, channel, UpdaterWillingToTest, UpdaterServiceURL):
+def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
+    """
+    Ask the viewer version manager what builds are available for me
+    given my platform and version.
+    Returns a map of all responses.
+    """
+    # URI template /update/v1.2/channelname/version/platform/platformversion/willing-to-test/uniqueid
+    # https://lindenlab.atlassian.net/wiki/spaces/SLT/pages/71106564/Viewer+Version+Manager+REST+API
+    # See https://lindenlab.atlassian.net/wiki/spaces/SLT/pages/466081/Viewer+Version+Manager+in+AWS
     version = BuildData.get('Version')
 
+    # Use explicit 'or' rather than getenv()'s default= param so that in the
+    # override case, we don't even have to open or read build_data.json. If we
+    # passed get("Update Service") as getenv()'s default value, we'd have to
+    # evaluate it unconditionally.
+    update_service = os.getenv('SL_UPDATE_SERVICE') or \
+        BuildData.get('Update Service', DEFAULT_UPDATE_SERVICE)
     #suppress warning we get in dev env for altname cert 
-    if UpdaterServiceURL != DEFAULT_UPDATE_SERVICE:
+    if update_service != DEFAULT_UPDATE_SERVICE:
         warnings.simplefilter('ignore', urllib3.exceptions.SecurityWarning)
 
     bitness = getBitness(platform_key)
@@ -407,9 +407,9 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest, UpdaterServiceUR
     # if debugging, ask the VVM to explain how it got the response
     debug_param= {'explain': 1} if log.isEnabledFor(DEBUG) else {}
     log.debug("Sending query to VVM: query %s/%s%s",
-              UpdaterServiceURL, update_urlpath,
+              update_service, update_urlpath,
               (" with explain requested" if debug_param else ""))
-    VVMService = llrest.SimpleRESTService(name='VVM', baseurl=UpdaterServiceURL)
+    VVMService = llrest.SimpleRESTService(name='VVM', baseurl=update_service)
     
     try:
         result_data = VVMService.get(update_urlpath, params=debug_param)
@@ -417,7 +417,7 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest, UpdaterServiceUR
         if res.status == 404: # 404 is how the Viewer Version Manager indicates that the channel is unmanaged
             log.info("Update service returned 'not found'; normally this means the channel is unmanaged (and allowed)")
         else:
-            log.warning("Update service %s/%s failed: %s", UpdaterServiceURL, update_urlpath, res)
+            log.warning("Update service %s/%s failed: %s", update_service, update_urlpath, res)
         return None
 
     log.debug("received result from VVM: %r" % result_data)

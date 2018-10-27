@@ -122,13 +122,6 @@ def leap(install_key, channel, testok, width):
     log = SL_Logging.add_stream(sys.stderr,
                                 formatter=SL_Logging.TimelessFormatter())
 
-    # Use explicit 'or' rather than getenv()'s default= param so that in the
-    # override case, we don't even have to open or read build_data.json. If we
-    # passed get("Update Service") as getenv()'s default value, we'd have to
-    # evaluate it unconditionally.
-    vvmurl = os.getenv("SL_UPDATE_SERVICE") or BuildData.get("Update Service")
-    params.append(('vvmurl', vvmurl))
-
     varwidth = max(len(var) for var, value in params)
     params.sort()
     for var, value in params:
@@ -143,8 +136,7 @@ def leap(install_key, channel, testok, width):
 
     result = update_manager.query_vvm(platform_key=platform_key,
                                       channel=channel,
-                                      UpdaterWillingToTest=testok,
-                                      UpdaterServiceURL=vvmurl)
+                                      UpdaterWillingToTest=testok)
     if not result:
         log.info("No update.")
         update_manager.cleanup_previous_download(platform_key)

@@ -143,7 +143,7 @@ def capture_vmp_args(log, arg_list, cmd_line = None):
 
     vmp_params = {'--channel':'channel', '--settings':'settings', '--set':'set'}
     # the settings set with --set.  All such settings have only one argument.
-    vmp_setters = ('UpdaterServiceSetting', 'UpdaterServiceURL', 'UpdaterWillingToTest', 'ForceAddressSize')   
+    vmp_setters = ('UpdaterServiceSetting', 'UpdaterWillingToTest', 'ForceAddressSize')   
 
     # Here turn the list into a queue, popping off the left as we go. Note that deque() makes a copy by value, not by reference
     # Because of the complexity introduced by the uncertainty of how many options a parameter can take, this is far less complicated code than the more
