@@ -218,7 +218,7 @@ def get_settings(settings_file):
     log=SL_Logging.getLogger('get_settings')
 
     try:
-        settings = llsd.parse(open(settings_file).read())
+        settings = llsd.parse(open(settings_file, 'rb').read())
     except llsd.LLSDParseError as lpe:
         log.warning("Could not parse settings file %r: %s", os.path.abspath(settings_file), lpe)
     except OSError as err:
@@ -700,7 +700,7 @@ def update_manager(log, command, cli_overrides = {}):
                                              'app_settings', 'settings_install.xml')
         try:
             # Does this user already have a settings_install file?
-            with open(install_settings_file) as inf:
+            with open(install_settings_file, 'rb') as inf:
                 install_settings = llsd.parse(inf.read())
         except (IOError, OSError, llsd.LLSDParseError) as err:
             # There's no such file, or the file exists but is garbled.
@@ -722,7 +722,7 @@ def update_manager(log, command, cli_overrides = {}):
             log.debug("No previous SkipBenchmark setting; trying %s",
                       app_settings_file)
             try:
-                with open(app_settings_file) as inf:
+                with open(app_settings_file, 'rb') as inf:
                     SkipBenchmark = llsd.parse(inf.read())['SkipBenchmark']
             except (IOError, OSError, llsd.LLSDParseError, KeyError) as err:
                 # This is more serious: can't read app_settings/settings.xml?!
@@ -749,7 +749,7 @@ def update_manager(log, command, cli_overrides = {}):
         install_settings['SkipBenchmark'] = SkipBenchmark
         # (re)write the settings_install file
         try:
-            with open(install_settings_file, 'w') as outf:
+            with open(install_settings_file, 'wb') as outf:
                 outf.write(llsd.format_pretty_xml(install_settings))
         except (OSError, IOError) as err:
             log.warning("Can't update %s: %s: %s", install_settings_file,

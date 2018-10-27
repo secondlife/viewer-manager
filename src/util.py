@@ -13,8 +13,6 @@ import sys
 import tempfile
 import time
 
-from llbase import llsd
-
 #Because of the evolution over time of the specification of VMP, some methods were added "in place", in particular various getter methods in update manager, which should someday be refactored into this
 #utility class.  
 

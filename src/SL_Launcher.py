@@ -125,7 +125,7 @@ def get_cmd_line(log, cmd_settings_file = None):
 
     log.debug("reading command line rules from '%s'" % cmd_settings_file)
     try:
-        cmd_line = llsd.parse(open(cmd_settings_file).read())
+        cmd_line = llsd.parse(open(cmd_settings_file, 'rb').read())
     except (IOError, OSError, llsd.LLSDParseError) as err:
         log.warning("Could not parse settings file %r: %r", cmd_settings_file, err)
         cmd_line = {}

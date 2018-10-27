@@ -106,9 +106,9 @@ def cmdpump():
 
 def get(f=None):
     """Read LLSD from the passed open file-like object (default sys.stdin)"""
-    if f is None:
-        f = sys.stdin
-    data = _get(f)
+    # Note: 'f' should be open in 'rb' mode: llsd.parse() expects a stream of
+    # bytes, not chars, when that matters.
+    data = _get(f or sys.stdin)
     try:
         return llsd.parse(data)
     except llsd.LLSDParseError, e:
@@ -165,6 +165,8 @@ def _get(f):
     return data
 
 def put(req, f=None):
+    # Note: 'f' should be open in 'wb' mode: llsd.format_notation() produces a
+    # stream of bytes, not chars, when that matters.
     if f is None:
         f = sys.stdout
     try:
