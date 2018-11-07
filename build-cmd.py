@@ -345,7 +345,7 @@ def main():
         os.mkdir(stage_VMP)
 
         pyinstaller(pyinstaller_cmd,
-                    mainfile=os.path.join(src, "updater.py"),
+                    mainfile=os.path.join(src, "SLVersionChecker.py"),
                     dstdir=stage_VMP,
                     icon=icon)
 

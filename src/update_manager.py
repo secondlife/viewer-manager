@@ -683,7 +683,8 @@ def update_manager(log, command, cli_overrides = {}):
     # okay.
     # TODO: If we suppress this on the initial run, but the user subsequently
     # updates their OS or graphics card so that we can and should perform
-    # graphics benchmarking, need to rerun in updater.leap() so we can unsuppress.
+    # graphics benchmarking, need to rerun in SLVersionChecker.leap() so we
+    # can unsuppress.
     if WindowsVideo.onNo64Windows() \
       and int(BuildData.get('Address Size')) == 64 \
       and WindowsVideo.isUnsupported():

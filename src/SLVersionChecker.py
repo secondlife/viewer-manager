@@ -1,6 +1,6 @@
 #!/usr/bin/python
 """\
-@file   updater.py
+@file   SLVersionChecker.py
 @author Nat Goodspeed
 @date   2018-09-12
 @brief  Query, download and install viewer updates as required.
@@ -21,7 +21,7 @@ from util import pass_logger, SL_Logging, BuildData, Application
 if __name__ == '__main__':
     # Do this right away, before even importing our sibling modules, so that
     # even a crash on import will get logged properly.
-    SL_Logging.getLogger('updater')
+    SL_Logging.getLogger('SLVersionChecker')
 
 import eventlet
 
