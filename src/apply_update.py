@@ -286,25 +286,14 @@ def apply_mac_update(command, installable):
     # return ExecRunner(os.path.join(deploy_path, "Contents", "MacOS", "SL_Launcher.py"),
     #                   *command[1:])
 
-@pass_logger
-def apply_windows_update(log, command, installable):
+def apply_windows_update(command, installable):
     IUM.status_message("Launching installer...")
-    # SL-10030: It seems Windows won't let a program running as a Standard
-    # user run a program with a name like "update" or "setup" (see SL-9952).
-    # Rename the downloaded installer before attempting to run it <eyeroll/>.
-    # We hypothesize it's the term "Setup" in the name that Windows dislikes.
-    newname = installable.replace("_Setup", "")
-    # Specifically, copy it and then run it: try to avoid timing glitches in
-    # which some other process thinks, "Oh, no downloaded installer in this
-    # directory yet."
-    log.info("Copying '{}' to '{}'".format(installable, newname))
-    shutil.copy2(installable, newname)
     # Pass back the installer; SL_Launcher will exec it and replace this process.
     # Ignore all command-line arguments; we can't pass them through the NSIS
     # installer to the next viewer anyway. If they're arguments we injected,
     # it's okay because the installer will launch (the new) SL_Launcher.
     # Direct the NSIS installer to create a marker file for cleanup next run.
-    return ExecRunner(newname, "/marker")
+    return ExecRunner(installable, "/marker")
 
 def main():
     import argparse
