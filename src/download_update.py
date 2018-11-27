@@ -39,6 +39,7 @@ import errno
 import glob
 import InstallerUserMessage as IUM
 import os.path
+import re
 import requests
 import sys
 #silences InsecurePlatformWarning
@@ -83,7 +84,14 @@ def download_update(url, download_dir, size, progressbar = False, chunk_size = C
         if err.errno != errno.EEXIST:
             raise
     #the url split provides the basename of the filename
-    filename = os.path.join(download_dir, url.split('/')[-1])
+    basename = url.split('/')[-1]
+    # SL-10030: On some Windows systems, the updater cannot launch a program
+    # whose name contains the word "setup" ... in other words, every Windows
+    # installer :-P
+    # Use re.I because in fact it's capitalized as "Setup", but catch every
+    # possible capitalization.
+    basename = re.sub(r'setup', '', basename, flags=re.I)
+    filename = os.path.join(download_dir, basename)
     log.info("downloading to: %s" % filename)
     req = requests.get(url, stream=True)
 
