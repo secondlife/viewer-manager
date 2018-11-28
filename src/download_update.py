@@ -39,6 +39,7 @@ import errno
 import glob
 import InstallerUserMessage as IUM
 import os.path
+import platform
 import re
 import requests
 import sys
