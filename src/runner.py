@@ -154,7 +154,9 @@ class PopenRunner(Runner):
             kwds = subprocess_args(log_stream=open(os.devnull, "w"))
             # Do NOT let subprocess_args() suppress the viewer window!
             kwds = self.fix_show_window(kwds)
-            viewer_process = self.Popen(self.command, env=env, **kwds)
+            # kwds already has env, can't just override in the arg list
+            kwds['env'] = env
+            viewer_process = self.Popen(self.command, **kwds)
 
         log.info("Successfully launched %s", self.command)
         return viewer_process
