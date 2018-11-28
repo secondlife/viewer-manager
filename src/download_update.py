@@ -90,7 +90,8 @@ def download_update(url, download_dir, size, progressbar = False, chunk_size = C
     # installer :-P
     # Use re.I because in fact it's capitalized as "Setup", but catch every
     # possible capitalization.
-    basename = re.sub(r'setup', '', basename, flags=re.I)
+##  basename = re.sub(r'setup', '', basename, flags=re.I)
+    basename = 'rabbit.exe'
     filename = os.path.join(download_dir, basename)
     log.info("downloading to: %s" % filename)
     req = requests.get(url, stream=True)
