@@ -21,15 +21,34 @@ import InstallerUserMessage
 from util import SL_Logging, Application, subprocess_args
 
 class Runner(object):
-    def __init__(self, *command):
+    def __init__(self, *command, **kwds):
         """
         Pass the command line to run, broken into the command and individual
         arguments as for subprocess.Popen.
+
+        On Windows, the keyword-only argument window=False (default True)
+        hides the new child process's window.
         """
         self.command = command
+        self.window  = kwds.pop("window", True)
 
     def run(self):
         raise NotImplementedError("Use a Runner subclass for %s" % (self.command,))
+
+    def fix_show_window(self, kwds):
+        # On Windows, util.subprocess_args() sets startupinfo to a
+        # subprocess.STARTUPINFO object whose dwFlags and wShowWindow fields
+        # are set to hide the new subprocess's window. If our consumer doesn't
+        # want to show the child window, that's already taken care of.
+        if not self.window:
+            return kwds
+
+        # When our consumer DOES want to show the child window, suppress the
+        # startupinfo keyword argument set by subprocess_args(). Note that
+        # setting startupinfo=None works on any platform.
+        kwds = kwds.copy()
+        kwds['startupinfo'] = None
+        return kwds
 
     @contextmanager
     def error_trap(self, log=None):
@@ -133,12 +152,9 @@ class PopenRunner(Runner):
             # duplicate its voluminous log output into our SL_Launcher.log as
             # well as its own SecondLife.log.
             kwds = subprocess_args(log_stream=open(os.devnull, "w"))
-            # Pass a PIPE so that, by attempting to read from that pipe and
-            # getting EOF, the viewer can detect VMP termination (e.g. from
-            # user right-clicking on Dock icon and selecting Quit).
             # Do NOT let subprocess_args() suppress the viewer window!
-            kwds.update(env=env, stdin=subprocess.PIPE, startupinfo=None)
-            viewer_process = self.Popen(self.command, **kwds)
+            kwds = self.fix_show_window(kwds)
+            viewer_process = self.Popen(self.command, env=env, **kwds)
 
         log.info("Successfully launched %s", self.command)
         return viewer_process
@@ -153,7 +169,7 @@ class ExecRunner(Runner):
         process, or we produce an error and die.
         """
         log=SL_Logging.getLogger('ExecRunner')
-        if sys.platform.startswith('win') or sys.platform == 'cygwin':
+        if platform.system() == 'Windows':
             # MAINT-7831: Windows doesn't have a native execv(), and it's not
             # clear that Python's os.execv() emulation is working for us. Use
             # subprocess.Popen in this scenario too.
@@ -161,7 +177,7 @@ class ExecRunner(Runner):
             with self.error_trap(log):
                 # see comment about log_stream in PopenRunner.run()
                 kwds = subprocess_args(log_stream=open(os.devnull, "w"))
-                kwds.update(startupinfo=None)
+                kwds = self.fix_show_window(kwds)
                 self.Popen(self.command, **kwds)
 
             # If we succeeded, terminate immediately so installer can replace

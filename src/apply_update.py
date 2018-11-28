@@ -34,7 +34,7 @@ Applies an already downloaded update.
 """
 
 from datetime import datetime
-from util import subprocess_args, pass_logger, SL_Logging, BuildData
+from util import subprocess_args, pass_logger, SL_Logging, BuildData, Application
 
 import distutils
 from distutils import dir_util
@@ -289,11 +289,15 @@ def apply_mac_update(command, installable):
 def apply_windows_update(command, installable):
     IUM.status_message("Launching installer...")
     # Pass back the installer; SL_Launcher will exec it and replace this process.
-    # Ignore all command-line arguments; we can't pass them through the NSIS
-    # installer to the next viewer anyway. If they're arguments we injected,
-    # it's okay because the installer will launch (the new) SL_Launcher.
+    # Ignore all incoming command-line arguments; we can't pass them through
+    # the NSIS installer to the next viewer anyway. If they're arguments we
+    # injected, it's okay because the installer will launch (the new)
+    # SL_Launcher.
+    # SL-10030: Try using a .bat file to run the installer, instead of running
+    # it directly. Suppress the .bat file's DOS box window.
     # Direct the NSIS installer to create a marker file for cleanup next run.
-    return ExecRunner(installable, "/marker")
+    return ExecRunner(os.path.join(Application.install_path(), "nextviewer.bat"),
+                      installable, "/marker", window=False)
 
 def main():
     import argparse

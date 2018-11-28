@@ -601,6 +601,7 @@ def subprocess_args(include_stdout=True, log_stream=None):
         # distraction.
         si = subprocess.STARTUPINFO()
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
         # Windows doesn't search the path by default. Pass it an environment so
         # it will.
         env = os.environ
