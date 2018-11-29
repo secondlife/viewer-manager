@@ -357,6 +357,9 @@ def main():
             except:
                 pass
 
+        # don't forget our helper .bat file
+        copy(os.path.join(src, 'nextviewer.bat'), stage_VMP)
+
     print("Build Succeeded")
 
 def pyinstaller(pyinstaller_cmd, mainfile, dstdir, icon, manifest_from_build=None):
