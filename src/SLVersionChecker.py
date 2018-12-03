@@ -83,7 +83,7 @@ def precheck(log, viewer, args):
 
     log.info("Viewer version {} ({} bit)"
              .format(BuildData.get('Version'), BuildData.get('Address Size')))
-    log.debug("viewer binary name: {}".format(viewer))
+    log.debug("viewer binary name: %s", viewer)
 
     # Use of capture_vmp_args() may be overcautious: we know the NSIS
     # installer does not pass any command-line arguments that impact update
