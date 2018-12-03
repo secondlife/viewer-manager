@@ -57,6 +57,20 @@ class Error(Exception):
 def precheck(log, viewer, args):
     # cf. SL_Launcher.main()
 
+    # SL-10153: If the viewer is installed on a path that includes non-ASCII
+    # characters, we fail to launch it because non-ASCII characters are
+    # replaced with ASCII '?'. Since the NSIS installer supports Unicode,
+    # presumably its Exec verb uses CreateProcessW(), which can presumably
+    # pass non-ASCII command-line arguments. However, Python 2 doesn't seem to
+    # deal well with non-ASCII command-line parsing. Thing is, we should
+    # already be able to determine the name of our target executable.
+    executable = Application.executable()
+    if executable != viewer:
+        log.warning("Overriding '%s' with '%s'", viewer, executable)
+        if os.path.basename(executable) != os.path.basename(viewer):
+            log.warning("  despite difference in basename")
+        viewer = executable
+
     # We use a number of other modules, including 'requests'. We want every
     # single module that performs network I/O, or other conventional
     # operations, to perform it using eventlet magic.
