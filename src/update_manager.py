@@ -983,6 +983,10 @@ def check_install_privs(log):
 def cleanup_previous_download(log, platform_key):
     # clean up any previous download dir on windows, see apply_update.apply_update()
     if platform_key == 'win':
+        # It has happened that we've hit an exception even before assigning to
+        # past_download_dir, in which case the original exception is masked by
+        # an unbound local variable exception. Provide a placeholder value.
+        past_download_dir = None
         try:
             past_download_dir = make_download_dir(BuildData.get('Version'))
             #call make to convert our version into a previous download dir path
