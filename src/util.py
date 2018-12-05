@@ -233,7 +233,8 @@ class SL_Logging(object):
         passing this stream to the log_stream parameter of subprocess_args, 
         any stderr output from the subprocess will be directed into the log
         """
-        return SL_Logging.stream(prefix_msg="======== running subcommand %r; any %s follows" % (process, streams))
+        return SL_Logging.stream(prefix_msg="running subcommand %r; any %s follows" %
+                                 (process, streams))
 
     class TimelessFormatter(logging.Formatter):
         """
@@ -425,7 +426,12 @@ class Application(object):
         elif (running_on == 'Linux'): 
             base_dir = os.path.join(os.path.expanduser('~'), app_element_nowhite)
         elif (running_on == 'Windows'):
-            appdata = Application.get_folder_path(Application.CSIDL_APPDATA)
+            # We fervently hope the environment value is properly encoded
+            appdata = os.getenv('APPDATA').decode('utf-8')
+            # but if it's not, non-ASCII characters could have been munged to
+            # '?' (recall that '?' isn't a reasonable pathname character)
+            if '?' in appdata:
+                appdata = Application.get_folder_path(Application.CSIDL_APPDATA)
             base_dir = os.path.join(appdata, app_element_nowhite)
         else:
             raise ValueError("Unsupported platform '%s'" % running_on)
