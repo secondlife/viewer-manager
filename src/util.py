@@ -1,5 +1,4 @@
 import cgitb
-from contextlib import contextmanager
 import errno
 import functools
 import itertools
@@ -234,8 +233,7 @@ class SL_Logging(object):
         passing this stream to the log_stream parameter of subprocess_args, 
         any stderr output from the subprocess will be directed into the log
         """
-        return SL_Logging.stream(prefix_msg="running subcommand %r; any %s follows" %
-                                 (process, streams))
+        return SL_Logging.stream(prefix_msg="======== running subcommand %r; any %s follows" % (process, streams))
 
     class TimelessFormatter(logging.Formatter):
         """
@@ -443,31 +441,29 @@ class Application(object):
         Windows-only function to return the special folder pathname
         corresponding to the passed ID value.
         """
-        # SL-10153: Try emptying PATH before using ctypes.
-        with out_PATH():
-            import ctypes
-            # https://docs.python.org/2.7/library/ctypes.html#loading-dynamic-link-libraries
-            # "windll libraries call functions using the stdcall calling
-            # convention. oledll also uses the stdcall calling convention, and
-            # assumes the functions return a Windows HRESULT error code. The error
-            # code is used to automatically raise a WindowsError exception when
-            # the function call fails."
-            dll = ctypes.oledll.shell32
-            buf = ctypes.create_unicode_buffer(300)
-            # SHGetFolderPath():
-            # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762181(v=vs.85).aspx
-            # This says new code should use SHGetKnownFolderPath():
-            # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762188(v=vs.85).aspx
-            # However, the parameters to SHGetKnownFolderPath() are more
-            # complicated (therefore harder to fake up with Python ctypes) --
-            # you need an entire Python module just to make that one call:
-            # https://gist.github.com/mkropat/7550097
-            # Therefore just use SHGetFolderPath(), whose parameters are
-            # decimal integers documented here:
-            # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762494(v=vs.85).aspx
-            # Discard HRESULT; trust the oledll assertion documented above.
-            dll.SHGetFolderPathW(None, id, None, 0, buf)
-            return buf.value
+        import ctypes
+        # https://docs.python.org/2.7/library/ctypes.html#loading-dynamic-link-libraries
+        # "windll libraries call functions using the stdcall calling
+        # convention. oledll also uses the stdcall calling convention, and
+        # assumes the functions return a Windows HRESULT error code. The error
+        # code is used to automatically raise a WindowsError exception when
+        # the function call fails."
+        dll = ctypes.oledll.shell32
+        buf = ctypes.create_unicode_buffer(300)
+        # SHGetFolderPath():
+        # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762181(v=vs.85).aspx
+        # This says new code should use SHGetKnownFolderPath():
+        # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762188(v=vs.85).aspx
+        # However, the parameters to SHGetKnownFolderPath() are more
+        # complicated (therefore harder to fake up with Python ctypes) --
+        # you need an entire Python module just to make that one call:
+        # https://gist.github.com/mkropat/7550097
+        # Therefore just use SHGetFolderPath(), whose parameters are
+        # decimal integers documented here:
+        # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762494(v=vs.85).aspx
+        # Discard HRESULT; trust the oledll assertion documented above.
+        dll.SHGetFolderPathW(None, id, None, 0, buf)
+        return buf.value
 
     @staticmethod
     def get_executable_name():
@@ -509,25 +505,23 @@ class Application(object):
         # long or short file name, and can use the prefix "\\?\".'
         # The following is adapted from:
         # http://nullege.com/codes/search/ctypes.windll.kernel32.GetModuleFileNameW
-        # SL-10153: Try emptying PATH before using ctypes.
-        with out_PATH():
-            import ctypes
-            name = ctypes.create_unicode_buffer(1024)
-            # "If this [hModule] parameter is NULL [i.e. None], GetModuleFileName
-            # retrieves the path of the executable file of the current process."
-            rc = ctypes.windll.kernel32.GetModuleFileNameW(None, name, len(name))
-            # "If the function fails, the return value is 0 (zero). To get
-            # extended error information, call GetLastError."
-            if not rc:
-                # https://docs.python.org/2/library/ctypes.html#return-types
-                # "WinError is a function which will call Windows FormatMessage()
-                # api to get the string representation of an error code, and
-                # returns an exception. WinError takes an optional error code
-                # parameter, if no one is used, it calls GetLastError() to
-                # retrieve it."
-                raise ctypes.WinError()
-            # must've worked
-            return name.value
+        import ctypes
+        name = ctypes.create_unicode_buffer(1024)
+        # "If this [hModule] parameter is NULL [i.e. None], GetModuleFileName
+        # retrieves the path of the executable file of the current process."
+        rc = ctypes.windll.kernel32.GetModuleFileNameW(None, name, len(name))
+        # "If the function fails, the return value is 0 (zero). To get
+        # extended error information, call GetLastError."
+        if not rc:
+            # https://docs.python.org/2/library/ctypes.html#return-types
+            # "WinError is a function which will call Windows FormatMessage()
+            # api to get the string representation of an error code, and
+            # returns an exception. WinError takes an optional error code
+            # parameter, if no one is used, it calls GetLastError() to
+            # retrieve it."
+            raise ctypes.WinError()
+        # must've worked
+        return name.value
 
     @staticmethod
     def user_settings_path():
@@ -541,31 +535,6 @@ class Application(object):
         #and carried forward through the rest of the updater to determine
         #platform specific actions as appropriate
         return Application.PlatformKey.get(platform.system())
-
-@contextmanager
-def out_PATH():
-    """
-    With ctypes, running on a non-ASCII username or install path, we have
-    sometimes hit WindowsError -2147024773 (aka 0x8007007b):
-    The filename, directory name, or volume label syntax is incorrect.
-    As our only usage above is asking the Windows API to provide a
-    pathname *to* us, rather than accepting a pathname *from* us, this has
-    never made sense to me. We suspect it might be a non-ASCII directory
-    name creeping onto the PATH -- or perhaps the ASCII question marks to
-    which Windows converts non-ASCII characters.
-
-    This contextmanager function temporarily empties PATH for the duration
-    of the 'with' block, restoring it on exit from the block. This doesn't
-    seem to prevent our accessing kernel32 or shell32, and it's easier
-    than examining each entry on PATH to try to determine which of them
-    might be 'bad'.
-    """
-    PATH = os.environ.pop('PATH', '')
-    try:
-        # execute body of 'with' block
-        yield
-    finally:
-        os.environ['PATH'] = PATH
 
 # ****************************************************************************
 #   BuildData
