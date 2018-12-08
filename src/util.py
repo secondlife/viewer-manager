@@ -3,6 +3,7 @@ import errno
 import functools
 import itertools
 import json
+import locale
 import logging
 import os
 import os.path
@@ -426,8 +427,16 @@ class Application(object):
         elif (running_on == 'Linux'): 
             base_dir = os.path.join(os.path.expanduser('~'), app_element_nowhite)
         elif (running_on == 'Windows'):
+            # If $APPDATA contains non-ASCII characters, they should be
+            # encoded -- but ha ha, the encoding depends on the language for
+            # which Windows is configured!
+            encoding = locale.getpreferredencoding()
+            # On an ASCII system, though, we must still be prepared to handle
+            # non-ASCII username. We've observed both 'ascii' and 'US-ASCII'.
+            if 'ascii' in encoding.lower():
+                encoding = 'utf-8'
             # We fervently hope the environment value is properly encoded
-            appdata = os.getenv('APPDATA').decode('utf-8')
+            appdata = os.getenv('APPDATA').decode(encoding)
             # but if it's not, non-ASCII characters could have been munged to
             # '?' (recall that '?' isn't a reasonable pathname character)
             if '?' in appdata:
