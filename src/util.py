@@ -427,18 +427,30 @@ class Application(object):
         elif (running_on == 'Linux'): 
             base_dir = os.path.join(os.path.expanduser('~'), app_element_nowhite)
         elif (running_on == 'Windows'):
-            # If $APPDATA contains non-ASCII characters, they should be
-            # encoded -- but ha ha, the encoding depends on the language for
-            # which Windows is configured!
-            encoding = locale.getpreferredencoding()
-            # On an ASCII system, though, we must still be prepared to handle
-            # non-ASCII username. We've observed both 'ascii' and 'US-ASCII'.
-            if 'ascii' in encoding.lower():
-                encoding = 'utf-8'
-            # We fervently hope the environment value is properly encoded
-            appdata = os.getenv('APPDATA').decode(encoding)
-            # but if it's not, non-ASCII characters could have been munged to
-            # '?' (recall that '?' isn't a reasonable pathname character)
+            appdata = os.getenv('APPDATA') # raw bytes
+            try:
+                # If $APPDATA contains non-ASCII characters, they should be
+                # encoded -- but ha ha, the encoding depends on the language
+                # for which Windows is configured! 'mbcs' is supposed to be
+                # Python idiom for the generic Windows encoding.
+                appdata = appdata.decode('mbcs')
+            except UnicodeDecodeError:
+                # 'mbcs' didn't work -- try getpreferredencoding()?!
+                encoding = locale.getpreferredencoding()
+                # On an ASCII system, though, we must still be prepared to
+                # handle non-ASCII username. On different systems we've
+                # observed getpreferredencoding() to return both 'ascii' and
+                # 'US-ASCII'.
+                if 'ascii' in encoding.lower():
+                    encoding = 'utf-8'
+                # If this decode() call doesn't work either, let it propagate
+                # -- we're out of ideas.
+                appdata = appdata.decode(encoding)
+
+            # The other thing that could have happened is that we could have
+            # received a plain ASCII string in which non-ASCII characters have
+            # been munged to '?'. Recall that '?' isn't a reasonable pathname
+            # character.
             if '?' in appdata:
                 appdata = Application.get_folder_path(Application.CSIDL_APPDATA)
             base_dir = os.path.join(appdata, app_element_nowhite)
