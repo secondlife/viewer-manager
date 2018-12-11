@@ -447,11 +447,12 @@ class Application(object):
                 # -- we're out of ideas.
                 appdata = appdata.decode(encoding)
 
-            # The other thing that could have happened is that we could have
-            # received a plain ASCII string in which non-ASCII characters have
-            # been munged to '?'. Recall that '?' isn't a reasonable pathname
-            # character.
-            if '?' in appdata:
+            # But that's not all that could have gone wrong. We could have
+            # received a plain-ASCII pathname string in which non-ASCII
+            # characters have been munged to '?'; or the decoding could have
+            # produced garbage rather than raising an exception. Does the
+            # putative pathname actually exist?
+            if not os.path.exists(appdata):
                 appdata = Application.get_folder_path(Application.CSIDL_APPDATA)
             base_dir = os.path.join(appdata, app_element_nowhite)
         else:
