@@ -132,17 +132,6 @@ class PopenRunner(Runner):
         log=SL_Logging.getLogger('PopenRunner')
         log.info("Launching %s", self.command)
 
-        env = os.environ.copy()
-        if platform.system() == "Windows":
-            # MAINT-8087: for a Windows user with a non-ASCII username, the
-            # environment variables APPDATA and LOCALAPPDATA are just wrong.
-            # Set them properly. Don't forget to encode them: they have to
-            # pass through the environment as 8-bit strings.
-            env.update(**{
-                key: Application.get_folder_path(id).encode('utf8')
-                for key, id in (("APPDATA",      Application.CSIDL_APPDATA),
-                                ("LOCALAPPDATA", Application.CSIDL_LOCAL_APPDATA))})
-
         with self.error_trap(log):
             # In the frozen environment constructed by PyInstaller on Windows,
             # unless we override both stdout and stderr, we get the dreaded
@@ -154,8 +143,6 @@ class PopenRunner(Runner):
             kwds = subprocess_args(log_stream=open(os.devnull, "w"))
             # Do NOT let subprocess_args() suppress the viewer window!
             kwds = self.fix_show_window(kwds)
-            # kwds already has env, can't just override in the arg list
-            kwds['env'] = env
             viewer_process = self.Popen(self.command, **kwds)
 
         log.info("Successfully launched %s", self.command)

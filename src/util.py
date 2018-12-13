@@ -1,4 +1,5 @@
 import cgitb
+import ctypes
 import errno
 import functools
 import itertools
@@ -14,8 +15,16 @@ import sys
 import tempfile
 import time
 
-#Because of the evolution over time of the specification of VMP, some methods were added "in place", in particular various getter methods in update manager, which should someday be refactored into this
-#utility class.  
+# Because of the evolution over time of the specification of VMP, some methods
+# were added "in place", in particular various getter methods in update
+# manager, which should someday be refactored into this utility class.
+
+try:
+    unicode
+except NameError:
+    # In Python 3, 'unicode' is no longer a builtin type name. But in Python
+    # 2, sometimes we must explicitly convert a string to unicode.
+    unicode = str
 
 class Error(Exception):
     pass
@@ -47,6 +56,43 @@ def udir(file=__file__):
     than util.py.
     """
     return os.path.dirname(ufile(file))
+
+# ****************************************************************************
+#   getenv()
+# ****************************************************************************
+# SL-10153: On a Windows system configured with locale English (United States)
+# when the username (or any other part of a pathname) is non-ASCII, Trouble
+# results. In particular, passing such pathnames through the normal process
+# environment using normal environment access can produce garbage values.
+if not platform.system() == 'Windows':
+    # Everywhere else, os.getenv() should Just Work
+    getenv = os.getenv
+
+else:
+    # "Then There's Windows"
+    # https://docs.microsoft.com/en-us/windows/desktop/Debug/system-error-codes--0-499-
+    ERROR_ENVVAR_NOT_FOUND = 203
+
+    def getenv(key, default=None):
+        key = unicode(key)
+        # From https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-getenvironmentvariable
+        # "An environment variable has a maximum size limit of 32,767
+        # characters, including the null-terminating character."
+        # Don't bother trying a too-small buffer, reallocating and retrying --
+        # just make a big enough buffer for any Windows environment variable.
+        buf = ctypes.create_unicode_buffer(u'\0' * 32767)
+        if ctypes.windll.kernel32.GetEnvironmentVariableW(key, buf, len(buf)-1):
+            return buf.value
+
+        # GetEnvironmentVariableW() returning 0 means it failed for some
+        # reason other than buffer too small
+        # (buffer too small returns a size > nSize param).
+        last_error = ctypes.GetLastError()
+        if last_error == ERROR_ENVVAR_NOT_FOUND:
+            # absence of specified key is considered an "error"
+            return default
+        # something really went wrong
+        raise ctypes.WinError(last_error)
 
 # ****************************************************************************
 #   pass_logger
@@ -268,15 +314,15 @@ class SL_Logging(object):
         Implement the standard Second Life log directory convention,
         with the addition of an environment override for use by tests
         """
-        variable_app_name = (''.join(Application.name().split())).upper() # remove all whitespace, upcase
-        logdir=os.getenv('%s_LOGDIR' % variable_app_name, os.path.join(Application.userpath(), 'logs'))
+        # remove all whitespace, upcase
+        variable_app_name = (''.join(Application.name().split())).upper()
+        logdir=getenv('%s_LOGDIR' % variable_app_name,
+                      os.path.join(Application.userpath(), 'logs'))
 
         try:
             os.makedirs(logdir)
         except OSError as err:
-            if err.errno == errno.EEXIST and os.path.isdir(logdir):
-                pass
-            else:
+            if not (err.errno == errno.EEXIST and os.path.isdir(logdir)):
                 raise
 
         return logdir
@@ -388,11 +434,10 @@ class Application(object):
 
     @staticmethod
     def app_data_path():
-        try:
-            # allow tests to override where to look for application data
-            return os.environ['APP_DATA_DIR']
-        except KeyError:
-            pass
+        # allow tests to override where to look for application data
+        APP_DATA_DIR = getenv('APP_DATA_DIR')
+        if APP_DATA_DIR:
+            return APP_DATA_DIR
         # this is the normal case in the installed app
         if (platform.system() == 'Darwin'):
             # On macOS, find the Resources directory.
@@ -427,31 +472,11 @@ class Application(object):
         elif (running_on == 'Linux'): 
             base_dir = os.path.join(os.path.expanduser('~'), app_element_nowhite)
         elif (running_on == 'Windows'):
-            appdata = os.getenv('APPDATA') # raw bytes
-            try:
-                # If $APPDATA contains non-ASCII characters, they should be
-                # encoded -- but ha ha, the encoding depends on the language
-                # for which Windows is configured! 'mbcs' is supposed to be
-                # Python idiom for the generic Windows encoding.
-                appdata = appdata.decode('mbcs')
-            except UnicodeDecodeError:
-                # 'mbcs' didn't work -- try getpreferredencoding()?!
-                encoding = locale.getpreferredencoding()
-                # On an ASCII system, though, we must still be prepared to
-                # handle non-ASCII username. On different systems we've
-                # observed getpreferredencoding() to return both 'ascii' and
-                # 'US-ASCII'.
-                if 'ascii' in encoding.lower():
-                    encoding = 'utf-8'
-                # If this decode() call doesn't work either, let it propagate
-                # -- we're out of ideas.
-                appdata = appdata.decode(encoding)
-
-            # But that's not all that could have gone wrong. We could have
-            # received a plain-ASCII pathname string in which non-ASCII
-            # characters have been munged to '?'; or the decoding could have
-            # produced garbage rather than raising an exception. Does the
-            # putative pathname actually exist?
+            appdata = getenv('APPDATA')
+            # We could have received a plain-ASCII pathname string in which
+            # non-ASCII characters have been munged to '?'; or decoding
+            # could have produced garbage rather than raising an exception.
+            # Does the putative pathname actually exist?
             if not os.path.exists(appdata):
                 appdata = Application.get_folder_path(Application.CSIDL_APPDATA)
             base_dir = os.path.join(appdata, app_element_nowhite)
@@ -469,7 +494,6 @@ class Application(object):
         Windows-only function to return the special folder pathname
         corresponding to the passed ID value.
         """
-        import ctypes
         # https://docs.python.org/2.7/library/ctypes.html#loading-dynamic-link-libraries
         # "windll libraries call functions using the stdcall calling
         # convention. oledll also uses the stdcall calling convention, and
@@ -533,7 +557,6 @@ class Application(object):
         # long or short file name, and can use the prefix "\\?\".'
         # The following is adapted from:
         # http://nullege.com/codes/search/ctypes.windll.kernel32.GetModuleFileNameW
-        import ctypes
         name = ctypes.create_unicode_buffer(1024)
         # "If this [hModule] parameter is NULL [i.e. None], GetModuleFileName
         # retrieves the path of the executable file of the current process."

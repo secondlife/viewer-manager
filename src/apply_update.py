@@ -267,8 +267,8 @@ def apply_mac_update(command, installable):
     try:
         # Clean up viewer saved state 
         # (see MAINT-3331; this caused a crash on OSX 10.7.5)
-        STATE_DIR = os.path.join(os.environ["HOME"], "Library", "Saved Application State",
-                                 bundle_id + ".savedState")
+        STATE_DIR = os.path.expanduser(os.path.join("~/Library", "Saved Application State",
+                                                    bundle_id + ".savedState"))
         shutil.rmtree(STATE_DIR)  
     except OSError as e:
         #if we fail to delete something that isn't there, that's okay
