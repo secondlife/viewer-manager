@@ -653,12 +653,11 @@ def subprocess_args(include_stdout=True, log_stream=None):
         si = subprocess.STARTUPINFO()
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = subprocess.SW_HIDE
-        # Windows doesn't search the path by default. Pass it an environment so
-        # it will.
-        env = os.environ
+        # Windows doesn't search the path for executable by default. (no longer true?)
+        # We can pass it an environment so it will, but that's unreliable
+        # since pyton 2 environment can't handle unicode (works through ansi).
     except AttributeError: # normal when not on Windows
         si = None
-        env = None
 
     # ``subprocess.check_output`` doesn't allow specifying ``stdout``::
     #
@@ -677,6 +676,7 @@ def subprocess_args(include_stdout=True, log_stream=None):
     else:
         ret = dict(stderr=log_stream)
 
+    env = None
     # On Windows, running this from the binary produced by Pyinstaller
     # with the ``--noconsole`` option requires redirecting everything
     # (stdin, stdout, stderr) to avoid an OSError exception
