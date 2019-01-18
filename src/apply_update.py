@@ -296,8 +296,13 @@ def apply_windows_update(command, installable):
     # SL-10030: Try using a .bat file to run the installer, instead of running
     # it directly. Suppress the .bat file's DOS box window.
     # Direct the NSIS installer to create a marker file for cleanup next run.
-    return ExecRunner(os.path.join(Application.install_path(), "nextviewer.bat"),
-                      installable, "/marker", window=False)
+    exedir, executable = os.path.split(installable)
+    bat_path = os.path.join(exedir, 'nextviewer.bat')
+    # Is it better to write path into file directly?
+    with open(bat_path, "w") as batfile:
+        batfile.write("%*")
+
+    return ExecRunner(bat_path, executable, "/marker", window=False)
 
 def main():
     import argparse
