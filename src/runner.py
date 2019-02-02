@@ -32,12 +32,15 @@ class Runner(object):
         On Windows, the keyword-only argument window=False (default True)
         hides the new child process's window.
         """
-        self.command = command
-        self.window  = kwds.pop("window", True)
-        self.cwd     = kwds.pop("cwd", None)
+        self._command = command
+        self.window   = kwds.pop("window", True)
+        self.cwd      = kwds.pop("cwd", None)
+
+    def command(self):
+        return self._command
 
     def run(self):
-        raise NotImplementedError("Use a Runner subclass for %s" % (self.command,))
+        raise NotImplementedError("Use a Runner subclass for %s" % (self._command,))
 
     def fix_show_window(self, kwds):
         # On Windows, util.subprocess_args() sets startupinfo to a
@@ -61,7 +64,7 @@ class Runner(object):
 
         # to log launch failure
         with self.error_trap(log):
-            # ... attempt to launch self.command ...
+            # ... attempt to launch self._command ...
 
         # If the launch attempt raises an exception, the 'with' block will not
         # return. If control reaches the next statement, the launch attempt
@@ -69,17 +72,17 @@ class Runner(object):
 
         # to avoid failure logging
         with self.error_trap():
-            # ... attempt to launch self.command ...
+            # ... attempt to launch self._command ...
         """
         try:
             yield
         except Exception as err:
             if log:
                 log.error("Failed to launch %s. Error messages as follows:\n%r",
-                          self.command[0], err)
-                message = "Failed to launch %s, see log for details" % self.command[0]
+                          self._command[0], err)
+                message = "Failed to launch %s, see log for details" % self._command[0]
             else:
-                message = "Failed to launch %r\n%r" % (self.command, err)
+                message = "Failed to launch %r\n%r" % (self._command, err)
             InstallerUserMessage.basic_message(message)
             sys.exit(-1)
 
@@ -148,7 +151,7 @@ class PopenRunner(Runner):
         If it succeeds, return the subprocess.Popen object.
         """
         log=SL_Logging.getLogger('PopenRunner')
-        log.info("Launching %s", self.command)
+        log.info("Launching %s", self._command)
 
         with self.error_trap(log):
             # In the frozen environment constructed by PyInstaller on Windows,
@@ -161,9 +164,9 @@ class PopenRunner(Runner):
             kwds = subprocess_args(log_stream=open(os.devnull, "w"))
             # Do NOT let subprocess_args() suppress the viewer window!
             kwds = self.fix_show_window(kwds)
-            viewer_process = self.Popen(self.command, **kwds)
+            viewer_process = self.Popen(self._command, **kwds)
 
-        log.info("Successfully launched %s", self.command)
+        log.info("Successfully launched %s", self._command)
         return viewer_process
 
 class ExecRunner(Runner):
@@ -180,12 +183,12 @@ class ExecRunner(Runner):
             # MAINT-7831: Windows doesn't have a native execv(), and it's not
             # clear that Python's os.execv() emulation is working for us. Use
             # subprocess.Popen in this scenario too.
-            log.info("Running %s", self.command)
+            log.info("Running %s", self._command)
             with self.error_trap(log):
                 # see comment about log_stream in PopenRunner.run()
                 kwds = subprocess_args(log_stream=open(os.devnull, "w"))
                 kwds = self.fix_show_window(kwds)
-                self.Popen(self.command, **kwds)
+                self.Popen(self._command, **kwds)
 
             # If we succeeded, terminate immediately so installer can replace
             # this running executable.
@@ -194,13 +197,13 @@ class ExecRunner(Runner):
         else:                               # any platform other than Windows
             # In this case os.execv() should actually replace this process, just
             # as we want.
-            log.info("Executing %s", self.command)
+            log.info("Executing %s", self._command)
 
             # ensure that logs are closed and flushed before execing
             logging.shutdown()
             # We've just shut down logging; do NOT pass 'log'.
             with self.error_trap():
-                os.execv(self.command[0], self.command)
+                os.execv(self._command[0], self._command)
                 # if that worked, we're gone...
 
             # process has been replaced or killed - does not return
