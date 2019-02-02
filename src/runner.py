@@ -26,11 +26,15 @@ class Runner(object):
         Pass the command line to run, broken into the command and individual
         arguments as for subprocess.Popen.
 
+        The keyword-only argument cwd=path specifies the new child process's
+        current working directory.
+
         On Windows, the keyword-only argument window=False (default True)
         hides the new child process's window.
         """
         self.command = command
         self.window  = kwds.pop("window", True)
+        self.cwd     = kwds.pop("cwd", None)
 
     def run(self):
         raise NotImplementedError("Use a Runner subclass for %s" % (self.command,))
@@ -89,22 +93,36 @@ class Runner(object):
         to the containing directory and then execute the filename.
         """
         if platform.system() != "Windows":
+            # If we were instantiated with a specific cwd= parameter, pass
+            # that through.
+            if self.cwd:
+                kwds['cwd'] = self.cwd
             return subprocess.Popen(command, **kwds)
 
-        # On Windows, use MAINT-8087 workaround.
-        # Get command as a list.
-        if isinstance(command, basestring):
-            command = [command]
+        # On Windows, it matters in which directory we attempt to find the
+        # program of interest: if a command pathname contains non-ASCII
+        # characters, Python 2 fails to properly pass them through Popen. Our
+        # consumer might pass cwd= to our constructor to bypass that problem.
+        if self.cwd:
+            # If we were instantiated with a specific cwd= parameter, use that
+            # as the directory to which we change.
+            progdir = self.cwd
         else:
-            command = list(command)
+            # No cwd= override: infer progdir from command[0] per MAINT-8087.
+            # Get command as a list.
+            if isinstance(command, basestring):
+                command = [command]
+            else:
+                command = list(command)
 
-        # DON'T pass subprocess the whole pathname, just the unqualified
-        # program name. (We assume a command[0]. If you pass an empty list,
-        # you get what you deserve.)
-        progdir, prog = os.path.split(command[0])
-        command[0] = prog
+            # DON'T pass subprocess the whole pathname, just the unqualified
+            # program name. (We assume a command[0]. If you pass an empty list,
+            # you get what you deserve.)
+            progdir, prog = os.path.split(command[0])
+            command[0] = prog
 
-        # change to the program's directory
+        # Change to the program's directory. And no, empirically it doesn't
+        # work simply to pass cwd=progdir to subprocess.Popen.
         olddir = os.getcwd()
         os.chdir(progdir)
         try:
