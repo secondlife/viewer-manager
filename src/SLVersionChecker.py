@@ -27,7 +27,7 @@ import eventlet
 
 import apply_update
 from SL_Launcher import capture_vmp_args
-from runner import PopenRunner
+from runner import Runner, PopenRunner
 from InstallerUserMessage import status_message
 import update_manager
 from leapcomm import ViewerClient, RedirectUnclaimedReqid, ViewerShutdown
@@ -85,21 +85,31 @@ def precheck(log, viewer, args):
              .format(BuildData.get('Version'), BuildData.get('Address Size')))
     log.debug("viewer binary name: %s", viewer)
 
-    # Use of capture_vmp_args() may be overcautious: we know the NSIS
-    # installer does not pass any command-line arguments that impact update
-    # processing, and the user has no chance to alter them.
-    myargs = capture_vmp_args(args)
-    command = [viewer] + list(args)
+    # SL-9980: If this is a Standard Windows user, who had to respond to a UAC
+    # prompt to get Admin privilege for the NSIS installer, and we simply
+    # launch the viewer -- as far as the viewer can tell, it was launched by
+    # the Admin user. It will read (and update) the Admin user's settings. It
+    # will record log files in the Admin user's logs directory. It will cache
+    # in the Admin user's cache directory ... etc. etc. Use conventional
+    # explorer.exe hack to slough off Admin privilege if we have it. Since
+    # explorer.exe only accepts one argument, pass it the shortcut, which
+    # packages up all other arguments of interest.
+    # But since the shortcut's name varies, read it from BuildData.
+    # Because the viewer's directory pathname might contain non-ASCII
+    # characters, direct PopenRunner to navigate to that directory and then
+    # point explorer.exe to the unqualified shortcut name.
+    runner = PopenRunner(os.path.join(os.environ['WINDIR'], 'explorer.exe'),
+                         BuildData.get('AppName') + '.lnk',
+                         cwd=os.path.dirname(viewer))
 
     try:
         # update_manager() returns a Runner instance -- or raises UpdateError.
-        runner = update_manager.update_manager(command, myargs)
+        runner = update_manager.update_manager(runner)
     except update_manager.UpdateError as err:
         log.error("Update manager raised %r" % err)
         # use status_message() so the frame will persist until this process
         # terminates
         status_message('%s\nViewer will launch momentarily.' % err)
-        runner = PopenRunner(*command)
 
     # Clear any existing status message: we're about to launch the viewer.
     status_message(None)
@@ -402,7 +412,9 @@ def download(log, which, download_dir, result, ui=True):
 #   install()
 # ****************************************************************************
 def install(platform_key, installer):
-    runner = update_manager.install(command=[], platform_key=platform_key,
+    # The Runner we pass is used only to extract any possible command-line
+    # arguments. We're not passing any.
+    runner = update_manager.install(runner=Runner(), platform_key=platform_key,
                                     installer=installer)
     runner.run()
 

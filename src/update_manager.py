@@ -637,7 +637,7 @@ def download(url, version, download_dir, size, hash, ui):
         raise UpdateError(message)
 
 @pass_logger
-def install(log, command, platform_key, installer):
+def install(log, runner, platform_key, installer):
     InstallerUserMessage.status_message("New version downloaded.\n"
                                         "Installing now, please wait.")
     # We expect the new installer to be located in a directory whose name is
@@ -646,7 +646,7 @@ def install(log, command, platform_key, installer):
     download_dir = os.path.dirname(installer)
     version = os.path.basename(download_dir)
     try:
-        runner = apply_update.apply_update(command, installer, platform_key)
+        runner = apply_update.apply_update(runner, installer, platform_key)
     except apply_update.ApplyError as err:
         InstallerUserMessage.basic_message("Failed to apply " + version)
         log.warning("Failed to update viewer to " + version)
@@ -661,12 +661,12 @@ def install(log, command, platform_key, installer):
 
 @log_calls
 @pass_logger
-def update_manager(log, command, cli_overrides = {}):
+def update_manager(log, existing_viewer, cli_overrides = {}):
     """
     Pass:
-    command:       list starting with pathname of the existing viewer
+    existing_viewer: a Runner instance for the existing viewer
                    executable, the one installed along with this SL_Launcher
-                   instance, followed by command-line arguments
+                   instance, with any command-line arguments
     cli_overrides: a dict containing VMP-relevant command-line switches
 
     Return:
@@ -758,9 +758,6 @@ def update_manager(log, command, cli_overrides = {}):
         else:
             log.debug("Wrote updated settings to %s", install_settings_file)
 
-    # we end up running the existing viewer in many cases
-    existing_viewer = PopenRunner(*command)
-
     # cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments
 
     #setup and getting initial parameters
@@ -837,7 +834,7 @@ def update_manager(log, command, cli_overrides = {}):
         else:
             installer = apply_update.get_filename(download_dir)
         # Do the install
-        return install(command, platform_key = platform_key, installer=installer)
+        return install(existing_viewer, platform_key = platform_key, installer=installer)
     elif 'Install_manual' == install_mode:
         # The user has chosen to install only required updates, and this one is optional,
         # so just run the already-installed viewer. We don't even download the optional
@@ -880,7 +877,7 @@ def update_manager(log, command, cli_overrides = {}):
 
             if 'Install_automatically' == install_mode:
                 log.info("updating automatically")
-                return install(command, platform_key = platform_key, installer=installer)
+                return install(existing_viewer, platform_key = platform_key, installer=installer)
 
             else: # 'Install_ask'
                 # ask the user what to do with the optional update
@@ -893,7 +890,7 @@ def update_manager(log, command, cli_overrides = {}):
                 update_action = skip_frame.choice3.get()
                 if update_action == 1:
                     log.info("User chose 'Install'")
-                    return install(command, platform_key = platform_key, installer=installer)
+                    return install(existing_viewer, platform_key = platform_key, installer=installer)
                 elif update_action == 2:
                     log.info("User chose 'Skip'")
                     put_marker_file(download_dir, ".skip")
@@ -1008,6 +1005,6 @@ if __name__ == '__main__':
     log = SL_Logging.getLogger('SL_Updater')
     try:
         viewer_binary = Application.executable()
-        update_manager(viewer_binary)
+        update_manager(PopenRunner(viewer_binary))
     except Exception:
         log.exception("Unhandled exception")

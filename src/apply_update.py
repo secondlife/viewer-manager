@@ -49,7 +49,7 @@ import os
 import os.path
 import plistlib
 import re
-from runner import ExecRunner
+from runner import Runner, ExecRunner
 import shutil
 import subprocess
 import sys
@@ -125,7 +125,7 @@ def try_dismount(installable, tmpdir):
         except Exception, e:
             log.error("Could not umount dmg file %s.  Error messages: %s" % (installable, e.message))    
 
-def apply_update(command, installable, platform_key):
+def apply_update(runner, installable, platform_key):
     #apply update using the platform specific tools
     try:
         apply_platform_update = dict(
@@ -136,9 +136,9 @@ def apply_update(command, installable, platform_key):
     except KeyError:
         raise ApplyError("Unknown Platform: " + platform_key)
 
-    return apply_platform_update(command, installable)
+    return apply_platform_update(runner, installable)
 
-def apply_linux_update(command, installable):
+def apply_linux_update(runner, installable):
     # UNTESTED
     log = SL_Logging.getLogger("SL_Apply_Update")
     IUM.status_message("Installing from tarball...")
@@ -160,9 +160,9 @@ def apply_linux_update(command, installable):
 
     # replace the original executable in the command, but pass through all
     # remaining command-line arguments
-    return ExecRunner(os.path.join(install_dir, "SL_Launcher.py"), *command[1:])
+    return ExecRunner(os.path.join(install_dir, "SL_Launcher.py"), *runner.command()[1:])
 
-def apply_mac_update(command, installable):
+def apply_mac_update(runner, installable):
     log = SL_Logging.getLogger("SL_Apply_Update")
 
     #verify dmg file
@@ -281,15 +281,15 @@ def apply_mac_update(command, installable):
     # replace the original executable in the command, but pass through all
     # remaining command-line arguments
     # we can't just exec the .app
-    return ExecRunner('/usr/bin/open', deploy_path, '--args', *command[1:])
+    return ExecRunner('/usr/bin/open', deploy_path, '--args', *runner.command()[1:])
     # Alternatively:
-    # return ExecRunner(os.path.join(deploy_path, "Contents", "MacOS", "SL_Launcher.py"),
-    #                   *command[1:])
+    # return ExecRunner(os.path.join(deploy_path, "Contents", "MacOS", "SecondLife"),
+    #                   *runner.command()[1:])
 
-def apply_windows_update(command, installable):
+def apply_windows_update(runner, installable):
     IUM.status_message("Launching installer...")
     # Pass back the installer; SL_Launcher will exec it and replace this process.
-    # Ignore all incoming command-line arguments; we can't pass them through
+    # Ignore the incoming runner; we can't pass its command-line arguments through
     # the NSIS installer to the next viewer anyway. If they're arguments we
     # injected, it's okay because the installer will launch (the new)
     # SL_Launcher.
@@ -319,7 +319,7 @@ def main():
 
     args = parser.parse_args()
    
-    result = apply_update(["ignored"], download_dir = args.download_dir,
+    result = apply_update(Runner("ignored"), download_dir = args.download_dir,
                           platform_key = args.platform_key)
     
 if __name__ == "__main__":
