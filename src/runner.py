@@ -95,11 +95,13 @@ class Runner(object):
         due to encoding issues. What works is to split() the pathname, change
         to the containing directory and then execute the filename.
         """
+        log = SL_Logging.getLogger('Popen')
         if platform.system() != "Windows":
             # If we were instantiated with a specific cwd= parameter, pass
             # that through.
             if self.cwd:
                 kwds['cwd'] = self.cwd
+                log.info("  in '%s'", self.cwd.encode('utf-8'))
             return subprocess.Popen(command, **kwds)
 
         # On Windows, it matters in which directory we attempt to find the
@@ -110,6 +112,7 @@ class Runner(object):
             # If we were instantiated with a specific cwd= parameter, use that
             # as the directory to which we change.
             progdir = self.cwd
+            log.info("  forcing cwd '%s'", progdir.encode('utf-8'))
         else:
             # No cwd= override: infer progdir from command[0] per MAINT-8087.
             # Get command as a list.
@@ -123,6 +126,7 @@ class Runner(object):
             # you get what you deserve.)
             progdir, prog = os.path.split(command[0])
             command[0] = prog
+            log.info("  inferring cwd '%s'", progdir.encode('utf-8'))
 
         # Change to the program's directory. And no, empirically it doesn't
         # work simply to pass cwd=progdir to subprocess.Popen.

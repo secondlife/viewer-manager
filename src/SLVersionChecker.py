@@ -97,9 +97,11 @@ def precheck(log, viewer, args):
     # But since the shortcut's name varies, read it from BuildData.
     # Because the viewer's directory pathname might contain non-ASCII
     # characters, direct PopenRunner to navigate to that directory and then
-    # point explorer.exe to the unqualified shortcut name.
+    # point explorer.exe to the shortcut name.
+    # Prepend os.curdir to prevent Windows from launching whichever shortcut
+    # by that name is on the current PATH.
     runner = PopenRunner(os.path.join(os.environ['WINDIR'], 'explorer.exe'),
-                         BuildData.get('AppName') + '.lnk',
+                         os.path.join(os.curdir, BuildData.get('AppName') + '.lnk'),
                          cwd=os.path.dirname(viewer))
 
     try:
