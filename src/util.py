@@ -485,8 +485,10 @@ class Application(object):
         return base_dir
 
     # Folder ID values for get_folder_path()
-    CSIDL_APPDATA       = 26
-    CSIDL_LOCAL_APPDATA = 28
+    CSIDL_PROGRAMS         = 0x0002
+    CSIDL_DESKTOPDIRECTORY = 0x0010
+    CSIDL_APPDATA          = 0x001a
+    CSIDL_LOCAL_APPDATA    = 0x001c
 
     @staticmethod
     def get_folder_path(id):

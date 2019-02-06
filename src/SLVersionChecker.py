@@ -11,8 +11,10 @@ $/LicenseInfo$
 """
 
 # Only packages bundled with Python should be imported here.
+import errno
 import os
 import platform
+import shutil
 import subprocess
 import sys
 
@@ -125,7 +127,67 @@ def precheck(log, viewer, args):
 # ****************************************************************************
 # This subcommand is typically invoked by the viewer itself to check for
 # updates during a run.
-def leap(install_key, channel, testok, width):
+def leap(*args, **kwds):
+    """
+    Intercept control between leap_body() and its caller so we can perform
+    some cleanup work on return.
+    """
+    leap_body(*args, **kwds)
+
+    # SL-10469: Along about December 2018, there was a BugSplat RC viewer that
+    # permitted Windows per-user installs. This was later deemed unworkable
+    # (see SL-10396). However, a user who had previously performed a per-user
+    # install might be left with confusing and possibly dangling shortcuts.
+    # We can't reliably make the current NSIS installer remove them because,
+    # if the current user is a Standard Windows user, s/he must seek Admin
+    # privilege elevation to run the installer at all -- and once the
+    # installer is running as Admin, Windows won't divulge the identity of the
+    # original Standard user. We could try to delete any such shortcuts for
+    # the Admin user, but that would do nothing for the Standard user.
+    # Similarly, our precheck() function is run with Admin still in effect.
+    # Not until we get to leap() are we sure to be running with the real
+    # Windows login user's identity.
+    # This ugliness only pertains to Windows.
+    if platform.system() != 'Windows':
+        return
+
+    log = SL_Logging.getLogger('leap')
+    # The shortcuts of interest would be found in (e.g.)
+    # c:\Users\<username>\
+    #   AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Second Life Viewer\*.*
+    #   Desktop\Second Life Viewer.lnk
+    # We can get Windows to tell us the Start Menu\Programs folder
+    # (CSIDL_PROGRAMS) and Desktop (CSIDL_DESKTOPDIRECTORY) so we'll find them
+    # even on oddly-configured systems. The other essential information is our
+    # own application name, found in BuildData.get('AppName').
+    appname  = BuildData.get('AppName')
+    local_progsdir = os.path.join(Application.get_folder_path(Application.CSIDL_PROGRAMS),
+                                  appname)
+    try:
+        shutil.rmtree(local_progsdir)
+    except OSError as err:
+        # Absence of local_progsdir is the normal case. Don't squawk.
+        if err.errno != errno.ENOENT:
+            # This is best-effort cleanup: even if it fails, carry on regardless.
+            log.warning("Couldn't delete old shortcuts at '%s': %s", local_progsdir, err)
+    else:
+        # we actually deleted something -- log it for forensic purposes
+        log.info("Deleted old shortcuts at '%s'", local_progsdir)
+
+    local_desktop_shortcut = os.path.join(Application.get_folder_path(Application.CSIDL_DESKTOPDIRECTORY),
+                                          appname + '.lnk')
+    try:
+        os.remove(local_desktop_shortcut)
+    except OSError as err:
+        # absence is the normal case
+        if err.errno != errno.ENOENT:
+            # still only best-effort
+            log.warning("Couldn't delete old shortcut at '%s': %s", local_desktop_shortcut, err)
+    else:
+        # actually deleted it
+        log.info("Deleted old shortcut at '%s'", local_desktop_shortcut)
+
+def leap_body(install_key, channel, testok, width):
     """
     Pass:
     install_key: one of the numeric values from the UpdaterServiceSetting combo_box
