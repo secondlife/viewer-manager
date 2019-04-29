@@ -29,6 +29,7 @@ from __future__ import print_function
 from shutil import copy, copytree, ignore_patterns, rmtree
 
 import cgitb
+from collections import deque
 import errno
 import glob
 from importlib import import_module
@@ -122,19 +123,24 @@ def main():
         raise Error('Run %s within a virtualenv: it uses pip install' % scriptname)
 
     # First, install the stuff on which this build depends.
-    # ...but only bother with pyinstaller on Windows
+    build_installs = deque(BUILD_DEPS.values())
     if system() != 'Windows':
-        BUILD_DEPS.pop("PyInstaller", None)
+        # only bother with pyinstaller on Windows
+        build_installs.remove("pyinstaller")
+    else:
+        # https://github.com/pypa/pip/issues/6163
+        # Apparently pip 19.0 has a bug that prevents installing PyInstaller.
+        # --no-use-pep517 is supposed to work around it.
+        # But as of 2019-04-29, --no-use-pep517 is only supported on our
+        # Windows TeamCity build hosts! On Mac, pip produces an error!
+        build_installs.appendleft('--no-use-pep517')
 
     # iterating over a dict produces just its keys
     print("Installing %s into virtualenv: %s" %
           (', '.join(itertools.chain(BUILD_DEPS, RUNTIME_DEPS)), virtualenv))
 
     try:
-        # https://github.com/pypa/pip/issues/6163
-        # Apparently pip 19.0 has a bug that prevents installing PyInstaller.
-        # --no-use-pep517 is supposed to work around it.
-        run('pip', 'install', '-U', '--no-use-pep517', *BUILD_DEPS.values())
+        run('pip', 'install', '-U', *build_installs)
     except RunError as err:
         raise Error(str(err))
 
