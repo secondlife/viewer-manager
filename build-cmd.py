@@ -131,7 +131,10 @@ def main():
           (', '.join(itertools.chain(BUILD_DEPS, RUNTIME_DEPS)), virtualenv))
 
     try:
-        run('pip', 'install', '-U', *BUILD_DEPS.values())
+        # https://github.com/pypa/pip/issues/6163
+        # Apparently pip 19.0 has a bug that prevents installing PyInstaller.
+        # --no-use-pep517 is supposed to work around it.
+        run('pip', 'install', '-U', '--no-use-pep517', *BUILD_DEPS.values())
     except RunError as err:
         raise Error(str(err))
 
