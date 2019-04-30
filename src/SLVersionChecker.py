@@ -132,7 +132,16 @@ def leap(*args, **kwds):
     Intercept control between leap_body() and its caller so we can perform
     some cleanup work on return.
     """
-    leap_body(*args, **kwds)
+    log = SL_Logging.getLogger('leap')
+    try:
+        leap_body(*args, **kwds)
+    except ViewerShutdown:
+        # SL-10683: if we hit ViewerShutdown when we're *not* expecting it,
+        # just silently steal away. For instance, when the viewer crashes on
+        # startup, we can't even set up our communications protocol.
+        # (Well, not quite silently.)
+        log.error("Viewer terminated abruptly, shutting down")
+        return
 
     # SL-10469: Along about December 2018, there was a BugSplat RC viewer that
     # permitted Windows per-user installs. This was later deemed unworkable
@@ -151,7 +160,6 @@ def leap(*args, **kwds):
     if platform.system() != 'Windows':
         return
 
-    log = SL_Logging.getLogger('leap')
     # The shortcuts of interest would be found in (e.g.)
     # c:\Users\<username>\
     #   AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Second Life Viewer\*.*
