@@ -175,7 +175,9 @@ def put(req, f=None):
     except OSError as err:
         if err.errno != errno.EPIPE:
             raise
-        raise ViewerShutdown("Viewer shut down; can't send")
+        raise ViewerShutdown("Viewer shut down; can't send; " + repr(err))
+    except IOError as err:
+        raise ViewerShutdown("Viewer shut down; can't send (IO); " + repr(err))
 
 def send(pump, data, f=None):
     put(llsd.format_notation(dict(pump=pump, data=data)), f=f)
