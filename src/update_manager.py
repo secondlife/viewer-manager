@@ -625,6 +625,7 @@ def download(url, version, download_dir, size, hash, ui):
                 return filename
             #try again
             log.warning("Hash mismatch: Expected: %s Received: %s" % (hash, down_hash))
+            os.remove(filename)
 
     else:
         # we got through the whole for loop without once succeeding
