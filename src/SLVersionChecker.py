@@ -34,13 +34,16 @@ from InstallerUserMessage import status_message
 import update_manager
 from leapcomm import ViewerClient, RedirectUnclaimedReqid, ViewerShutdown
 
-# These definitions depend on the viewer's llstartup.h: if EStartupState
-# changes, so must they. Much as we would prefer to rely on string names
-# alone, we must divide the viewer session into "before clicking Login" vs.
-# "after clicking Login", which requires an inequality comparison on the enum
-# value.
-STATE_LOGIN_WAIT = 3
-STATE_WORLD_INIT = 8
+# dict mapping { startup state string name: enum value }
+# These default definitions are based on the viewer's llstartup.h: if
+# EStartupState changes, so must they. Much as we would prefer to rely on
+# string names alone, we must divide the viewer session into "before clicking
+# Login" vs. "after clicking Login", which requires an inequality comparison
+# on the enum value.
+STARTUP_STATES = dict(
+    STATE_LOGIN_WAIT=3,
+    STATE_WORLD_INIT=8,
+)
 
 class Error(Exception):
     pass
@@ -219,6 +222,13 @@ def leap_body(install_key, channel, testok, width):
     # viewer's initialization data.
     viewer = ViewerClient()
 
+    # Ask the viewer for its table of EStartupState strings.
+    table = viewer.request(pump="LLStartUp",
+                           data=dict(op="getStateTable"))["table"]
+    # What we get back is a list of string names, implicitly associating each
+    # with its index. We need a lookup in the other direction: name->index.
+    STARTUP_STATES = {name: index for index, name in enumerate(table)}
+
     platform_key = Application.platform_key() # e.g. "mac"
     install_mode = update_manager.decode_install_mode(install_key)
 
@@ -227,8 +237,15 @@ def leap_body(install_key, channel, testok, width):
                                       UpdaterWillingToTest=testok)
     if not result:
         log.info("No update.")
+        post_guessed_relnotes(viewer)
         update_manager.cleanup_previous_download(platform_key)
         return
+
+    relnotes = result.get('more_info')
+    if relnotes:
+        post_relnotes(viewer, relnotes)
+    else:
+        post_guessed_relnotes(viewer)
 
     result = update_manager.choose_update(platform_key, width, result)
     if not result:
@@ -317,6 +334,25 @@ def leap_body(install_key, channel, testok, width):
     return
 
 # ****************************************************************************
+#   post_guessed_relnotes()
+# ****************************************************************************
+@pass_logger
+def post_guessed_relnotes(log, viewer):
+    # TODO: fetch LLTrans::getString("RELEASE_NOTES_BASE_URL")
+    # Until then, this imitates the generation from viewer version 6.2.3
+    guess = "https://releasenotes.secondlife.com/viewer/%s.html" % BuildData.get('Version')
+    log.warning("No release notes available from VVM, guessing: %s", guess)
+    post_relnotes(viewer, guess)
+
+# ****************************************************************************
+#   post_relnotes()
+# ****************************************************************************
+@pass_logger
+def post_relnotes(log, viewer, relnotes):
+    log.info("Sending relnotes URL '%s'", relnotes)
+    viewer.send(pump="relnotes", data=relnotes)
+
+# ****************************************************************************
 #   catch_viewer_before_login()
 # ****************************************************************************
 @pass_logger
@@ -325,7 +361,7 @@ def catch_viewer_before_login(log, viewer, version, notification):
     log.info("Viewer in {}".format(startup_state))
     # In what state is the viewer? It matters whether the user has clicked
     # Login yet.
-    if startup_state.enum <= STATE_LOGIN_WAIT:
+    if startup_state.enum <= STARTUP_STATES["STATE_LOGIN_WAIT"]:
         # User hasn't yet clicked Login. Pop up a modal viewer
         # notification, pre-empting his/her ability to do that.
         log.info("popping up %s", notification)
@@ -376,7 +412,7 @@ def catch_viewer_before_login(log, viewer, version, notification):
                 # beyond, login is progressing -- we won't ever get an ack.
                 if event["pump"] == "StartupState":
                     startup_state = viewer.State(enum=data.get("enum", 0), str=data.get("str"))
-                    if startup_state.enum >= STATE_WORLD_INIT:
+                    if startup_state.enum >= STARTUP_STATES["STATE_WORLD_INIT"]:
                         log.info("Viewer logging in anyway: ({})".format(startup_state))
                         return False
     except ViewerShutdown:
@@ -396,7 +432,7 @@ def process_optional_update(log, viewer, installer, version, install_mode, platf
     # could go for several sessions before being prompted to install an
     # already-downloaded optional update.
     startup_state = viewer.get_startup_state()
-    if startup_state.enum > STATE_LOGIN_WAIT:
+    if startup_state.enum > STARTUP_STATES["STATE_LOGIN_WAIT"]:
         log.info("User already clicked Login ({}), deferring"
                  .format(startup_state))
         return
