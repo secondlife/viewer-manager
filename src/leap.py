@@ -173,6 +173,8 @@ def put(req, f=None):
         f.write(':'.join((str(len(req)), req)))
         f.flush()
     except OSError as err:
+        if err.errno == errno.EINVAL:
+            raise ViewerShutdown("Viewer shut down; can't send (OS); " + repr(err))
         if err.errno != errno.EPIPE:
             raise
         raise ViewerShutdown("Viewer shut down; can't send; " + repr(err))
