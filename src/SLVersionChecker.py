@@ -25,6 +25,13 @@ if __name__ == '__main__':
     # even a crash on import will get logged properly.
     SL_Logging.getLogger('SLVersionChecker')
 
+# Temporary workaround for "import eventlet" crash SL-11563,
+# normaly eventlet should not reqire any pre-improting
+import dns
+from eventlet.hubs import epolls
+from eventlet.hubs import kqueue
+from eventlet.hubs import poll
+from eventlet.hubs import selects
 import eventlet
 
 import apply_update
