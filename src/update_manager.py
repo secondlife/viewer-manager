@@ -783,6 +783,10 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
         BuildData.override('Channel', channel)
 
     #log.debug("Pre query settings:\n%s", pformat(settings)) # too big to leave this in all the time
+    
+    # Clean previous download of current version before starting next update
+    # This only deletes installer that was marked as 'winstall' (was already installed)
+    cleanup_previous_download(platform_key)
 
     #  On launch, the Viewer Manager should query the Viewer Version Manager update api.
     result_data = query_vvm_from_settings(platform_key=platform_key,
@@ -791,14 +795,12 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
     #nothing to do or error
     if not result_data:
         log.info("No update.")
-        cleanup_previous_download(platform_key)
         # run already-installed viewer
         return existing_viewer
 
     ForceAddressSize = settings.get('ForceAddressSize')
     chosen_result = choose_update(platform_key, ForceAddressSize, result_data)
     if not chosen_result:
-        cleanup_previous_download(platform_key)
         # We didn't find anything better than what we've got, so run that
         return existing_viewer
 
