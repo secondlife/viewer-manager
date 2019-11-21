@@ -284,7 +284,7 @@ def leap_body(install_key, channel, testok, width):
 
     if result['required']:
         log.info("Required update to %s version %s", result['platform'], result['version'])
-        if catch_viewer_before_login(viewer, result['version'], "PauseForUpdate"):
+        if catch_viewer_before_login(viewer, result, "PauseForUpdate"):
             viewer.shutdown()
             # TODO: Is this correct?? Shouldn't we check for partial download?
             if downloaded is None:
@@ -330,7 +330,7 @@ def leap_body(install_key, channel, testok, width):
                              result=result, ui=False)
         # If we're still sitting at the Login screen, may as well proceed.
         process_optional_update(
-            viewer=viewer, installer=installer, version=result['version'],
+            viewer=viewer, installer=installer, result=result,
             install_mode=install_mode, platform_key=platform_key)
         return
 
@@ -339,7 +339,7 @@ def leap_body(install_key, channel, testok, width):
         log.info("Found previously downloaded update in: %s", download_dir)
         installer = apply_update.get_filename(download_dir)
         process_optional_update(
-            viewer=viewer, installer=installer, version=result['version'],
+            viewer=viewer, installer=installer, result=result,
             install_mode=install_mode, platform_key=platform_key)
         return
 
@@ -371,7 +371,7 @@ def post_relnotes(log, viewer, relnotes):
 #   catch_viewer_before_login()
 # ****************************************************************************
 @pass_logger
-def catch_viewer_before_login(log, viewer, version, notification):
+def catch_viewer_before_login(log, viewer, result, notification):
     startup_state = viewer.get_startup_state()
     log.info("Viewer in {}".format(startup_state))
     # In what state is the viewer? It matters whether the user has clicked
@@ -385,7 +385,8 @@ def catch_viewer_before_login(log, viewer, version, notification):
             response = viewer.request(
                 pump="LLNotifications",
                 data=dict(op="requestAdd", name=notification,
-                          substitutions=dict(VERSION=version),
+                          substitutions=dict(VERSION=result["version"],
+                                             URL=result["more_info"]),
                           payload={}))
         except ViewerShutdown:
             log.info("User closed the viewer")
@@ -411,7 +412,11 @@ def catch_viewer_before_login(log, viewer, version, notification):
         with RedirectUnclaimedReqid(viewer.startupWait, viewer, 10, reqid):
             # Now post to the rendezvous point.
             log.info("Posting to LoginSync")
-            viewer.send(pump="LoginSync", data=dict(reqid=reqid))
+            # We add information from the VVM response to our LoginSync post
+            # in case the viewer itself decides to pop up a notification.
+            viewer.send(pump="LoginSync", data=dict(reqid=reqid,
+                                                    VERSION=result['version'],
+                                                    URL=result['more_info']))
             # Monitor startupWait's queue. Though it seems imprudent to wait
             # without a timeout, the viewer may actually end up prompting
             # the user with PauseForUpdate -- and there's no telling how
@@ -440,7 +445,7 @@ def catch_viewer_before_login(log, viewer, version, notification):
 #   process_optional_update()
 # ****************************************************************************
 @pass_logger
-def process_optional_update(log, viewer, installer, version, install_mode, platform_key):
+def process_optional_update(log, viewer, installer, result, install_mode, platform_key):
     # It matters whether the user has clicked Login yet. If we've already
     # logged in, just wait until next time.
     # TODO: That means that a user who always clicks Login really quickly
@@ -460,8 +465,9 @@ def process_optional_update(log, viewer, installer, version, install_mode, platf
         try:
             response = viewer.request(
                 pump="LLNotifications",
-                data=dict(op="requestAdd", name="OptionalUpdateReady",
-                          substitutions=dict(VERSION=version), payload={}))
+                data=dict(op="requestAdd", name="OptionalUpdateReady", payload={},
+                          substitutions=dict(VERSION=result["version"],
+                                             URL=result["more_info"])))
         except ViewerShutdown:
             # User closed the viewer instead of clicking OK -- same thing.
             pass
@@ -476,8 +482,9 @@ def process_optional_update(log, viewer, installer, version, install_mode, platf
         try:
             response = viewer.request(
                 pump="LLNotifications",
-                data=dict(op="requestAdd", name="PromptOptionalUpdate",
-                          substitutions=dict(VERSION=version), payload={}))
+                data=dict(op="requestAdd", name="PromptOptionalUpdate", payload={},
+                          substitutions=dict(VERSION=result["version"],
+                                             URL=result["more_info"])))
         except ViewerShutdown:
             # User closed the viewer. In this context, let's take that as "Go
             # ahead and install the update."
