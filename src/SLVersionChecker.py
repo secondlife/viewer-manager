@@ -149,6 +149,11 @@ def leap(*args, **kwds):
         # (Well, not quite silently.)
         log.error("Viewer terminated abruptly, shutting down")
         return
+    except update_manager.UpdateError as err:
+        # Updater likely have been closed by user, but even in case of genuine failure
+        # we do not handle such case anywhere below, so just log and return 
+        log.error("Update manager raised %r" % err)
+        return
 
     # SL-10469: Along about December 2018, there was a BugSplat RC viewer that
     # permitted Windows per-user installs. This was later deemed unworkable
