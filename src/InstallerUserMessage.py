@@ -196,8 +196,11 @@ class Common(object):
 
     # ---------------------- update the status message -----------------------
     def set_message(self, message):
-        self.message.set(message)
-        self.flush_display()
+        try:
+            self.message.set(message)
+            self.flush_display()
+        except tk.TclError as err:
+            pass
 
 # ****************************************************************************
 #   CustomDialog
@@ -335,7 +338,11 @@ class StatusMessage(ModalRoot, Common):
         # It's actually important to use this incantation to hide the root
         # window: withdraw() leaves the Taskbar/Dock icon insensitive to
         # clicks, versus this alpha trick.
-        self.attributes("-alpha", 0.0)
+        try:
+            self.attributes("-alpha", 0.0)
+        except tk.TclError as err:
+            pass
+            # Updater's window was already terminated
 
 # ****************************************************************************
 #   basic_message(), BasicMessage
@@ -344,7 +351,10 @@ def basic_message(*args, **kwds):
     """
     basic_message(text) just pops up a message box which the user must clear.
     """
-    BasicMessage(root(), *args, **kwds)
+    try:
+        BasicMessage(root(), *args, **kwds)
+    except tk.TclError as err:
+        pass
 
 class BasicMessage(CustomDialog):
     def body(self, parent):
