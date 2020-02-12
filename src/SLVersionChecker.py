@@ -448,9 +448,9 @@ def process_optional_update(log, viewer, installer, version, install_mode, platf
                 data=dict(op="requestAdd", name="PromptOptionalUpdate",
                           substitutions=dict(VERSION=version), payload={}))
         except ViewerShutdown:
-            # User closed the viewer. In this context, let's take that as "Go
-            # ahead and install the update."
-            install(platform_key=platform_key, installer=installer)
+            # User closed the viewer.
+            log.info("User closed viewer without confirming optional update, assuming 'Not Now'")
+            update_manager.put_marker_file(os.path.dirname(installer), ".next")
             return
 
         # The response sent by LLNotifications (packaged as ['response']) is a
