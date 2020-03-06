@@ -46,7 +46,6 @@ $/LicenseInfo$
 
 import errno
 import re
-import os
 import sys
 from llbase import llsd
 from eventlet import tpool

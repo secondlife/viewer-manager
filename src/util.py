@@ -4,7 +4,6 @@ import errno
 import functools
 import itertools
 import json
-import locale
 import logging
 import os
 import os.path

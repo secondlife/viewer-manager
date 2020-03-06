@@ -15,7 +15,6 @@ import errno
 import os
 import platform
 import shutil
-import subprocess
 import sys
 
 # This must be the FIRST imported module that isn't bundled with Python.

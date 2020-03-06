@@ -33,26 +33,21 @@ $/LicenseInfo$
 Applies an already downloaded update.
 """
 
-from datetime import datetime
 from util import subprocess_args, pass_logger, SL_Logging, BuildData, Application
 
 import distutils
 from distutils import dir_util
 
-import ctypes
 import errno
 import glob
-import imp
 import InstallerUserMessage as IUM
 import itertools
 import os
 import os.path
 import plistlib
-import re
 from runner import Runner, ExecRunner
 import shutil
 import subprocess
-import sys
 import tarfile
 import tempfile
 

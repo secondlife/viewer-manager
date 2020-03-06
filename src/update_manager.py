@@ -40,7 +40,6 @@ import errno
 import glob
 import hashlib
 import InstallerUserMessage
-import json
 import os
 import os.path
 from pprint import pformat
@@ -49,7 +48,6 @@ import platform
 from runner import PopenRunner
 import shutil
 import subprocess
-import sys
 import tempfile
 import threading
 # specifically import the sleep() function for testability
@@ -625,7 +623,9 @@ def download(url, version, download_dir, size, hash, ui):
                 return filename
             #try again
             log.warning("Hash mismatch: Expected: %s Received: %s" % (hash, down_hash))
-            os.remove(filename)
+            # on hash mismatch download folder at minimum contains *.done and installer
+            # download_update creates new directory, so safe to remove whole tree
+            shutil.rmtree(download_dir)
 
     else:
         # we got through the whole for loop without once succeeding

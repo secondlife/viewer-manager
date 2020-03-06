@@ -110,8 +110,6 @@ def python_version_check():
 import collections
 from llbase import llsd
 
-from datetime import datetime
-
 #module globals
 
 #imports of other VMP modules

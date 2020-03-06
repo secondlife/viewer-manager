@@ -34,15 +34,11 @@ Performs a download of an update.  In a separate script from update_manager so t
 call it with subprocess.
 """
 import os
-from datetime import datetime
 import errno
 import glob
 import InstallerUserMessage as IUM
 import os.path
-import platform
-import re
 import requests
-import sys
 #silences InsecurePlatformWarning
 # http://stackoverflow.com/questions/29099404/ssl-insecureplatform-error-when-using-requests-package 
 import requests.packages.urllib3
