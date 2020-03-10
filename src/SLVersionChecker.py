@@ -36,7 +36,7 @@ import eventlet
 import apply_update
 from SL_Launcher import capture_vmp_args
 from runner import Runner, PopenRunner
-from InstallerUserMessage import status_message
+from InstallerUserMessage import status_message, AppDestroyed
 import update_manager
 from leapcomm import ViewerClient, RedirectUnclaimedReqid, ViewerShutdown
 
@@ -119,10 +119,24 @@ def precheck(log, viewer, args):
         log.error("Update manager raised %r" % err)
         # use status_message() so the frame will persist until this process
         # terminates
-        status_message('%s\nViewer will launch momentarily.' % err)
+        try:
+            status_message('%s\nViewer will launch momentarily.' % err)
+        except AppDestroyed as e:
+            log.exception("User attempted to quit")
+            sys.exit(1)
+        except Exception as e:
+            log.exception("Failed to update UI")
+            sys.exit(-1)
 
     # Clear any existing status message: we're about to launch the viewer.
-    status_message(None)
+    try:
+        status_message(None)
+    except AppDestroyed as e:
+        log.exception("User attempted to quit")
+        sys.exit(1)
+    except Exception as e:
+        log.exception("Failed to update UI")
+        sys.exit(-1)
 
     # If runner is actually an ExecRunner, or if the launch attempt fails,
     # this run() call won't return.
@@ -151,7 +165,7 @@ def leap(*args, **kwds):
     except update_manager.UpdateError as err:
         # Updater likely have been closed by user, but even in case of genuine failure
         # we do not handle such case anywhere below, so just log and return 
-        log.error("Update manager raised %r" % err)
+        log.exception("Unhandled exception in leap_body")
         return
 
     # SL-10469: Along about December 2018, there was a BugSplat RC viewer that

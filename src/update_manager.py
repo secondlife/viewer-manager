@@ -613,6 +613,7 @@ def download(url, version, download_dir, size, hash, ui):
         try:
             filename = download_update.download_update(**download_args)
         except Exception as e:
+            # Might be caused by user closing manager
             log.error("Failed to download new version %s in %s downloader: %s: %s",
                       version, ground, e.__class__.__name__, e)
         else:
@@ -633,14 +634,23 @@ def download(url, version, download_dir, size, hash, ui):
                   (version, url)
         log.error(message)
         if ui:
-            InstallerUserMessage.basic_message(message)
+            try:
+                InstallerUserMessage.basic_message(message)
+            except Exception as e:
+                # We are already raising an exception, so just log
+                log.exception("Failed to show message")
 
         raise UpdateError(message)
 
 @pass_logger
 def install(log, runner, platform_key, installer):
-    InstallerUserMessage.status_message("New version downloaded.\n"
+    try:
+        InstallerUserMessage.status_message("New version downloaded.\n"
                                         "Installing now, please wait.")
+    except InstallerUserMessage.AppDestroyed as e:
+        raise UpdateError("App was destreoyed")
+    except Exception as e:
+        raise UpdateError("Failed to update InstallerUserMessage")
     # We expect the new installer to be located in a directory whose name is
     # the version to which we're updating. That's okay because we only use
     # 'version' for informational messages anyway.
@@ -648,8 +658,12 @@ def install(log, runner, platform_key, installer):
     version = os.path.basename(download_dir)
     try:
         runner = apply_update.apply_update(runner, installer, platform_key)
-    except apply_update.ApplyError as err:
-        InstallerUserMessage.basic_message("Failed to apply " + version)
+    except apply_update.ApplyError as err:    
+        try:
+            InstallerUserMessage.basic_message("Failed to apply " + version)
+        except Exception as e:
+            # We are already raising an exception, so just log
+            log.exception("Failed to show message")
         log.warning("Failed to update viewer to " + version)
         raise UpdateError("Failed to apply version %s update: %s" %
                           (version, err))
@@ -676,8 +690,13 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
 
     Raises UpdateError in various failure cases.
     """
-    InstallerUserMessage.status_message("Checking for updates\n"
+    try:
+        InstallerUserMessage.status_message("Checking for updates\n"
                                         "This may take a few moments...")
+    except InstallerUserMessage.AppDestroyed as e:
+        raise UpdateError("App was destreoyed")
+    except Exception as e:
+        raise UpdateError("Failed to update InstallerUserMessage")
 
     # It is reported that on Windows 10, some graphics cards cannot deal with
     # our viewer's video benchmarking -- but that if we skip it, things run
@@ -975,8 +994,12 @@ def check_install_privs(log):
         return True
 
     log.info("Current user does NOT have permission to update %s", executable)
-    InstallerUserMessage.basic_message(
-        "Please find a system admin to upgrade Second Life")
+    try:
+        InstallerUserMessage.basic_message(
+            "Please find a system admin to upgrade Second Life")
+    except Exception as e:
+        # already quiting
+        log.exception("Failed to show message")
     return False
 
 @pass_logger

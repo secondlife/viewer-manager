@@ -93,6 +93,7 @@ def download_update(url, download_dir, size, progressbar = False, chunk_size = C
 
     message = "Download Progress"
     if progressbar:
+        # will raise an exception if user closes this
         progress = IUM.root()
         progress.progress_bar(message=message, size = size)
     else:

@@ -83,7 +83,11 @@ class Runner(object):
                 message = "Failed to launch %s, see log for details" % self._command[0]
             else:
                 message = "Failed to launch %r\n%r" % (self._command, err)
-            InstallerUserMessage.basic_message(message)
+            try:
+                InstallerUserMessage.basic_message(message)
+            except:
+                # Already quiting
+                pass
             sys.exit(-1)
 
     def Popen(self, command, **kwds):
