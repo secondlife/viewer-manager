@@ -545,7 +545,9 @@ def main(*raw_args):
                          help='UpdaterServiceSetting value')
     subleap.add_argument('channel',
                          help='the running viewer\'s channel name')
-    subleap.add_argument('testok', type=bool,
+    # This one should be bool, but viewer provides 0 or 1 integer values
+    # which argparse doesn't treat right
+    subleap.add_argument('testok', type=int,
                          help='UpdaterWillingToTest setting')
     subleap.add_argument('width', type=int,
                          help='ForceAddressSize setting')
