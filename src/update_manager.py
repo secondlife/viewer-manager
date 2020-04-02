@@ -395,10 +395,16 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
     #this will always return something usable, error handling in method
     UUID = str(make_VVM_UUID_hash(platform_key))
 
-    # UpdaterWillingToTest is either 0 or 1
-    test_ok = 'testok' if UpdaterWillingToTest else 'testno'
-    log.debug("UpdaterWillingToTest = %r, test_ok = %r", UpdaterWillingToTest, test_ok)
-    
+    # UpdaterWillingToTest is expected to be either 0 or 1, either string or int
+    test_ok = 'testok'
+    try:
+        # convert "0" or "1" to corresponding integer
+        UpdaterWillingToTest = int(UpdaterWillingToTest)
+        test_ok = 'testok' if UpdaterWillingToTest else 'testno'
+        log.debug("UpdaterWillingToTest = %r, test_ok = %r", UpdaterWillingToTest, test_ok)
+    except ValueError:
+        log.error("Invalid value for UpdaterWillingToTest, assuming %s is True",
+                      UpdaterWillingToTest)
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
              (channel, version, VVM_platform, platform_version, test_ok, UUID))
     update_urlpath =  urllib.quote('/'.join(['v1.2', channel, version, VVM_platform, platform_version, test_ok, UUID]))
