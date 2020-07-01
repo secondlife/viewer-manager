@@ -63,8 +63,8 @@ def test_try_dismount():
     else:
         try:
             apply_update.try_dismount(None, "SL TESTING", "/Volumes")
-        except Exception, e:
-            print "Test failed due to: %s" % str(e)
+        except Exception as e:
+            print("Test failed due to: %s" % e)
             assert False    
 
 def test_try_dismount_missing_dmg():
@@ -75,6 +75,6 @@ def test_try_dismount_missing_dmg():
     else:  
         try:
             apply_update.try_dismount(None, "Should Fail Silently", "/Volumes")
-        except Exception, e:
-            print "Test failed due to: %s" % str(e)
+        except Exception as e:
+            print("Test failed due to: %s" % e)
             assert False

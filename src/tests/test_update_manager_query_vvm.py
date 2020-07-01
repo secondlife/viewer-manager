@@ -39,7 +39,7 @@ import sys
 import threading
 import with_setup_args
 
-from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from util import SL_Logging, Application, BuildData
 
 os.environ['APP_DATA_DIR'] = os.path.dirname(__file__)
@@ -158,8 +158,8 @@ class TestHTTPRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             if withdata:
                 self.wfile.write(response)            
-        except Exception, e:
-            print >> sys.stderr, "Exception during GET (ignoring): %s" % str(e)    
+        except Exception as e:
+            print("Exception during GET (ignoring): %s" % e, file=sys.stderr)    
 
 #ripped from llcorehttp tests
 class Server(HTTPServer):
@@ -173,7 +173,6 @@ class Server(HTTPServer):
     # default behavior which *shouldn't* cause the program to return
     # a failure status.
     def handle_error(self, request, client_address):
-        print '-'*40
-        print 'Ignoring exception during processing of request from',
-        print client_address
-        print '-'*40
+        print('-'*40)
+        print('Ignoring exception during processing of request from', client_address)
+        print('-'*40)

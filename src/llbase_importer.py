@@ -19,15 +19,15 @@ _handler = cgitb.Hook(format="text", file=sys.stderr)
 
 # have to define relevant function first so it's available in case import fails
 def diagnostics(err, qualifier="", message=None):
-    print >>sys.stderr, 72*'='
-    print >>sys.stderr, "%s importing llbase%s: %s" % (err.__class__.__name__, qualifier, err)
+    print(72*'=', file=sys.stderr)
+    print("%s importing llbase%s: %s" % (err.__class__.__name__, qualifier, err), file=sys.stderr)
     if message:
-        print >>sys.stderr, message
-    print >>sys.stderr, "APP_DATA_DIR = %r" % os.environ['APP_DATA_DIR']
-    print >>sys.stderr, "sys.path:"
+        print(message, file=sys.stderr)
+    print("APP_DATA_DIR = %r" % os.environ['APP_DATA_DIR'], file=sys.stderr)
+    print("sys.path:", file=sys.stderr)
     pprint(sys.path, sys.stderr)
     _handler.handle()
-    print >>sys.stderr, 72*'='
+    print(72*'=', file=sys.stderr)
     raise
 
 # first, see if we can import just the package root to discover where it's

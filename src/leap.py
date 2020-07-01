@@ -111,9 +111,9 @@ def get(f=None):
     data = _get(f or sys.stdin)
     try:
         return llsd.parse(data)
-    except llsd.LLSDParseError, e:
+    except llsd.LLSDParseError as e:
         msg = 'Bad received packet (%s)' % e
-        print >>sys.stderr, '%s, %s bytes:' % (msg, len(data))
+        print('%s, %s bytes:' % (msg, len(data)), file=sys.stderr)
         showmax = 40
         # We've observed failures with very large packets;
         # dumping the entire packet wastes time and space.
@@ -129,12 +129,12 @@ def get(f=None):
             data = data[:trunc]
             ellipsis = '... (%s more)' % (length - trunc)
         offset = -showmax
-        for offset in xrange(0, len(data)-showmax, showmax):
-            print >>sys.stderr, '%04d: %r +' % \
-                  (offset, data[offset:offset+showmax])
+        for offset in range(0, len(data)-showmax, showmax):
+            print('%04d: %r +' % \
+                  (offset, data[offset:offset+showmax]), file=sys.stderr)
         offset += showmax
-        print >>sys.stderr, '%04d: %r%s' % \
-              (offset, data[offset:], ellipsis)
+        print('%04d: %r%s' % \
+              (offset, data[offset:], ellipsis), file=sys.stderr)
         raise ParseError(msg, data)
 
 def _get(f):

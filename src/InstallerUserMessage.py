@@ -59,9 +59,9 @@ import traceback
 if platform.system() == 'Windows':
     os.environ.setdefault("TIX_LIBRARY", "")
 
-import Tkinter as tk
-import ttk
-from tkSimpleDialog import Dialog
+import tkinter as tk
+from tkinter import ttk
+from tkinter.simpledialog import Dialog
 #for hyperlinks
 import webbrowser
 from util import Application, SL_Logging, udir
@@ -441,40 +441,40 @@ if __name__ == "__main__":
     #basic message window test
     frame2 = InstallerUserMessage(title = "Beatles Quotes for 100")
     frame2.basic_message(message = "...attracts me like no other.")
-    print "Destroyed!"
+    print("Destroyed!")
     sys.stdout.flush()
 
     #binary choice test.  User destroys window when they select.
     frame3 = InstallerUserMessage(title = "Beatles Quotes for 200")
     frame3.binary_choice_message(message = "And all I have to do is think of her.", 
         true = "Don't want to leave her now", false = 'You know I believe and how')
-    print frame3.choice.get()
+    print(frame3.choice.get())
     sys.stdout.flush()
     
     #trinary choice test.  User destroys window when they select.
     frame3a = InstallerUserMessage(title = "Beatles Quotes for 400")
     frame3a.trinary_choice_message(message = "And all I have to do is think of her.", 
         one = "Don't want to leave her now", two = 'You know I believe and how', three = 'John is Dead')
-    print frame3a.choice3.get()
+    print(frame3a.choice3.get())
     sys.stdout.flush()
     
     #trinary link choice test. Click on message text to go to URL. User destroys window when they select.
     frame3b = InstallerUserMessage(title = "Beatles Quotes for 500")
     frame3b.trinary_choice_link_message(message = "Got to be good looking,\n'Cause he so hard to see", url = "http://www.ucla.edu", 
             one = "He bag production.", two = 'He got walrus gumboot.', three = 'He got Ono sideboard.')    
-    print frame3b.choice3.get()
+    print(frame3b.choice3.get())
     sys.stdout.flush()    
 
     #progress bar
     frame4 = InstallerUserMessage(title = "Beatles Quotes for 300")
     frame4.progress_bar(message = "You're asking me will my love grow", size = 100)
-    print "frame defined"
+    print("frame defined")
     for x in range(1, 90, 10):
         time.sleep(1)
-        print "run " + str(x)
+        print("run " + str(x))
         frame4.step(10)
     #tkk progress bars wrap at exactly 100 percent, look full at 99%
-    print "leftovers"
+    print("leftovers")
     frame4.step(9)
     time.sleep(5)
     frame4.destroy()

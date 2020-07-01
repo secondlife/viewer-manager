@@ -113,7 +113,7 @@ def try_dismount(installable, tmpdir):
                                                            log_stream=SL_Logging.stream_from_process(command)))
         log.info("result of subprocess call to detach dmg mount point: %r" % output)
         log.info("hdiutil detach succeeded")  
-    except Exception, e:
+    except Exception as e:
         log.error("Could not detach dmg file %s.  Error messages: %s" % (installable, e.message))  
         #try harder, more forcibly
         try:
@@ -122,7 +122,7 @@ def try_dismount(installable, tmpdir):
                                                  **subprocess_args(include_stdout=False,
                                                                    log_stream=SL_Logging.stream_from_process(command)))
             log.info("result of subprocess call to unmount dmg mount point: %r" % output)
-        except Exception, e:
+        except Exception as e:
             log.error("Could not umount dmg file %s.  Error messages: %s" % (installable, e.message))    
 
 def apply_update(runner, installable, platform_key):

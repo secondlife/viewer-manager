@@ -95,10 +95,10 @@ def test_download_update_null_url(tmpdir1):
     try:
         download_update.download_update(url=None, download_dir=tmpdir1, size=None, progressbar=False)
     #this is the expected error when d_u tries to apply split() to None
-    except AttributeError, e:
+    except AttributeError as e:
         pass
     #something else bad happened
-    except Exception, e:
+    except Exception as e:
         # preserve the original exception and its traceback
         raise
     #we failed to fail

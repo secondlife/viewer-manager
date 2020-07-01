@@ -40,7 +40,7 @@ def test_make_download_dir():
     try:
         download_dir = update_manager.make_download_dir(version)
     except OSError as e:
-        print >>sys.stderr, "make_download_dir failed to eat OSError %s" % str(e)
+        print("make_download_dir failed to eat OSError %s" % e, file=sys.stderr)
         assert False
 
     assert download_dir, "make_download_dir returned None for version %s" % version

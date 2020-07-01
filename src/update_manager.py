@@ -55,7 +55,7 @@ import threading
 # specifically import the sleep() function for testability
 from time import sleep
 #for the quote method
-import urllib
+import urllib.parse
 #for the disable_warnings method 
 import urllib3
 import uuid
@@ -403,7 +403,7 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
     
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
              (channel, version, VVM_platform, platform_version, test_ok, UUID))
-    update_urlpath =  urllib.quote('/'.join(['v1.2', channel, version, VVM_platform, platform_version, test_ok, UUID]))
+    update_urlpath =  urllib.parse.quote('/'.join(['v1.2', channel, version, VVM_platform, platform_version, test_ok, UUID]))
     # if debugging, ask the VVM to explain how it got the response
     debug_param= {'explain': 1} if log.isEnabledFor(DEBUG) else {}
     log.debug("Sending query to VVM: query %s/%s%s",
@@ -603,7 +603,7 @@ def download(url, version, download_dir, size, hash, ui):
     log.info("Preparing to download new version %s to %s in %s",
              version, download_dir, ground)
     #three strikes and you're out
-    for download_tries in xrange(3):
+    for download_tries in range(3):
         download_args = dict(url = url, download_dir = download_dir, size = size,
                              progressbar=ui)
         log.debug("%s%s downloader args: %r",

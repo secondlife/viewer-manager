@@ -64,8 +64,8 @@ def test_get_settings_bad_key(tmpdir1):
         settings_llsd['LagAmount']['Value']
     except KeyError:
         assert True
-    except Exception, e:
-        print "Non KeyError from bad key test: %s" % repr(e)
+    except Exception as e:
+        print("Non KeyError from bad key test: %r" % e)
         assert False
         
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)

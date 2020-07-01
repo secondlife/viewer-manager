@@ -286,7 +286,7 @@ class ViewerClient(object):
             self.connected = False
             # Forward the exception to everyone listening either on
             # self.pending or self.waitfors.
-            for waitfor in self.pending.itervalues():
+            for waitfor in self.pending.values():
                 self.log.debug("sending %s to %s", e.__class__.__name__, waitfor)
                 waitfor._exception(e)
             for p, w in self.waitfors:
@@ -552,7 +552,7 @@ class WaitForEventOnPump(WaitFor):
     for events wrapped the way lleventhost wraps them.
     """
     def __init__(self, vclient, priority, pumps):
-        if isinstance(pumps, basestring):
+        if isinstance(pumps, str):
             # If a single string pump name was passed (typical), make a
             # singleton tuple from it so we can treat uniformly the case of
             # multiple pump names.

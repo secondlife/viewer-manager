@@ -116,7 +116,7 @@ class Runner(object):
         else:
             # No cwd= override: infer progdir from command[0] per MAINT-8087.
             # Get command as a list.
-            if isinstance(command, basestring):
+            if isinstance(command, str):
                 command = [command]
             else:
                 command = list(command)

@@ -9,7 +9,7 @@ import logging
 import os
 import os.path
 import platform
-from StringIO import StringIO
+from io import StringIO
 import subprocess
 import sys
 import tempfile
@@ -18,13 +18,6 @@ import time
 # Because of the evolution over time of the specification of VMP, some methods
 # were added "in place", in particular various getter methods in update
 # manager, which should someday be refactored into this utility class.
-
-try:
-    unicode
-except NameError:
-    # In Python 3, 'unicode' is no longer a builtin type name. But in Python
-    # 2, sometimes we must explicitly convert a string to unicode.
-    unicode = str
 
 class Error(Exception):
     pass
@@ -74,13 +67,13 @@ else:
     ERROR_ENVVAR_NOT_FOUND = 203
 
     def getenv(key, default=None):
-        key = unicode(key)
+        key = str(key)
         # From https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-getenvironmentvariable
         # "An environment variable has a maximum size limit of 32,767
         # characters, including the null-terminating character."
         # Don't bother trying a too-small buffer, reallocating and retrying --
         # just make a big enough buffer for any Windows environment variable.
-        buf = ctypes.create_unicode_buffer(u'\0' * 32767)
+        buf = ctypes.create_unicode_buffer('\0' * 32767)
         if ctypes.windll.kernel32.GetEnvironmentVariableW(key, buf, len(buf)-1):
             return buf.value
 
@@ -191,7 +184,7 @@ class SL_Logging(object):
             except Exception as err:
                 # bad log level shouldn't derail the entire log setup
                 verbosity = logging.DEBUG
-                print >>msgs, "Setting DEBUG level because: %s" % err
+                print("Setting DEBUG level because: %s" % err, file=msgs)
 
             try:
                 logdir = SL_Logging.directory()
@@ -200,7 +193,7 @@ class SL_Logging(object):
                 # find and read build_data.json. Even if we can't find the
                 # official log directory, put our log file SOMEWHERE.
                 logdir = tempfile.gettempdir()
-                print >>msgs, "Redirecting log to %r because:" % logdir
+                print("Redirecting log to %r because:" % logdir, file=msgs)
                 # get diagnostic info for this exception into msgs
                 # while still within the 'except' handler clause
                 handler.handle()
@@ -212,7 +205,7 @@ class SL_Logging(object):
             try:
                 log_name = SL_Logging.rotate(log_basepath, extension=extension, maxsize=logsize)
             except Exception as err:
-                print >>msgs, "Growing previous log file because:"
+                print("Growing previous log file because:", file=msgs)
                 handler.handle()
                 # shrug! Just append to the same log file, despite size!
                 log_name = log_basepath + extension
@@ -714,7 +707,7 @@ class MergedSettings(object):
         """pass overrides as a plain dict mapping keys to actual values"""
         self.overrides = overrides
 
-    def __nonzero__(self):
+    def __bool__(self):
         # not empty if either settings or overrides is non-empty
         return bool(self.overrides) or bool(self.settings)
 

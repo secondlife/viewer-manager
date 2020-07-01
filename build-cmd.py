@@ -23,7 +23,7 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
-from __future__ import print_function
+
 
 # Check https://wiki.lindenlab.com/wiki/How_To_Start_Using_Autobuild/Examples for info on how to build this package
 from shutil import copy, copytree, ignore_patterns, rmtree

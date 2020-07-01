@@ -214,7 +214,7 @@ def leap_body(install_key, channel, testok, width):
     """
     # This first: the only way to capture params is as a snapshot of locals(),
     # so do that before cluttering locals() with local variable assignments.
-    params = locals().items()
+    params = list(locals().items())
     # If we're run as a LEAP child process, anything we write to stderr goes
     # into the viewer log -- so add stderr as another logging stream. (Note:
     # we continue writing to our log file anyway for when the updater process

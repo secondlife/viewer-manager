@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from __future__ import print_function
+
 
 """\
 $LicenseInfo:firstyear=2006&license=viewerlgpl$

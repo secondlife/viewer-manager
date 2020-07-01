@@ -36,7 +36,7 @@ import platform
 import shutil
 import tempfile
 from patch import patch, patch_dict, DELETE
-from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # when running individual test files, this is needed for the imports below
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
