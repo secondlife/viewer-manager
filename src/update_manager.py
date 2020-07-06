@@ -204,8 +204,15 @@ def sleep_between(iterable, message, duration):
     log = SL_Logging.getLogger('sleep_between')
     it = iter(iterable)
     # Yield the first item immediately.
-    # Of course let StopIteration propagate for the empty case.
-    yield next(it)
+    try:
+        yield next(it)
+    except StopIteration:
+        # In Python 2, if a generator function raised StopIteration, the
+        # calling logic would accept that as normal end of iteration. But
+        # Python 3 actually propagates StopIteration to (e.g.) the 'for'
+        # statement, so we must catch it and Do The Right Thing.
+        return
+
     # loop over the rest of the items
     for n, item in enumerate(it):
         log.info(message.format(n=n+1, t=duration))
@@ -225,7 +232,7 @@ def get_settings(settings_file):
         if err.errno == errno.ENOENT:
             log.info("No settings file at %r", os.path.abspath(settings_file))
         else:
-            log.warning("OS error reading settings file %r: %s" % (os.path.abspath(settings_file), e))
+            log.warning("OS error reading settings file %r: %s" % (os.path.abspath(settings_file), err))
     except Exception as e:
         log.warning("Could not read settings file %r: %s", os.path.abspath(settings_file), e)
     else:
@@ -281,7 +288,8 @@ def make_VVM_UUID_hash(platform_key):
         #fake it
         log.info("Unable to get system unique id; constructing a dummy")
         muuid = str(uuid.uuid1())
-    hash = hashlib.md5(muuid).hexdigest()
+    # hashlib requires a bytes object, not a str
+    hash = hashlib.md5(muuid.encode('utf8')).hexdigest()
     return hash
 
 def getBitness(platform_key):

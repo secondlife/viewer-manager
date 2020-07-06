@@ -70,7 +70,7 @@ marker_regex = '*' + '.done'
 # Mock the requests get module and its response object so that we don't need a real request
 class DummyResponse(object):
     def iter_content(self, chunk_size=1, decode_unicode=False):
-        return ['a', 'b', 'c']
+        return [b'a', b'b', b'c']
     
 def dummy_get(url, stream=None): # mock for request.get
     if url != URL:

@@ -157,7 +157,7 @@ class TestHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_header("X-LL-Special", "Mememememe");
             self.end_headers()
             if withdata:
-                self.wfile.write(response)            
+                self.wfile.write(response.encode('utf8'))            
         except Exception as e:
             print("Exception during GET (ignoring): %s" % e, file=sys.stderr)    
 

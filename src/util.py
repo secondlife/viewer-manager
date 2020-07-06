@@ -666,7 +666,10 @@ def subprocess_args(include_stdout=True, log_stream=None):
         # pass literally the same file handle so output interleaves nicely.
         ret = dict(stdout=log_stream, stderr=subprocess.STDOUT)
     else:
-        ret = dict(stderr=log_stream)
+        # With Python 3, unless you pass check_output() any of several
+        # different optional arguments (e.g. universal_newlines), it returns a
+        # bytes object instead of decoding to str.
+        ret = dict(stderr=log_stream, universal_newlines=True)
 
     # On Windows, running this from the binary produced by Pyinstaller
     # with the ``--noconsole`` option requires redirecting everything

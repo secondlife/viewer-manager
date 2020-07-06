@@ -49,7 +49,8 @@ def try_dismount_setup():
         return [], {}
     script_dir = os.path.dirname(os.path.realpath(__file__))
     test_dmg = os.path.join(script_dir, 'tests/data/Second Life Installer.dmg')
-    subprocess.check_output(["hdiutil", "attach", test_dmg, "-mountroot", tmpdir])
+    subprocess.check_output(["hdiutil", "attach", test_dmg, "-mountroot", tmpdir],
+                            universal_newlines=True)
     return [], {}
 
 def try_dismount_teardown():
