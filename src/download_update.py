@@ -34,6 +34,7 @@ Performs a download of an update.  In a separate script from update_manager so t
 call it with subprocess.
 """
 import os
+from contextlib import suppress
 from datetime import datetime
 import errno
 import glob
@@ -78,12 +79,8 @@ def download_update(url, download_dir, size, progressbar = False, chunk_size = C
     log.info("Downloading new viewer from %r to %r" % (url, download_dir))
     log.debug(" url %s, download_dir %s, size %s, progressbar %s, chunk_size %s",
               url, download_dir, size, progressbar, chunk_size)
-    try:
+    with suppress(FileExistsError):
         os.makedirs(download_dir)
-    except OSError as err:
-        # fine if it already exists, other errors not fine
-        if err.errno != errno.EEXIST:
-            raise
     #the url split provides the basename of the filename
     basename = url.split('/')[-1]
 ##  # SL-10030: On some Windows systems, the updater cannot launch a program
