@@ -41,6 +41,7 @@ from pprint import pprint
 import re
 import subprocess
 import sys
+import struct
 import trace
 
 # set this up early to report crashes in anything that follows
@@ -91,15 +92,13 @@ class Error(Exception):
 
 #correctly return bitness
 def getAddressSize():
-    if system() != 'Windows':
-        # We only support 64-bit operating systems ... except for Windows.
-        return 64
-
-    # Sadly, most of the ways that python uses to determine bit width in the
-    # end rely on the CPU/memory/Python build bit width and all return 64.
-    # Scraping sys.version is the only reliable method to discover whether
-    # we're running 32-bit Windows, e.g. on 64-bit-capable hardware.
-    return 32 if '32 bit' in sys.version else 64
+    # The question we ask in this function isn't what the CPU is capable of,
+    # nor whether the Windows OS is 32-bit or 64-bit. The question is how the
+    # Python interpreter was built. PyInstaller builds a 32-bit executable
+    # from 32-bit Python, a 64-bit executable from 64-bit Python. To be able
+    # to run the updater on all potential Windows target hosts, we must build
+    # it using 32-bit Python.
+    return 8*struct.calcsize('P')
     
 def main():
     print("Python version string: %s" % sys.version)
@@ -140,7 +139,11 @@ def main():
           (', '.join(itertools.chain(BUILD_DEPS, RUNTIME_DEPS)), virtualenv))
 
     try:
-        run('pip', 'install', '-U', *build_installs)
+        # 'python -m pip' is recommended since, if you just invoke 'pip', you
+        # could end up finding a different pip than the one associated with
+        # the Python interpreter running the current script.
+        # https://pip.pypa.io/en/latest/user_guide/#using-pip-from-your-program
+        run(sys.executable, '-m', 'pip', 'install', '-U', *build_installs)
     except RunError as err:
         raise Error(str(err))
 
@@ -174,7 +177,7 @@ def main():
     # the system image, ensure our virtualenv has the version specified in
     # RUNTIME_DEPS (or the latest version if not version-locked).
     try:
-        run('pip', 'install', '-U', *RUNTIME_DEPS.values())
+        run(sys.executable, '-m', 'pip', 'install', '-U', *RUNTIME_DEPS.values())
     except RunError as err:
         raise Error(str(err))
 
@@ -200,7 +203,7 @@ def main():
         # that devs can build even with 64-bit Python. (The address size of the
         # executable produced by PyInstaller depends on the address size of the
         # Python interpreter.)
-        print('The Windows VMP must be built on a 32-bit python Windows host', sys.stderr)
+        print('The Windows VMP must be built using 32-bit python', file=sys.stderr)
 
     #run nosetests
     nose_env = os.environ.copy()
@@ -230,6 +233,7 @@ def main():
         #print("nose environment: %r" % nose_env)
         output = subprocess.check_output(command,
                                          stderr=subprocess.STDOUT, env=nose_env,
+                                         universal_newlines=True,
                                          cwd=src)
     except subprocess.CalledProcessError as e:
         #exception attribute only exists on CalledProcessError
@@ -315,46 +319,13 @@ def main():
                 copy(srcpath, dstpath)
     # ------------------------------- Windows --------------------------------
     elif system() == 'Windows':
-        # In a typical Windows install, pyinstaller lives in
-        # C:\PythonXX\Scripts\pyinstaller.exe where Scripts is a sibling of the
-        # python executable.
-        # BUT that's not true of the virtualenv that autobuild runs in, so
-        # search.
-        pyinstaller_runners = [
-            # If what we find is pyinstaller-script.py, need to run it with
-            # our own interpreter.
-            [sys.executable, 'pyinstaller-script.py'],
-            # On the other hand, if we find pyinstaller.exe, just run that.
-            ['pyinstaller.exe'],
-            ]
-        # search directories on PATH
-        # use one-off exception to escape doubly-nested loop
-        class Found(Exception):
-            pass
-        try:
-            for dir in os.environ["PATH"].split(os.pathsep):
-                for cmd in pyinstaller_runners:
-                    # Check if the LAST entry in pyinstaller_cmd is in this dir.
-                    pyinstaller_path = os.path.join(dir, cmd[-1])
-                    if os.path.exists(pyinstaller_path):
-                        raise Found()
-        except Found:
-            pass
-        else:
-            # not on $PATH, hmm, try hard coding the canonical location
-            dir = r'C:\Python27\Scripts'
-            cmd = pyinstaller_runners[0]
-            pyinstaller_path = os.path.join(dir, cmd[-1])
-            print("pyinstaller not on PATH, trying hardcoded %s" % pyinstaller_path)
-
-        # take everything but the last entry in cmd, then append
-        # the new (prepended with dir) pyinstaller_path as last
-        pyinstaller_cmd = cmd[:-1] + [pyinstaller_path]
+        # https://pyinstaller.readthedocs.io/en/stable/usage.html#running-pyinstaller-from-python-code
+        global PyInstaller
+        import PyInstaller.__main__
 
         os.mkdir(stage_VMP)
 
-        pyinstaller(pyinstaller_cmd,
-                    mainfile=os.path.join(src, "SLVersionChecker.py"),
+        pyinstaller(mainfile=os.path.join(src, "SLVersionChecker.py"),
                     dstdir=stage_VMP,
                     icon=icon)
 
@@ -368,12 +339,12 @@ def main():
 
     print("Build Succeeded")
 
-def pyinstaller(pyinstaller_cmd, mainfile, dstdir, icon, manifest_from_build=None):
+def pyinstaller(mainfile, dstdir, icon, manifest_from_build=None):
     basename = os.path.basename(mainfile)
     print((" %s " % basename).center(72, '='))
     print("target %r exists: %s" % (mainfile, os.path.exists(mainfile)))
     # https://pyinstaller.readthedocs.io/en/stable/usage.html#options
-    command = pyinstaller_cmd + [
+    command = [
         # don't prompt, just overwrite previous exe
         "-y",
         # suppress opening console window at runtime
@@ -398,8 +369,9 @@ def pyinstaller(pyinstaller_cmd, mainfile, dstdir, icon, manifest_from_build=Non
     # Temporary: until hook-eventlet.support.greendns.py makes it into
     # PyInstaller, use the one in this directory.
     command.append('--additional-hooks-dir=' + os.path.dirname(__file__))
+    print_command('pyinstaller', *command)
     try:
-        run(*command)
+        PyInstaller.__main__.run(command)
     except Exception as e:
         raise Error("Error building %s: %s: %s" % (mainfile, e.__class__.__name__, e))
 
@@ -418,11 +390,14 @@ def pyinstaller(pyinstaller_cmd, mainfile, dstdir, icon, manifest_from_build=Non
 RunError = subprocess.CalledProcessError
 
 def run(*command, **kwds):
+    print_command(*command)
+    # it's caller's responsibility to catch RunError
+    return subprocess.check_call(command, **kwds)
+
+def print_command(*command):
     print(' '.join((("'%s'" % word) if ' ' in word else word)
                    for word in command))
     sys.stdout.flush()
-    # it's caller's responsibility to catch RunError
-    return subprocess.check_call(command, **kwds)
 
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
