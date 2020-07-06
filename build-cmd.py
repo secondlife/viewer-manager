@@ -30,6 +30,7 @@ from shutil import copy, copytree, ignore_patterns, rmtree
 
 import cgitb
 from collections import deque
+from contextlib import suppress
 import errno
 import glob
 from importlib import import_module
@@ -118,8 +119,8 @@ def main():
     # ensure we're running in a virtualenv
     try:
         virtualenv = os.environ["VIRTUAL_ENV"]
-    except KeyError:
-        raise Error('Run %s within a virtualenv: it uses pip install' % scriptname)
+    except KeyError as err:
+        raise Error('Run %s within a virtualenv: it uses pip install' % scriptname) from err
 
     # First, install the stuff on which this build depends.
     build_installs = deque(BUILD_DEPS.values())
@@ -145,7 +146,7 @@ def main():
         # https://pip.pypa.io/en/latest/user_guide/#using-pip-from-your-program
         run(sys.executable, '-m', 'pip', 'install', '-U', *build_installs)
     except RunError as err:
-        raise Error(str(err))
+        raise Error(str(err)) from err
 
     # Try for a package we can assume to be present in any virtualenv. We
     # don't import this at the top of the script in case we're NOT in a
@@ -179,23 +180,16 @@ def main():
     try:
         run(sys.executable, '-m', 'pip', 'install', '-U', *RUNTIME_DEPS.values())
     except RunError as err:
-        raise Error(str(err))
+        raise Error(str(err)) from err
 
     # We use copytree() to populate stage_VMP. copytree() doesn't like it when
     # its destination directory already exists.
-    try:
+    with suppress(FileNotFoundError):
         rmtree(stage_VMP, ignore_errors=True)
-    except OSError as err:
-        if err.errno != errno.ENOENT:
-            # anything but "doesn't exist" is a problem
-            raise
 
     # But make sure the stage directory exists
-    try:
+    with suppress(FileExistsError):
         os.makedirs(stage)
-    except OSError as err:
-        if err.errno != errno.EEXIST:
-            raise
 
     #We ship a 32 bit VMP with 64 bit viewers
     if system() == 'Windows' and getAddressSize() == 64:
@@ -238,10 +232,10 @@ def main():
     except subprocess.CalledProcessError as e:
         #exception attribute only exists on CalledProcessError
         raise Error("Tests failed: %s\n"
-                    "output:\n%s" % (e, e.output))
+                    "output:\n%s" % (e, e.output)) from e
     except Exception as e:
         #more debug is best effort
-        raise Error("%s didn't run: %s: %s" % (command, e.__class__.__name__, e))
+        raise Error("%s didn't run: %s: %s" % (command, e.__class__.__name__, e)) from e
 
     print("Successful nosetest output:")
     print(' '.join(line for line in output.splitlines()
@@ -373,7 +367,7 @@ def pyinstaller(mainfile, dstdir, icon, manifest_from_build=None):
     try:
         PyInstaller.__main__.run(command)
     except Exception as e:
-        raise Error("Error building %s: %s: %s" % (mainfile, e.__class__.__name__, e))
+        raise Error("Error building %s: %s: %s" % (mainfile, e.__class__.__name__, e)) from e
 
     if manifest_from_build:
         basebase = os.path.splitext(basename)[0]
@@ -383,7 +377,7 @@ def pyinstaller(mainfile, dstdir, icon, manifest_from_build=None):
         try:
             run('mt.exe', '-manifest', manifest, '-outputresource:%s;1' % exe)
         except RunError as e:
-            raise Error("Couldn't embed manifest %s in %s: %s" % (manifest, exe, e))
+            raise Error("Couldn't embed manifest %s in %s: %s" % (manifest, exe, e)) from e
 
 # We don't bother to catch CalledProcessError and reraise it as RunError; we
 # just alias the original exception.
@@ -396,8 +390,7 @@ def run(*command, **kwds):
 
 def print_command(*command):
     print(' '.join((("'%s'" % word) if ' ' in word else word)
-                   for word in command))
-    sys.stdout.flush()
+                   for word in command), flush=True)
 
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
