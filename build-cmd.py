@@ -26,7 +26,7 @@ $/LicenseInfo$
 
 
 # Check https://wiki.lindenlab.com/wiki/How_To_Start_Using_Autobuild/Examples for info on how to build this package
-from shutil import copy, copytree, ignore_patterns, rmtree
+from shutil import copy, rmtree
 
 import cgitb
 from collections import deque
@@ -53,40 +53,12 @@ cgitb.enable(format='text')
 # that package. That may include any version qualifiers, or whatever,
 # recognized by pip.
 BUILD_DEPS = dict(
-    nose='nose',
-    PyInstaller='pyinstaller',
-)
-
-# Python packages on which the VMP depends at runtime, in the same form.
-RUNTIME_DEPS = dict(
     eventlet='eventlet',
     llbase='llbase',
+    nose='nose',
+    PyInstaller='pyinstaller',
     requests='requests',
 )
-
-# As of 2018-03-30, these are the packages on which RUNTIME_DEPS depend. It
-# bugs me (nat) to have to enumerate them explicitly -- but I have found no
-# good way to derive only the set of modules imported by the packages above
-# that are NOT in a vanilla macOS bundled Python install. ModuleFinder, for
-# instance, presents *everything*, even the stuff bundled with the system.
-# The code in main() derives the set of packages added to the current
-# virtualenv as a consequence of pip installing the above, which should defend
-# against the likely case of one or more of the above packages adding new non-
-# default package dependencies.
-# This list is used to ensure that even if one or more of the packages above
-# are already present in the build host's system Python, and hence aren't
-# added by pip install, we copy them anyway.
-RUNTIME_DEPS_DEPS = [
-    "certifi",
-    "chardet",
-    "dns",
-    "enum",
-    "greenlet",
-    "idna",
-    "monotonic",
-    "six",
-    "urllib3",
-]
 
 class Error(Exception):
     pass
@@ -122,12 +94,11 @@ def main():
     except KeyError as err:
         raise Error('Run %s within a virtualenv: it uses pip install' % scriptname) from err
 
-    # First, install the stuff on which this build depends.
+    # Install the Python packages on which this build depends.
+    # STREAMLINE: If we no longer need --no-use-pep517, replace build_installs
+    # with BUILD_DEPS.values() in the pip install below.
     build_installs = deque(BUILD_DEPS.values())
-    if system() != 'Windows':
-        # only bother with pyinstaller on Windows
-        build_installs.remove("pyinstaller")
-    else:
+    if False: ## still necessary? system() == 'Windows':
         # https://github.com/pypa/pip/issues/6163
         # Apparently pip 19.0 has a bug that prevents installing PyInstaller.
         # --no-use-pep517 is supposed to work around it.
@@ -137,53 +108,22 @@ def main():
 
     # iterating over a dict produces just its keys
     print("Installing %s into virtualenv: %s" %
-          (', '.join(itertools.chain(BUILD_DEPS, RUNTIME_DEPS)), virtualenv))
+          (', '.join(BUILD_DEPS), virtualenv))
 
     try:
         # 'python -m pip' is recommended since, if you just invoke 'pip', you
         # could end up finding a different pip than the one associated with
         # the Python interpreter running the current script.
         # https://pip.pypa.io/en/latest/user_guide/#using-pip-from-your-program
+        # -U means: even if we already have an older version of (say) requests
+        # in the system image, ensure our virtualenv has the version specified
+        # in RUNTIME_DEPS (or the latest version if not version-locked).
         run(sys.executable, '-m', 'pip', 'install', '-U', *build_installs)
     except RunError as err:
         raise Error(str(err)) from err
 
-    # Try for a package we can assume to be present in any virtualenv. We
-    # don't import this at the top of the script in case we're NOT in a
-    # virtualenv and DON'T have setuptools available. In that case we should
-    # hit the "Run within a virtualenv" test above, which will be more helpful
-    # to the user than an ImportError regarding setuptools. (Huh?)
-    import setuptools
-
-    # Figure out in which directory this platform installs Python packages for
-    # this virtualenv. We expect that every (modern) virtualenv contains a
-    # setuptools install. Its __file__ is setuptools/__init__.pyc, so
-    # dirname() gets us the setuptools directory, and joining that with pardir
-    # should get us the containing directory.
-    venvlibs = os.path.realpath(os.path.join(os.path.dirname(setuptools.__file__), os.pardir))
-    if venvlibs.endswith(".egg"):
-        # however, we've also found it nested under a setuptools-blah.egg directory
-        venvlibs = os.path.realpath(os.path.join(venvlibs, os.pardir))
-    print("%s installed into %s" % (', '.join(BUILD_DEPS), venvlibs))
-
-    # Now that we know where our dependencies will be installed, take a
-    # snapshot of what's there already (from the initial virtualenv setup plus
-    # the above 'pip install').
-    before = set(os.listdir(venvlibs))
-##  print('\n'.join(itertools.chain(["inventory before runtime dependencies:"],
-##                                  sorted(before))))
-
-    # Now install the runtime stuff.
-    # -U means: even if we already have an older version of (say) requests in
-    # the system image, ensure our virtualenv has the version specified in
-    # RUNTIME_DEPS (or the latest version if not version-locked).
-    try:
-        run(sys.executable, '-m', 'pip', 'install', '-U', *RUNTIME_DEPS.values())
-    except RunError as err:
-        raise Error(str(err)) from err
-
-    # We use copytree() to populate stage_VMP. copytree() doesn't like it when
-    # its destination directory already exists.
+    # Make sure our staging area is clean because our manifest sweeps up
+    # whatever's in this directory.
     with suppress(FileNotFoundError):
         rmtree(stage_VMP, ignore_errors=True)
 
@@ -205,8 +145,8 @@ def main():
     # TypeError: encoded string too long (547, maximum length 519)
     #so nuke a few env vars we aren't using for this
     if system() == 'Windows' and getAddressSize() == 32:
-        nose_env['LIB'] = ""
-        nose_env['WINDOWSSDK_EXECUTABLEPATH_X64'] = ''
+        nose_env.pop('LIB', None)
+        nose_env.pop('WINDOWSSDK_EXECUTABLEPATH_X64', None)
 
     # If we were to run nosetests installed in system Python, as opposed to
     # our virtualenv, then the scripts under test won't be able to import
@@ -230,7 +170,7 @@ def main():
                                          universal_newlines=True,
                                          cwd=src)
     except subprocess.CalledProcessError as e:
-        #exception attribute only exists on CalledProcessError
+        # output attribute only exists on CalledProcessError
         raise Error("Tests failed: %s\n"
                     "output:\n%s" % (e, e.output)) from e
     except Exception as e:
@@ -238,7 +178,7 @@ def main():
         raise Error("%s didn't run: %s: %s" % (command, e.__class__.__name__, e)) from e
 
     print("Successful nosetest output:")
-    print(' '.join(line for line in output.splitlines()
+    print('\n'.join(line for line in output.splitlines()
                    if 'Ran' in line or 'OK' in line))
            
     #the version file consists of one line with the version string in it
@@ -251,85 +191,20 @@ def main():
     sourceLicenseFile = os.path.join(top, "LICENSE")
     copy(sourceLicenseFile, stage)
 
-    # -------------------------------- Posix ---------------------------------
-    if system() in ('Darwin', 'Linux'):
-        # Having installed our dependencies and -- importantly -- all THEIR
-        # dependencies, figure out what we added.
-        after = set(os.listdir(venvlibs))
-    ##  print('\n'.join(itertools.chain(["inventory after installing runtime dependencies:"],
-    ##                                  sorted(after))))
-        installed = after - before
-        print('\n'.join(itertools.chain(["newly-installed runtime dependencies:"],
-                                        sorted(installed))))
-        # As of 2018-03-27, anyway, there's some cruft in that directory
-        tocopy = set(os.path.join(venvlibs, f)
-                     for f in installed
-                     if not (f.endswith(".dist-info") or f.endswith(".egg-info")))
-        # The steps above intentionally capture only stuff added by our 'pip
-        # install' command. But what if one or more of our dependencies was
-        # already present in system Python before we created the virtualenv? In
-        # that case, it wouldn't show up in 'installed' or 'tocopy'. Stir in the
-        # set we started with, plus (what we believe to be) their dependencies,
-        # converting from package name to file or directory name.
-        for pkg in itertools.chain(RUNTIME_DEPS, RUNTIME_DEPS_DEPS):
-            try:
-                modfile = import_module(pkg).__file__
-            except ImportError as err:
-                # This may mean that one of RUNTIME_DEPS_DEPS is no longer
-                # required by any of RUNTIME_DEPS, and hence was not installed.
-                # A developer should remove that item from RUNTIME_DEPS_DEPS, but
-                # we shouldn't fail the build for that reason.
-                # Produce a warning to stderr, but keep going.
-                print("%s: %s" % (err.__class__.__name__, err), file=sys.stderr)
-            else:
-                # splitext()[0] strips off the extension (e.g. .pyc)
-                # split() takes apart the directory path from the simple name
-                moddir, modname = os.path.split(os.path.splitext(modfile)[0])
-                if modname == '__init__':
-                    # If an imported module's name is __init__, the name
-                    # represents a whole package. Have to copy its entire
-                    # directory.
-                    tocopy.add(moddir)
-                else:
-                    # imported module isn't named __init__, therefore it's a
-                    # single file module -- copy just that file
-                    tocopy.add(modfile)
-        print('\n'.join(itertools.chain(["packages to copy:"],
-                                        sorted(tocopy))))
+    # Now that we're using Python 3, we can't assume that's the default Python
+    # on every target system -- so we must use PyInstaller on all platforms.
+    os.mkdir(stage_VMP)
+    pyinstaller(mainfile=os.path.join(src, "SLVersionChecker.py"),
+                dstdir=stage_VMP,
+                icon=icon)
 
-        ignores = ignore_patterns('*.pyc', '*tests*')
-        # start with the parent directory
-        copytree(src, stage_VMP, ignore=ignores)
-        # Copy packages installed by RUNTIME_DEPS.
-        for srcpath in tocopy:
-            dstpath = os.path.join(stage_VMP, os.path.basename(srcpath))
-            print("Copying %s to %s" % (srcpath, dstpath))
-            if os.path.isdir(srcpath):
-                # srcpath represents a whole package. Have to copy its entire
-                # directory.
-                copytree(srcpath, dstpath, ignore=ignores)
-            else:
-                # it's a single file module -- copy just that file
-                copy(srcpath, dstpath)
-    # ------------------------------- Windows --------------------------------
-    elif system() == 'Windows':
-        # https://pyinstaller.readthedocs.io/en/stable/usage.html#running-pyinstaller-from-python-code
-        global PyInstaller
-        import PyInstaller.__main__
-
-        os.mkdir(stage_VMP)
-
-        pyinstaller(mainfile=os.path.join(src, "SLVersionChecker.py"),
-                    dstdir=stage_VMP,
-                    icon=icon)
-
-        #best effort cleanup after pyinstaller
-        rmtree(build, ignore_errors=True)
-        for f in glob.glob(os.path.join(top, "*.spec")):
-            try:
-                os.remove(f)
-            except:
-                pass
+    #best effort cleanup after pyinstaller
+    rmtree(build, ignore_errors=True)
+    for f in glob.glob(os.path.join(top, "*.spec")):
+        try:
+            os.remove(f)
+        except:
+            pass
 
     print("Build Succeeded")
 
@@ -341,8 +216,6 @@ def pyinstaller(mainfile, dstdir, icon, manifest_from_build=None):
     command = [
         # don't prompt, just overwrite previous exe
         "-y",
-        # suppress opening console window at runtime
-        "-w",
         # icon to use for the generated executable
         "-i", icon,
         # don't reuse previous PyInstaller cache
@@ -359,17 +232,23 @@ def pyinstaller(mainfile, dstdir, icon, manifest_from_build=None):
     # Also note, in case of need:
     # --debug: produce runtime startup messages about imports and such (may
     #          need --console rather than -w?)
+    if system() == 'Windows':
+        # suppress opening console window at runtime
+        command.insert(0, "-w")
 
     # Temporary: until hook-eventlet.support.greendns.py makes it into
     # PyInstaller, use the one in this directory.
     command.append('--additional-hooks-dir=' + os.path.dirname(__file__))
+
     print_command('pyinstaller', *command)
+    # https://pyinstaller.readthedocs.io/en/stable/usage.html#running-pyinstaller-from-python-code
+    import PyInstaller.__main__
     try:
         PyInstaller.__main__.run(command)
     except Exception as e:
         raise Error("Error building %s: %s: %s" % (mainfile, e.__class__.__name__, e)) from e
 
-    if manifest_from_build:
+    if system() == 'Windows' and manifest_from_build:
         basebase = os.path.splitext(basename)[0]
         exe = os.path.join(dstdir, basebase + ".exe")
         manifest = os.path.join(manifest_from_build, basebase, basebase + '.exe.manifest')
