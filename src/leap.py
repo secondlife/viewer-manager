@@ -184,7 +184,11 @@ def send(pump, data, f=None):
     put(llsd.format_notation(dict(pump=pump, data=data)), f=f)
 
 def request(pump, data, f=None):
-    # we expect 'data' is a dict
-    xdata = data.copy()
-    xdata.setdefault('reply', _reply)
+    try:
+        # we expect 'data' is a dict
+        xdata = data.copy()
+        xdata.setdefault('reply', _reply)
+    except AttributeError:
+        # but it might not be
+        xdata = data
     send(pump, xdata, f=f)
