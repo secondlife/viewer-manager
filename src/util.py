@@ -53,39 +53,14 @@ def udir(file=__file__):
 # ****************************************************************************
 #   getenv()
 # ****************************************************************************
-# SL-10153: On a Windows system configured with locale English (United States)
-# when the username (or any other part of a pathname) is non-ASCII, Trouble
-# results. In particular, passing such pathnames through the normal process
-# environment using normal environment access can produce garbage values.
-if not platform.system() == 'Windows':
-    # Everywhere else, os.getenv() should Just Work
-    getenv = os.getenv
-
-else:
-    # "Then There's Windows"
-    # https://docs.microsoft.com/en-us/windows/desktop/Debug/system-error-codes--0-499-
-    ERROR_ENVVAR_NOT_FOUND = 203
-
-    def getenv(key, default=None):
-        key = str(key)
-        # From https://docs.microsoft.com/en-us/windows/desktop/api/winbase/nf-winbase-getenvironmentvariable
-        # "An environment variable has a maximum size limit of 32,767
-        # characters, including the null-terminating character."
-        # Don't bother trying a too-small buffer, reallocating and retrying --
-        # just make a big enough buffer for any Windows environment variable.
-        buf = ctypes.create_unicode_buffer('\0' * 32767)
-        if ctypes.windll.kernel32.GetEnvironmentVariableW(key, buf, len(buf)-1):
-            return buf.value
-
-        # GetEnvironmentVariableW() returning 0 means it failed for some
-        # reason other than buffer too small
-        # (buffer too small returns a size > nSize param).
-        last_error = ctypes.GetLastError()
-        if last_error == ERROR_ENVVAR_NOT_FOUND:
-            # absence of specified key is considered an "error"
-            return default
-        # something really went wrong
-        raise ctypes.WinError(last_error)
+# SL-10153: In Python 2, on a Windows system configured with locale English
+# (United States) when the username (or any other part of a pathname) is
+# non-ASCII, passing such pathnames through the normal process environment
+# using normal environment access could produce garbage values because the
+# Python 2 interpreter used the A (8-bit) Windows system call entry points
+# instead of the W (16-bit) entry points. But with Python 3, we fully expect
+# that to work. Continue to support util.getenv() for existing callers.
+getenv = os.getenv
 
 # ****************************************************************************
 #   pass_logger

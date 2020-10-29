@@ -180,11 +180,12 @@ def leap(*args, **kwds):
                                   appname)
     try:
         shutil.rmtree(local_progsdir)
-    except OSError as err:
+    except FileNotFoundError as err:
         # Absence of local_progsdir is the normal case. Don't squawk.
-        if err.errno != errno.ENOENT:
-            # This is best-effort cleanup: even if it fails, carry on regardless.
-            log.warning("Couldn't delete old shortcuts at '%s': %s", local_progsdir, err)
+        pass
+    except OSError as err:
+        # This is best-effort cleanup: even if it fails, carry on regardless.
+        log.warning("Couldn't delete old shortcuts at '%s': %s", local_progsdir, err)
     else:
         # we actually deleted something -- log it for forensic purposes
         log.info("Deleted old shortcuts at '%s'", local_progsdir)
