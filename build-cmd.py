@@ -52,7 +52,7 @@ cgitb.enable(format='text')
 # recognized by pip.
 BUILD_DEPS = dict(
     nose='nose',
-    PyInstaller='pyinstaller',
+    PyInstaller='pyinstaller==3.5',
 )
 
 # Python packages on which the VMP depends at runtime, in the same form.
@@ -126,7 +126,7 @@ def main():
     build_installs = deque(BUILD_DEPS.values())
     if system() != 'Windows':
         # only bother with pyinstaller on Windows
-        build_installs.remove("pyinstaller")
+        build_installs.remove("pyinstaller==3.5")
     else:
         # https://github.com/pypa/pip/issues/6163
         # Apparently pip 19.0 has a bug that prevents installing PyInstaller.
