@@ -441,7 +441,7 @@ class WindowsVideo(object):
     #Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
     #so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
     #hence the strange equality test for 'Graphics' when we pop the last word off the string.
-    NO64_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
+    NO64_GRAPHICS_LIST = ['Graphics', '2000', '3000']
 
     @staticmethod
     def onNo64Windows():
