@@ -69,8 +69,8 @@ class testWindowsVideo(object):
         with patch(update_manager, "wmic", 
                        lambda *args: 
                        'Name                    \r\r\n' 
-                       'Intel(R) HD Graphics 3000 \r\r\n' 
-                       'Intel(R) HD Graphics 4000 \r\r\n'
+                       'Intel(R) HD Graphics 2000 \r\r\n' 
+                       'Intel(R) HD Graphics 3000 \r\r\n'
                        '\r\r\n'): 
             assert_equal(update_manager.WindowsVideo.isUnsupported(), True)
 
