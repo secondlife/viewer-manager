@@ -618,6 +618,8 @@ def download(url, version, download_dir, size, hash, ui):
         # flicker briefly before the progress bar frame is displayed.
         try:
             filename = download_update.download_update(**download_args)
+        except download_update.FileInUseExcption:
+            raise UpdateError("Download file is locked")
         except Exception as e:
             # Might be caused by user closing manager
             log.error("Failed to download new version %s in %s downloader: %s: %s",
