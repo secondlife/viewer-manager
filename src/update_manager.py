@@ -485,13 +485,43 @@ class WindowsVideo(object):
                                  (ln.rstrip() for ln in wmic_graphics.splitlines())
                                  if line][1:]
                 if wmic_list:
+                    good_cards = []
                     # The logic here is a little complicated:
                     # - If there's no bad card, we're good.
                     # - If there's a bad card AND some other card, still good.
                     # - If the only card(s) present are bad cards, not good.
-                    good_cards = [line for line in wmic_list
-                                  if not ("Intel(R) HD Graphics" in line and
-                                          line.split()[-1] in WindowsVideo.NO64_GRAPHICS_LIST)]
+                    for line in wmic_list:
+                        if not ("Intel(R) HD Graphics" in line and
+                                 line.split()[-1] in WindowsVideo.NO64_GRAPHICS_LIST):
+                            # Card not in the list, pass
+                            good_cards.append(line)
+                            continue
+                        # else
+                        if ("Intel(R) HD Graphics" in line and line.split()[-1] in "Graphics"):
+                            # Last word is "Graphics"
+                            # This is either a generic Intel(R) HD Graphics or some mislabeled supported GPU
+                            # To distinguish them we will have to check CPU model
+                            try:
+                                wmic_cpus = wmic('cpu','get','NAME')
+                            except WmicError as err:
+                                log.warning(err)
+                                continue
+                            else:
+                                cpus = [line1 for line1 in
+                                             (ln.rstrip() for ln in wmic_cpus.splitlines())
+                                              if line1][1:] #drop first line
+                                cpu = re.search("(\si[0-9]-2[0-9]{3})|(E3-1260L)", cpus[0])
+                                if cpu:
+                                    #  HD 2000/3000
+                                    log.debug("cpu corresponds to Intel HD 2000/3000: %r", cpus)
+                                    continue
+                                cpu = re.search("(\si[0-9]-[0-9]{3}[MUE\s])|(Processor\s[a-zA-Z]*[0-9]{3})|(E3-12[6-9][0-9]L)", cpus[0])
+                                if cpu:
+                                    #  Legacy HD Graphics, also all pentiums and celerons
+                                    log.debug("cpu corresponds to Intel HD Graphics: %r", cpus)
+                                    continue
+                                # No regex matches, a good card
+                                good_cards.append(line)
                     # There's no order guarantee from wmic, this is to prevent an
                     # HD card discovered after a good card from overwriting the state variable
                     # by specification, a machine is bad iff ALL of the cards on the machine are bad ones
