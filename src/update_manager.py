@@ -510,17 +510,52 @@ class WindowsVideo(object):
                                 cpus = [line1 for line1 in
                                              (ln.rstrip() for ln in wmic_cpus.splitlines())
                                               if line1][1:] #drop first line
-                                cpu = re.search("(\si[0-9]-2[0-9]{3})|(E3-1260L)", cpus[0])
+
+                                # HD 2000/3000
+                                cpu = re.search("(\si[0-9]-2[0-9]{3}[EKLMSTXQ\s])|(E3-1260L)", cpus[0])
                                 if cpu:
-                                    #  HD 2000/3000
                                     log.debug("cpu corresponds to Intel HD 2000/3000: %r", cpus)
                                     continue
-                                cpu = re.search("(\si[0-9]-[0-9]{3}[MUE\s])|(Processor\s[a-zA-Z]*[0-9]{3})|(E3-12[6-9][0-9]L)", cpus[0])
+
+                                # IntelR HD Graphics for Previous Generation IntelR Processors
+                                cpu = re.search("(\si[0-9]-[0-9]{3}[ELMU\s])|(Processor\sP[46][0-6]0[05]\s)|(Processor\sU[35][46]0[05]\s)", cpus[0])
                                 if cpu:
-                                    #  Legacy HD Graphics, also all pentiums and celerons
                                     log.debug("cpu corresponds to Intel HD Graphics: %r", cpus)
                                     continue
-                                # No regex matches, a good card
+                                
+                                # IntelR HD Graphics for 2nd Generation IntelR Processors
+                                cpu = re.search("(Processor\s[BG]*[0-9]{3}[ET\s])", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to Intel 2nd Generation: %r", cpus)
+                                    continue
+
+                                # IntelR HD Graphics for 3rd Generation IntelR Processors
+                                cpu = re.search("(Processor\s[G]*[12][016][0-4][05-9][YTUME\s])|(Processor\s927UE)|(Processor\sA1018)", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to 3rd Generation: %r", cpus)
+                                    continue
+
+                                # IntelR HD Graphics for 4th Generation IntelR Processors
+                                # Partial overlap with 3rd gen due to Processor 2000E
+                                cpu = re.search("(Processor\s[G]*3[2-5][2-9][0168][YTUME\s])|(Processor\s2[09][05-8][0-9][YTUME\s])|(Processor\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to Intel HD Graphics for 4th Generation: %r", cpus)
+                                    continue
+
+                                # Some celeron CPUs might output 'Intel64 Family' as a name
+                                cpu = re.search("Intel64\sFamily\s", cpus[0])
+                                if cpu:
+                                    log.debug("Unrecognized Intel64 Family CPU: %r", cpus)
+                                    continue
+
+                                # Does not cover, due to supposedly up to date drivers:
+                                # IntelR HD Graphics for Intel AtomR Processor Z3700 Series
+                                # IntelR HD Graphics for IntelR CeleronR Processor N3000 Series (HD 400)
+                                #
+                                # IntelR HD Graphics for 4th Generation IntelR also have an up to date driver, but for now we consider it as 32 bit.
+
+                                # No regex matches, assume a good card
+                                log.debug("No CPU regex matches, assume a good card: %r", cpus)
                                 good_cards.append(line)
                     # There's no order guarantee from wmic, this is to prevent an
                     # HD card discovered after a good card from overwriting the state variable
