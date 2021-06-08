@@ -59,9 +59,9 @@ class testWindowsVideo(object):
     def testOneBadOneGood(self):
         with patch(update_manager, "wmic",
                        lambda *args:
-                       'Name                    \r\r\n'
-                       'Intel(R) HD Graphics    \r\r\n'
-                       'NVIDIA GeForce GTS 450  \r\r\n'
+                       'Name                      \r\r\n'
+                       'Intel(R) HD Graphics 2000 \r\r\n'
+                       'NVIDIA GeForce GTS 450    \r\r\n'
                        '\r\r\n'):
             assert_false(update_manager.WindowsVideo.isUnsupported())
 
@@ -69,8 +69,8 @@ class testWindowsVideo(object):
         with patch(update_manager, "wmic", 
                        lambda *args: 
                        'Name                    \r\r\n' 
-                       'Intel(R) HD Graphics 3000 \r\r\n' 
-                       'Intel(R) HD Graphics 4000 \r\r\n'
+                       'Intel(R) HD Graphics 2000 \r\r\n' 
+                       'Intel(R) HD Graphics 3000 \r\r\n'
                        '\r\r\n'): 
             assert_equal(update_manager.WindowsVideo.isUnsupported(), True)
 
@@ -86,3 +86,29 @@ class testWindowsVideo(object):
             raise update_manager.WmicError("fake error")
         with patch(update_manager, "wmic", wmic):
             assert_true(update_manager.WindowsVideo.isUnsupported())
+
+    def testBadIntelHDGraphics(self):
+        def wmic(*args):
+            if args[0] is 'path':
+                return 'Name                      \r\r\n'\
+                       'Intel(R) HD Graphics      \r\r\n'\
+                       '\r\r\n'
+            else:
+                return 'Name                                    \r\r\n'\
+                       'Intel(R) Core(TM) i7-2600 CPU @ 3.20GHz \r\r\n'\
+                       '\r\r\n'
+        with patch(update_manager, "wmic", wmic):
+            assert_true(update_manager.WindowsVideo.isUnsupported())
+
+    def testGoodIntelHDGraphics(self):
+        def wmic(*args):
+            if args[0] is 'path':
+                return 'Name                      \r\r\n'\
+                       'Intel(R) HD Graphics      \r\r\n'\
+                       '\r\r\n'
+            else:
+                return 'Name                                     \r\r\n'\
+                       'Intel(R) Core(TM) i5-6600K CPU @ 3.20GHz \r\r\n'\
+                       '\r\r\n'
+        with patch(update_manager, "wmic", wmic):
+            assert_false(update_manager.WindowsVideo.isUnsupported())

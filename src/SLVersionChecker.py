@@ -15,7 +15,6 @@ import errno
 import os
 import platform
 import shutil
-import subprocess
 import sys
 
 # This must be the FIRST imported module that isn't bundled with Python.
@@ -37,17 +36,20 @@ import eventlet
 import apply_update
 from SL_Launcher import capture_vmp_args
 from runner import Runner, PopenRunner
-from InstallerUserMessage import status_message
+from InstallerUserMessage import status_message, AppDestroyed
 import update_manager
 from leapcomm import ViewerClient, RedirectUnclaimedReqid, ViewerShutdown
 
-# These definitions depend on the viewer's llstartup.h: if EStartupState
-# changes, so must they. Much as we would prefer to rely on string names
-# alone, we must divide the viewer session into "before clicking Login" vs.
-# "after clicking Login", which requires an inequality comparison on the enum
-# value.
-STATE_LOGIN_WAIT = 3
-STATE_WORLD_INIT = 8
+# dict mapping { startup state string name: enum value }
+# These default definitions are based on the viewer's llstartup.h: if
+# EStartupState changes, so must they. Much as we would prefer to rely on
+# string names alone, we must divide the viewer session into "before clicking
+# Login" vs. "after clicking Login", which requires an inequality comparison
+# on the enum value.
+STARTUP_STATES = dict(
+    STATE_LOGIN_WAIT=3,
+    STATE_WORLD_INIT=8,
+)
 
 class Error(Exception):
     pass
@@ -120,10 +122,24 @@ def precheck(log, viewer, args):
         log.error("Update manager raised %r" % err)
         # use status_message() so the frame will persist until this process
         # terminates
-        status_message('%s\nViewer will launch momentarily.' % err)
+        try:
+            status_message('%s\nViewer will launch momentarily.' % err)
+        except AppDestroyed as e:
+            log.exception("User attempted to quit")
+            sys.exit(1)
+        except Exception as e:
+            log.exception("Failed to update UI")
+            sys.exit(-1)
 
     # Clear any existing status message: we're about to launch the viewer.
-    status_message(None)
+    try:
+        status_message(None)
+    except AppDestroyed as e:
+        log.exception("User attempted to quit")
+        sys.exit(1)
+    except Exception as e:
+        log.exception("Failed to update UI")
+        sys.exit(-1)
 
     # If runner is actually an ExecRunner, or if the launch attempt fails,
     # this run() call won't return.
@@ -148,6 +164,11 @@ def leap(*args, **kwds):
         # startup, we can't even set up our communications protocol.
         # (Well, not quite silently.)
         log.error("Viewer terminated abruptly, shutting down")
+        return
+    except update_manager.UpdateError as err:
+        # Updater likely have been closed by user, but even in case of genuine failure
+        # we do not handle such case anywhere below, so just log and return 
+        log.exception("Unhandled exception in leap_body")
         return
 
     # SL-10469: Along about December 2018, there was a BugSplat RC viewer that
@@ -235,6 +256,13 @@ def leap_body(install_key, channel, testok, width):
     # viewer's initialization data.
     viewer = ViewerClient()
 
+    # Ask the viewer for its table of EStartupState strings.
+    table = viewer.request(pump="LLStartUp",
+                           data=dict(op="getStateTable"))["table"]
+    # What we get back is a list of string names, implicitly associating each
+    # with its index. We need a lookup in the other direction: name->index.
+    STARTUP_STATES = {name: index for index, name in enumerate(table)}
+
     platform_key = Application.platform_key() # e.g. "mac"
     install_mode = update_manager.decode_install_mode(install_key)
 
@@ -243,8 +271,15 @@ def leap_body(install_key, channel, testok, width):
                                       UpdaterWillingToTest=testok)
     if not result:
         log.info("No update.")
+        post_guessed_relnotes(viewer)
         update_manager.cleanup_previous_download(platform_key)
         return
+
+    relnotes = result.get('more_info')
+    if relnotes:
+        post_relnotes(viewer, relnotes)
+    else:
+        post_guessed_relnotes(viewer)
 
     result = update_manager.choose_update(platform_key, width, result)
     if not result:
@@ -268,7 +303,7 @@ def leap_body(install_key, channel, testok, width):
 
     if result['required']:
         log.info("Required update to %s version %s", result['platform'], result['version'])
-        if catch_viewer_before_login(viewer, result['version'], "PauseForUpdate"):
+        if catch_viewer_before_login(viewer, result, "PauseForUpdate"):
             viewer.shutdown()
             # TODO: Is this correct?? Shouldn't we check for partial download?
             if downloaded is None:
@@ -314,7 +349,7 @@ def leap_body(install_key, channel, testok, width):
                              result=result, ui=False)
         # If we're still sitting at the Login screen, may as well proceed.
         process_optional_update(
-            viewer=viewer, installer=installer, version=result['version'],
+            viewer=viewer, installer=installer, result=result,
             install_mode=install_mode, platform_key=platform_key)
         return
 
@@ -323,7 +358,7 @@ def leap_body(install_key, channel, testok, width):
         log.info("Found previously downloaded update in: %s", download_dir)
         installer = apply_update.get_filename(download_dir)
         process_optional_update(
-            viewer=viewer, installer=installer, version=result['version'],
+            viewer=viewer, installer=installer, result=result,
             install_mode=install_mode, platform_key=platform_key)
         return
 
@@ -333,15 +368,34 @@ def leap_body(install_key, channel, testok, width):
     return
 
 # ****************************************************************************
+#   post_guessed_relnotes()
+# ****************************************************************************
+@pass_logger
+def post_guessed_relnotes(log, viewer):
+    # TODO: fetch LLTrans::getString("RELEASE_NOTES_BASE_URL")
+    # Until then, this imitates the generation from viewer version 6.2.3
+    guess = "https://releasenotes.secondlife.com/viewer/%s.html" % BuildData.get('Version')
+    log.warning("No release notes available from VVM, guessing: %s", guess)
+    post_relnotes(viewer, guess)
+
+# ****************************************************************************
+#   post_relnotes()
+# ****************************************************************************
+@pass_logger
+def post_relnotes(log, viewer, relnotes):
+    log.info("Sending relnotes URL '%s'", relnotes)
+    viewer.send(pump="relnotes", data=relnotes)
+
+# ****************************************************************************
 #   catch_viewer_before_login()
 # ****************************************************************************
 @pass_logger
-def catch_viewer_before_login(log, viewer, version, notification):
+def catch_viewer_before_login(log, viewer, result, notification):
     startup_state = viewer.get_startup_state()
     log.info("Viewer in {}".format(startup_state))
     # In what state is the viewer? It matters whether the user has clicked
     # Login yet.
-    if startup_state.enum <= STATE_LOGIN_WAIT:
+    if startup_state.enum <= STARTUP_STATES["STATE_LOGIN_WAIT"]:
         # User hasn't yet clicked Login. Pop up a modal viewer
         # notification, pre-empting his/her ability to do that.
         log.info("popping up %s", notification)
@@ -350,7 +404,8 @@ def catch_viewer_before_login(log, viewer, version, notification):
             response = viewer.request(
                 pump="LLNotifications",
                 data=dict(op="requestAdd", name=notification,
-                          substitutions=dict(VERSION=version),
+                          substitutions=dict(VERSION=result["version"],
+                                             URL=result["more_info"]),
                           payload={}))
         except ViewerShutdown:
             log.info("User closed the viewer")
@@ -376,7 +431,11 @@ def catch_viewer_before_login(log, viewer, version, notification):
         with RedirectUnclaimedReqid(viewer.startupWait, viewer, 10, reqid):
             # Now post to the rendezvous point.
             log.info("Posting to LoginSync")
-            viewer.send(pump="LoginSync", data=dict(reqid=reqid))
+            # We add information from the VVM response to our LoginSync post
+            # in case the viewer itself decides to pop up a notification.
+            viewer.send(pump="LoginSync", data=dict(reqid=reqid,
+                                                    VERSION=result['version'],
+                                                    URL=result['more_info']))
             # Monitor startupWait's queue. Though it seems imprudent to wait
             # without a timeout, the viewer may actually end up prompting
             # the user with PauseForUpdate -- and there's no telling how
@@ -392,7 +451,7 @@ def catch_viewer_before_login(log, viewer, version, notification):
                 # beyond, login is progressing -- we won't ever get an ack.
                 if event["pump"] == "StartupState":
                     startup_state = viewer.State(enum=data.get("enum", 0), str=data.get("str"))
-                    if startup_state.enum >= STATE_WORLD_INIT:
+                    if startup_state.enum >= STARTUP_STATES["STATE_WORLD_INIT"]:
                         log.info("Viewer logging in anyway: ({})".format(startup_state))
                         return False
     except ViewerShutdown:
@@ -405,14 +464,14 @@ def catch_viewer_before_login(log, viewer, version, notification):
 #   process_optional_update()
 # ****************************************************************************
 @pass_logger
-def process_optional_update(log, viewer, installer, version, install_mode, platform_key):
+def process_optional_update(log, viewer, installer, result, install_mode, platform_key):
     # It matters whether the user has clicked Login yet. If we've already
     # logged in, just wait until next time.
     # TODO: That means that a user who always clicks Login really quickly
     # could go for several sessions before being prompted to install an
     # already-downloaded optional update.
     startup_state = viewer.get_startup_state()
-    if startup_state.enum > STATE_LOGIN_WAIT:
+    if startup_state.enum > STARTUP_STATES["STATE_LOGIN_WAIT"]:
         log.info("User already clicked Login ({}), deferring"
                  .format(startup_state))
         return
@@ -425,8 +484,9 @@ def process_optional_update(log, viewer, installer, version, install_mode, platf
         try:
             response = viewer.request(
                 pump="LLNotifications",
-                data=dict(op="requestAdd", name="OptionalUpdateReady",
-                          substitutions=dict(VERSION=version), payload={}))
+                data=dict(op="requestAdd", name="OptionalUpdateReady", payload={},
+                          substitutions=dict(VERSION=result["version"],
+                                             URL=result["more_info"])))
         except ViewerShutdown:
             # User closed the viewer instead of clicking OK -- same thing.
             pass
@@ -441,12 +501,13 @@ def process_optional_update(log, viewer, installer, version, install_mode, platf
         try:
             response = viewer.request(
                 pump="LLNotifications",
-                data=dict(op="requestAdd", name="PromptOptionalUpdate",
-                          substitutions=dict(VERSION=version), payload={}))
+                data=dict(op="requestAdd", name="PromptOptionalUpdate", payload={},
+                          substitutions=dict(VERSION=result["version"],
+                                             URL=result["more_info"])))
         except ViewerShutdown:
-            # User closed the viewer. In this context, let's take that as "Go
-            # ahead and install the update."
-            install(platform_key=platform_key, installer=installer)
+            # User closed the viewer.
+            log.info("User closed viewer without confirming optional update, assuming 'Not Now'")
+            update_manager.put_marker_file(os.path.dirname(installer), ".next")
             return
 
         # The response sent by LLNotifications (packaged as ['response']) is a
@@ -528,7 +589,9 @@ def main(*raw_args):
                          help='UpdaterServiceSetting value')
     subleap.add_argument('channel',
                          help='the running viewer\'s channel name')
-    subleap.add_argument('testok', type=bool,
+    # This one should be bool, but viewer provides 0 or 1 integer values
+    # which argparse doesn't treat right
+    subleap.add_argument('testok', type=int,
                          help='UpdaterWillingToTest setting')
     subleap.add_argument('width', type=int,
                          help='ForceAddressSize setting')

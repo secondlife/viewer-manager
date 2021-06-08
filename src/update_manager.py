@@ -40,7 +40,6 @@ import errno
 import glob
 import hashlib
 import InstallerUserMessage
-import json
 import os
 import os.path
 from pprint import pformat
@@ -49,7 +48,6 @@ import platform
 from runner import PopenRunner
 import shutil
 import subprocess
-import sys
 import tempfile
 import threading
 # specifically import the sleep() function for testability
@@ -405,10 +403,16 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
     #this will always return something usable, error handling in method
     UUID = str(make_VVM_UUID_hash(platform_key))
 
-    # UpdaterWillingToTest is either 0 or 1
-    test_ok = 'testok' if UpdaterWillingToTest else 'testno'
-    log.debug("UpdaterWillingToTest = %r, test_ok = %r", UpdaterWillingToTest, test_ok)
-    
+    # UpdaterWillingToTest is expected to be either 0 or 1, either string or int
+    test_ok = 'testok'
+    try:
+        # convert "0" or "1" to corresponding integer
+        UpdaterWillingToTest = int(UpdaterWillingToTest)
+        test_ok = 'testok' if UpdaterWillingToTest else 'testno'
+        log.debug("UpdaterWillingToTest = %r, test_ok = %r", UpdaterWillingToTest, test_ok)
+    except ValueError:
+        log.error("Invalid value for UpdaterWillingToTest, assuming %s is True",
+                      UpdaterWillingToTest)
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
              (channel, version, VVM_platform, platform_version, test_ok, UUID))
     update_urlpath =  urllib.parse.quote('/'.join(['v1.2', channel, version, VVM_platform, platform_version, test_ok, UUID]))
@@ -445,7 +449,7 @@ class WindowsVideo(object):
     #Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
     #so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
     #hence the strange equality test for 'Graphics' when we pop the last word off the string.
-    NO64_GRAPHICS_LIST = ['Graphics', '2000', '2500', '3000', '4000']
+    NO64_GRAPHICS_LIST = ['Graphics', '2000', '3000']
 
     @staticmethod
     def onNo64Windows():
@@ -489,13 +493,78 @@ class WindowsVideo(object):
                                  (ln.rstrip() for ln in wmic_graphics.splitlines())
                                  if line][1:]
                 if wmic_list:
+                    good_cards = []
                     # The logic here is a little complicated:
                     # - If there's no bad card, we're good.
                     # - If there's a bad card AND some other card, still good.
                     # - If the only card(s) present are bad cards, not good.
-                    good_cards = [line for line in wmic_list
-                                  if not ("Intel(R) HD Graphics" in line and
-                                          line.split()[-1] in WindowsVideo.NO64_GRAPHICS_LIST)]
+                    for line in wmic_list:
+                        if not ("Intel(R) HD Graphics" in line and
+                                 line.split()[-1] in WindowsVideo.NO64_GRAPHICS_LIST):
+                            # Card not in the list, pass
+                            good_cards.append(line)
+                            continue
+                        # else
+                        if ("Intel(R) HD Graphics" in line and line.split()[-1] in "Graphics"):
+                            # Last word is "Graphics"
+                            # This is either a generic Intel(R) HD Graphics or some mislabeled supported GPU
+                            # To distinguish them we will have to check CPU model
+                            try:
+                                wmic_cpus = wmic('cpu','get','NAME')
+                            except WmicError as err:
+                                log.warning(err)
+                                continue
+                            else:
+                                cpus = [line1 for line1 in
+                                             (ln.rstrip() for ln in wmic_cpus.splitlines())
+                                              if line1][1:] #drop first line
+
+                                # HD 2000/3000
+                                cpu = re.search("(\si[0-9]-2[0-9]{3}[EKLMSTXQ\s])|(E3-1260L)", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to Intel HD 2000/3000: %r", cpus)
+                                    continue
+
+                                # IntelR HD Graphics for Previous Generation IntelR Processors
+                                cpu = re.search("(\si[0-9]-[0-9]{3}[ELMU\s])|(Processor\sP[46][0-6]0[05]\s)|(Processor\sU[35][46]0[05]\s)", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to Intel HD Graphics: %r", cpus)
+                                    continue
+                                
+                                # IntelR HD Graphics for 2nd Generation IntelR Processors
+                                cpu = re.search("(Processor\s[BG]*[0-9]{3}[ET\s])", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to Intel 2nd Generation: %r", cpus)
+                                    continue
+
+                                # IntelR HD Graphics for 3rd Generation IntelR Processors
+                                cpu = re.search("(Processor\s[G]*[12][016][0-4][05-9][YTUME\s])|(Processor\s927UE)|(Processor\sA1018)", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to 3rd Generation: %r", cpus)
+                                    continue
+
+                                # IntelR HD Graphics for 4th Generation IntelR Processors
+                                # Partial overlap with 3rd gen due to Processor 2000E
+                                cpu = re.search("(Processor\s[G]*3[2-5][2-9][0168][YTUME\s])|(Processor\s2[09][05-8][0-9][YTUME\s])|(Processor\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to Intel HD Graphics for 4th Generation: %r", cpus)
+                                    continue
+
+                                # Some celeron CPUs might output 'Intel64 Family' as a name
+                                cpu = re.search("Intel64\sFamily\s", cpus[0])
+                                if cpu:
+                                    log.debug("Unrecognized Intel64 Family CPU: %r", cpus)
+                                    continue
+
+                                # Does not cover, due to supposedly up to date drivers:
+                                # IntelR HD Graphics for Intel AtomR Processor Z3700 Series
+                                # IntelR HD Graphics for IntelR CeleronR Processor N3000 Series (HD 400)
+                                #
+                                # IntelR HD Graphics for 4th Generation IntelR also have an up to date driver, but for now we consider it as 32 bit.
+
+                                # No regex matches, assume a good card
+                                log.debug("No CPU regex matches, assume a good card: %r", cpus)
+                                good_cards.append(line)
                     # There's no order guarantee from wmic, this is to prevent an
                     # HD card discovered after a good card from overwriting the state variable
                     # by specification, a machine is bad iff ALL of the cards on the machine are bad ones
@@ -622,7 +691,10 @@ def download(url, version, download_dir, size, hash, ui):
         # flicker briefly before the progress bar frame is displayed.
         try:
             filename = download_update.download_update(**download_args)
+        except download_update.FileInUseExcption:
+            raise UpdateError("Download file is locked")
         except Exception as e:
+            # Might be caused by user closing manager
             log.error("Failed to download new version %s in %s downloader: %s: %s",
                       version, ground, e.__class__.__name__, e)
         else:
@@ -633,7 +705,9 @@ def download(url, version, download_dir, size, hash, ui):
                 return filename
             #try again
             log.warning("Hash mismatch: Expected: %s Received: %s" % (hash, down_hash))
-            os.remove(filename)
+            # on hash mismatch download folder at minimum contains *.done and installer
+            # download_update creates new directory, so safe to remove whole tree
+            shutil.rmtree(download_dir)
 
     else:
         # we got through the whole for loop without once succeeding
@@ -641,14 +715,23 @@ def download(url, version, download_dir, size, hash, ui):
                   (version, url)
         log.error(message)
         if ui:
-            InstallerUserMessage.basic_message(message)
+            try:
+                InstallerUserMessage.basic_message(message)
+            except Exception as e:
+                # We are already raising an exception, so just log
+                log.exception("Failed to show message")
 
         raise UpdateError(message)
 
 @pass_logger
 def install(log, runner, platform_key, installer):
-    InstallerUserMessage.status_message("New version downloaded.\n"
+    try:
+        InstallerUserMessage.status_message("New version downloaded.\n"
                                         "Installing now, please wait.")
+    except InstallerUserMessage.AppDestroyed as e:
+        raise UpdateError("App was destreoyed")
+    except Exception as e:
+        raise UpdateError("Failed to update InstallerUserMessage")
     # We expect the new installer to be located in a directory whose name is
     # the version to which we're updating. That's okay because we only use
     # 'version' for informational messages anyway.
@@ -656,8 +739,12 @@ def install(log, runner, platform_key, installer):
     version = os.path.basename(download_dir)
     try:
         runner = apply_update.apply_update(runner, installer, platform_key)
-    except apply_update.ApplyError as err:
-        InstallerUserMessage.basic_message("Failed to apply " + version)
+    except apply_update.ApplyError as err:    
+        try:
+            InstallerUserMessage.basic_message("Failed to apply " + version)
+        except Exception as e:
+            # We are already raising an exception, so just log
+            log.exception("Failed to show message")
         log.warning("Failed to update viewer to " + version)
         raise UpdateError("Failed to apply version %s update: %s" %
                           (version, err))
@@ -684,8 +771,13 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
 
     Raises UpdateError in various failure cases.
     """
-    InstallerUserMessage.status_message("Checking for updates\n"
+    try:
+        InstallerUserMessage.status_message("Checking for updates\n"
                                         "This may take a few moments...")
+    except InstallerUserMessage.AppDestroyed as e:
+        raise UpdateError("App was destreoyed")
+    except Exception as e:
+        raise UpdateError("Failed to update InstallerUserMessage")
 
     # It is reported that on Windows 10, some graphics cards cannot deal with
     # our viewer's video benchmarking -- but that if we skip it, things run
@@ -983,8 +1075,12 @@ def check_install_privs(log):
         return True
 
     log.info("Current user does NOT have permission to update %s", executable)
-    InstallerUserMessage.basic_message(
-        "Please find a system admin to upgrade Second Life")
+    try:
+        InstallerUserMessage.basic_message(
+            "Please find a system admin to upgrade Second Life")
+    except Exception as e:
+        # already quiting
+        log.exception("Failed to show message")
     return False
 
 @pass_logger

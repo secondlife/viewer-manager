@@ -40,10 +40,7 @@ import errno
 import glob
 import InstallerUserMessage as IUM
 import os.path
-import platform
-import re
 import requests
-import sys
 #silences InsecurePlatformWarning
 # http://stackoverflow.com/questions/29099404/ssl-insecureplatform-error-when-using-requests-package 
 import requests.packages.urllib3
@@ -67,6 +64,9 @@ class DummyProgressBar(object):
     def progress_done(self):
         pass
 
+class FileInUseExcption(Exception):
+    pass
+
 #Note: No exception handling here! Response to exceptions is the responsibility of the caller
 def download_update(url, download_dir, size, progressbar = False, chunk_size = CHUNK_SIZE):
     #url to download from
@@ -89,11 +89,26 @@ def download_update(url, download_dir, size, progressbar = False, chunk_size = C
 ##  if platform.system() == 'Windows':
 ##      basename = 'SLNextViewer.exe'
     filename = os.path.join(download_dir, basename)
+
+    if os.path.exists(filename):
+        # workaround untill python 3 gets around
+        # try to rename file
+        # file is in use if rename fails
+        # (might be a better idea to have a lock file)
+        try:
+            os.rename(filename, filename+".temp")
+            log.info("resuming interrupted download")
+            os.rename(filename+".temp", filename)
+        except OSError:
+            log.info("failed to access file %s" % filename)
+            raise FileInUseExcption
+
     log.info("downloading to: %s" % filename)
     req = requests.get(url, stream=True)
 
     message = "Download Progress"
     if progressbar:
+        # will raise an exception if user closes this
         progress = IUM.root()
         progress.progress_bar(message=message, size = size)
     else:

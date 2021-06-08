@@ -64,7 +64,7 @@ if __name__ == "__main__":
                           builtins=True, subprocess=True)
 
 from runner import PopenRunner
-from InstallerUserMessage import status_message, root
+from InstallerUserMessage import status_message, root, AppDestroyed
 from tkeventlet import TkGreenthread
 
 #if for some reason we are running on a POSIX machine with python less than 2.7
@@ -109,8 +109,6 @@ def python_version_check():
 
 import collections
 from llbase import llsd
-
-from datetime import datetime
 
 #module globals
 
@@ -217,11 +215,25 @@ def main(log, arg_list):
         log.error("Update manager raised %r" % err)
         # use status_message() so the frame will persist until this process
         # terminates
-        status_message('%s\nViewer will launch momentarily.' % err)
+        try:
+            status_message('%s\nViewer will launch momentarily.' % err)
+        except AppDestroyed as e:
+            log.exception("User attempted to quit")
+            sys.exit(1)
+        except Exception as e:
+            log.exception("Failed to update UI")
+            sys.exit(-1)
         runner = PopenRunner(*command)
 
     # Clear any existing status message: we're about to launch the viewer.
-    status_message(None)
+    try:
+        status_message(None)
+    except AppDestroyed as e:
+        log.exception("User attempted to quit")
+        sys.exit(1)
+    except Exception as e:
+        log.exception("Failed to update UI")
+        sys.exit(1)
 
     # If runner is actually an ExecRunner, or if the launch attempt fails,
     # this run() call won't return.

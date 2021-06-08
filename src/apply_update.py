@@ -33,26 +33,21 @@ $/LicenseInfo$
 Applies an already downloaded update.
 """
 
-from datetime import datetime
 from util import subprocess_args, pass_logger, SL_Logging, BuildData, Application
 
 import distutils
 from distutils import dir_util
 
-import ctypes
 import errno
 import glob
-import imp
 import InstallerUserMessage as IUM
 import itertools
 import os
 import os.path
 import plistlib
-import re
 from runner import Runner, ExecRunner
 import shutil
 import subprocess
-import sys
 import tarfile
 import tempfile
 
@@ -141,7 +136,11 @@ def apply_update(runner, installable, platform_key):
 def apply_linux_update(runner, installable):
     # UNTESTED
     log = SL_Logging.getLogger("SL_Apply_Update")
-    IUM.status_message("Installing from tarball...")
+    try:
+        IUM.status_message("Installing from tarball...")
+    except Exception as e:
+        raise ApplyError("Failed to update IUM %r" % e)
+    
     #which install the updater is run from
     install_dir = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
     try:
@@ -166,7 +165,11 @@ def apply_mac_update(runner, installable):
     log = SL_Logging.getLogger("SL_Apply_Update")
 
     #verify dmg file
-    IUM.status_message("Verifying installer image...")
+    try:
+        IUM.status_message("Verifying installer image...")
+    except Exception as e:
+        raise ApplyError("Failed to update IUM %r" % e)
+    
     try:
         verify_cmd=["hdiutil", "verify", installable]
         output = subprocess.check_output(verify_cmd, **subprocess_args(include_stdout=False,
@@ -183,7 +186,11 @@ def apply_mac_update(runner, installable):
     # from this function should remove it.
     try:
 
-        IUM.status_message("Mounting installer image...")
+        try:
+            IUM.status_message("Mounting installer image...")
+        except Exception as e:
+            raise ApplyError("Failed to update IUM %r" % e)
+            
         try:
             hdiutil_cmd=["hdiutil", "attach", installable, "-mountroot", tmpdir]
             output = subprocess.check_output(hdiutil_cmd,
@@ -221,8 +228,12 @@ def apply_mac_update(runner, installable):
             log.debug("Found application directory at %r" % mounted_appdir)
 
             #do the install, finally       
-            #copy over the new bits    
-            IUM.status_message("Copying updated viewer...")
+            #copy over the new bits
+            try:
+                IUM.status_message("Copying updated viewer...")            
+            except Exception as e:
+                raise ApplyError("Failed to update IUM %r" % e)
+                
             try:
                 # in the future, we may want to make this $HOME/Applications ...
                 deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
@@ -287,7 +298,10 @@ def apply_mac_update(runner, installable):
     #                   *runner.command()[1:])
 
 def apply_windows_update(runner, installable):
-    IUM.status_message("Launching installer...")
+    try:
+        IUM.status_message("Launching installer...")
+    except Exception as e:
+        raise ApplyError("Failed to update IUM %r" % e)
     # Pass back the installer; SL_Launcher will exec it and replace this process.
     # Ignore the incoming runner; we can't pass its command-line arguments through
     # the NSIS installer to the next viewer anyway. If they're arguments we

@@ -67,6 +67,14 @@ import webbrowser
 from util import Application, SL_Logging, udir
 
 # ****************************************************************************
+#   Exceptions
+# ****************************************************************************
+class AppDestroyed(Exception):
+    def __init__(self, msg, data):
+        Exception.__init__(self, msg)
+        self.data = data
+
+# ****************************************************************************
 #   Tk root window
 # ****************************************************************************
 # We want the Tk root window to be available as needed -- but we don't want to
@@ -196,8 +204,11 @@ class Common(object):
 
     # ---------------------- update the status message -----------------------
     def set_message(self, message):
-        self.message.set(message)
-        self.flush_display()
+        try:
+            self.message.set(message)
+            self.flush_display()
+        except tk.TclError as err:
+            raise AppDestroyed(str(err))
 
 # ****************************************************************************
 #   CustomDialog
@@ -335,7 +346,11 @@ class StatusMessage(ModalRoot, Common):
         # It's actually important to use this incantation to hide the root
         # window: withdraw() leaves the Taskbar/Dock icon insensitive to
         # clicks, versus this alpha trick.
-        self.attributes("-alpha", 0.0)
+        try:
+            self.attributes("-alpha", 0.0)
+        except tk.TclError as err:
+            # Updater's window was already terminated
+            raise AppDestroyed(str(err))
 
 # ****************************************************************************
 #   basic_message(), BasicMessage
@@ -344,7 +359,10 @@ def basic_message(*args, **kwds):
     """
     basic_message(text) just pops up a message box which the user must clear.
     """
-    BasicMessage(root(), *args, **kwds)
+    try:
+        BasicMessage(root(), *args, **kwds)
+    except tk.TclError as err:
+        raise AppDestroyed(str(err))
 
 class BasicMessage(CustomDialog):
     def body(self, parent):
