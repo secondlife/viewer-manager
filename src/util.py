@@ -1,4 +1,5 @@
 import cgitb
+import contextlib
 import ctypes
 import errno
 import functools
@@ -217,14 +218,12 @@ class SL_Logging(object):
     @staticmethod
     def get_verbosity():
         verbosity_env = os.getenv('SL_LAUNCH_LOGLEVEL','DEBUG')
-        # we COULD just use getattr(logging, verbosity_env) ...
-        try:
-            verbosity = dict(
-                INFO=logging.INFO,
-                DEBUG=logging.DEBUG,
-                WARNING=logging.WARNING,
-                )[verbosity_env]
-        except KeyError:
+        # Except in Python [3.4, 3.4.2), passing a string level name to
+        # getLevelName() performs the reverse lookup.
+        # https://docs.python.org/3/library/logging.html#logging.getLevelName
+        verbosity = logging.getLevelName(verbosity_env)
+        if not isinstance(verbosity, int):
+            # getLevelName('unknown') returns 'Level unknown' instead of int.
             raise ValueError("Unknown log level %r" % verbosity_env)
         return verbosity
 
@@ -286,11 +285,8 @@ class SL_Logging(object):
         logdir=getenv('%s_LOGDIR' % variable_app_name,
                       os.path.join(Application.userpath(), 'logs'))
 
-        try:
+        with contextlib.suppress(FileExistsError):
             os.makedirs(logdir)
-        except OSError as err:
-            if not (err.errno == errno.EEXIST and os.path.isdir(logdir)):
-                raise
 
         return logdir
 

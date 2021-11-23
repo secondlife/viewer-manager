@@ -11,6 +11,7 @@ $/LicenseInfo$
 """
 
 # Only packages bundled with Python should be imported here.
+from contextlib import contextmanager
 import errno
 import os
 import platform
@@ -32,11 +33,16 @@ from eventlet.hubs import kqueue
 from eventlet.hubs import poll
 from eventlet.hubs import selects
 import eventlet
+# On Mac with Python 3.9, we must use the poll hub rather than the
+# default kevent hub.
+# https://github.com/eventlet/eventlet/issues/670
+if platform.system() == 'Darwin' and sys.version_info[:2] >= (3, 9):
+    os.environ['EVENTLET_HUB'] = 'poll'
 
 import apply_update
 from SL_Launcher import capture_vmp_args
 from runner import Runner, PopenRunner
-from InstallerUserMessage import status_message, AppDestroyed
+from InstallerUserMessage import status_message, basic_message, AppDestroyed
 import update_manager
 from leapcomm import ViewerClient, RedirectUnclaimedReqid, ViewerShutdown
 
@@ -77,10 +83,12 @@ def precheck(log, viewer, args):
     # already be able to determine the name of our target executable.
     executable = Application.executable()
     if executable != viewer:
-        log.warning("Overriding '%s' with '%s'", viewer, executable)
-        if os.path.basename(executable) != os.path.basename(viewer):
-            log.warning("  despite difference in basename")
-        viewer = executable
+        # SL-13792: If this is still happening with Python 3, rub the
+        # developer's nose in it. Our fervent hope is that this whole stanza
+        # can be deleted -- but if testing still drives it, do something more
+        # blatant than logging a warning message.
+        basic_message("Viewer passed '%s' rather than '%s'" % (viewer, executable))
+        sys.exit(1)
 
     # We use a number of other modules, including 'requests'. We want every
     # single module that performs network I/O, or other conventional
@@ -199,30 +207,27 @@ def leap(*args, **kwds):
     appname  = BuildData.get('AppName')
     local_progsdir = os.path.join(Application.get_folder_path(Application.CSIDL_PROGRAMS),
                                   appname)
-    try:
-        shutil.rmtree(local_progsdir)
-    except FileNotFoundError as err:
-        # Absence of local_progsdir is the normal case. Don't squawk.
-        pass
-    except OSError as err:
-        # This is best-effort cleanup: even if it fails, carry on regardless.
-        log.warning("Couldn't delete old shortcuts at '%s': %s", local_progsdir, err)
-    else:
-        # we actually deleted something -- log it for forensic purposes
-        log.info("Deleted old shortcuts at '%s'", local_progsdir)
+    with delete_wrapper('old shortcuts', local_progsdir) as path:
+        shutil.rmtree(path)
 
     local_desktop_shortcut = os.path.join(Application.get_folder_path(Application.CSIDL_DESKTOPDIRECTORY),
                                           appname + '.lnk')
+    with delete_wrapper('old shortcut', local_desktop_shortcut) as path:
+        os.remove(path)
+
+@contextmanager
+def delete_wrapper(desc, path):
     try:
-        os.remove(local_desktop_shortcut)
+        yield path
+    except FileNotFoundError as err:
+        # Absence is the normal case. Don't squawk.
+        pass
     except OSError as err:
-        # absence is the normal case
-        if err.errno != errno.ENOENT:
-            # still only best-effort
-            log.warning("Couldn't delete old shortcut at '%s': %s", local_desktop_shortcut, err)
+        # This is best-effort cleanup: even if it fails, carry on regardless.
+        log.warning("Couldn't delete %s at '%s': %s", desc, path, err)
     else:
-        # actually deleted it
-        log.info("Deleted old shortcut at '%s'", local_desktop_shortcut)
+        # we actually deleted something -- log it for forensic purposes
+        log.info("Deleted %s at '%s'", desc, path)
 
 def leap_body(install_key, channel, testok, width):
     """
