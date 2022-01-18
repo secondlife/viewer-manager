@@ -530,9 +530,19 @@ class WindowsVideo(object):
                                 if cpu:
                                     log.debug("cpu corresponds to Intel HD Graphics: %r", cpus)
                                     continue
+
+                                cpu = re.search("(CPU\sP[46][0-6]0[05]\s)|(CPU\sU[35][46]0[05]\s)", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to Intel HD Graphics: %r", cpus)
+                                    continue
                                 
                                 # IntelR HD Graphics for 2nd Generation IntelR Processors
                                 cpu = re.search("(Processor\s[BG]*[0-9]{3}[ET\s])", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to Intel 2nd Generation: %r", cpus)
+                                    continue
+                                
+                                cpu = re.search("(CPU\s[BG]*[0-9]{3}[ET\s])", cpus[0])
                                 if cpu:
                                     log.debug("cpu corresponds to Intel 2nd Generation: %r", cpus)
                                     continue
@@ -543,9 +553,19 @@ class WindowsVideo(object):
                                     log.debug("cpu corresponds to 3rd Generation: %r", cpus)
                                     continue
 
+                                cpu = re.search("(CPU\s[G]*[12][016][0-4][05-9][YTUME\s])|(CPU\s927UE)|(CPU\sA1018)", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to 3rd Generation: %r", cpus)
+                                    continue
+
                                 # IntelR HD Graphics for 4th Generation IntelR Processors
                                 # Partial overlap with 3rd gen due to Processor 2000E
                                 cpu = re.search("(Processor\s[G]*3[2-5][2-9][0168][YTUME\s])|(Processor\s2[09][05-8][0-9][YTUME\s])|(Processor\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)", cpus[0])
+                                if cpu:
+                                    log.debug("cpu corresponds to Intel HD Graphics for 4th Generation: %r", cpus)
+                                    continue
+
+                                cpu = re.search("(CPU\s[G]*3[2-5][2-9][0168][YTUME\s])|(CPU\s2[09][05-8][0-9][YTUME\s])|(CPU\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)", cpus[0])
                                 if cpu:
                                     log.debug("cpu corresponds to Intel HD Graphics for 4th Generation: %r", cpus)
                                     continue
