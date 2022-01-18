@@ -70,7 +70,7 @@ from util import Application, SL_Logging, udir
 #   Exceptions
 # ****************************************************************************
 class AppDestroyed(Exception):
-    def __init__(self, msg, data):
+    def __init__(self, msg, data=None):
         Exception.__init__(self, msg)
         self.data = data
 
