@@ -11,6 +11,7 @@ $/LicenseInfo$
 """
 
 # Only packages bundled with Python should be imported here.
+import collections
 from contextlib import contextmanager
 import errno
 import os
@@ -40,7 +41,6 @@ if platform.system() == 'Darwin' and sys.version_info[:2] >= (3, 9):
     os.environ['EVENTLET_HUB'] = 'poll'
 
 import apply_update
-from SL_Launcher import capture_vmp_args
 from runner import Runner, PopenRunner
 from InstallerUserMessage import safe_status_message
 import update_manager
@@ -164,7 +164,7 @@ def leap(*args, **kwds):
         return
     except update_manager.UpdateError as err:
         # Updater likely have been closed by user, but even in case of genuine failure
-        # we do not handle such case anywhere below, so just log and return 
+        # we do not handle such case anywhere below, so just log and return
         log.exception("Unhandled exception in leap_body")
         return
 
@@ -552,6 +552,68 @@ def install(platform_key, installer):
     runner = update_manager.install(runner=Runner(), platform_key=platform_key,
                                     installer=installer)
     runner.run()
+
+# ****************************************************************************
+#   capture_vmp_args()
+# ****************************************************************************
+@pass_logger
+def capture_vmp_args(log, arg_list, cmd_line = None):
+    # expected input format: arg_list = ['--set', 'foo', 'bar', '-X', '-Y', 'qux']
+    # take a copy of the viewer parameters that are of interest to VMP.
+    # the regex for a parameter is --<param> {opt1} {opt2}
+    cli_overrides = {}
+    if cmd_line is None:
+        cmd_line = get_cmd_line()
+
+    vmp_params = {'--channel':'channel', '--settings':'settings', '--set':'set'}
+    # the settings set with --set.  All such settings have only one argument.
+    vmp_setters = ('UpdaterServiceSetting', 'UpdaterWillingToTest', 'ForceAddressSize')
+
+    # Here turn the list into a queue, popping off the left as we go. Note that deque() makes a copy by value, not by reference
+    # Because of the complexity introduced by the uncertainty of how many options a parameter can take, this is far less complicated code than the more
+    # pythonic (x,y) = <some generator> since we will sometimes have (x), sometimes (x,y) and sometimes (x,y,z)
+    # also, because the pop is destructive, we prevent ourselves from iterating back over list elements that iterator methods would peek ahead at
+    if arg_list is not None:
+        log.info("Parsing passed arguments: %r" % arg_list)
+        vmp_queue = collections.deque(arg_list)
+        cli_overrides[vmp_params['--set']] = {}
+        while vmp_queue:
+            param = vmp_queue.popleft()
+            #if it is not one of ours, pop through args until we get to the next parameter
+            try:
+                vmp_param = vmp_params[param]
+            except KeyError:
+                # param is not one we care about
+                continue
+
+            if param == '--set':
+                setting_name = vmp_queue.popleft()
+                setting_value = vmp_queue.popleft()
+                if setting_name in vmp_setters:
+                    cli_overrides[vmp_param][setting_name] = setting_value
+            else:
+                # just skip this one and keep looking for the next known option
+                # yes, this will break if someone tries to pass one of our options
+                # as the argument to some other option ... they deserve whatever they get
+                try:
+                    count = cmd_line[vmp_param]['count']
+                except KeyError:
+                    # cmd_line.xml has no entry for vmp_param, or entry has no
+                    # count field
+                    log.warning("Command line switch %r not defined in cmd_line.xml", param)
+                    # pretend count is 0; don't eat any subsequent args
+                    count = 0
+
+                # pop as many additional args as indicated by count
+                param_args = [vmp_queue.popleft() for argh in range(count)]
+                if count == 1:
+                    # in the special case of one arg, store scalar instead of list
+                    param_args = param_args[0]
+
+                #the parameter name is the key, the (possibly empty) list of args is the value
+                cli_overrides[vmp_param] = param_args
+
+    return cli_overrides
 
 # ****************************************************************************
 #   main()

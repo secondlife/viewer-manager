@@ -155,9 +155,9 @@ def apply_linux_update(runner, installable):
     except Exception as e:
         raise ApplyError("Can't install %s: %r" % (installable, e))
 
-    # replace the original executable in the command, but pass through all
-    # remaining command-line arguments
-    return ExecRunner(os.path.join(install_dir, "SL_Launcher.py"), *runner.command()[1:])
+    # return the original runner, which should work as-is since the new viewer
+    # is at the same pathname as the old
+    return runner
 
 def apply_mac_update(runner, installable):
     log = SL_Logging.getLogger("SL_Apply_Update")
