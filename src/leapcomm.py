@@ -673,5 +673,13 @@ class ExcQueue(eventlet.queue.LightQueue):
         # that the producer can break a consumer's iterate() loop by putting a
         # StopIteration instance on the queue: the self.get() call will duly
         # raise that exception.
-        while True:
-            yield self.get(*args, **kwds)
+        try:
+            while True:
+                yield self.get(*args, **kwds)
+        except StopIteration:
+            # The Python 2 interpreter conflated StopIteration raised within a
+            # generator with the StopIteration implicitly raised by returning
+            # from that generator. Python 3 does not: if a generator raises
+            # StopIteration, the caller of that generator sees the
+            # StopIteration exception. Most of the time that confuses things.
+            return

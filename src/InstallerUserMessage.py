@@ -34,6 +34,7 @@ This does everything the old updater/scripts/darwin/messageframe.py script did a
 Pushed up the manager directory to be multiplatform.
 """
 
+from contextlib import contextmanager 
 import os
 import sys
 import platform
@@ -64,7 +65,7 @@ from tkinter import ttk
 from tkinter.simpledialog import Dialog
 #for hyperlinks
 import webbrowser
-from util import Application, SL_Logging, udir
+from util import Application, SL_Logging, udir, pass_logger
 
 # ****************************************************************************
 #   Exceptions
@@ -73,6 +74,34 @@ class AppDestroyed(Exception):
     def __init__(self, msg, data=None):
         Exception.__init__(self, msg)
         self.data = data
+
+@pass_logger
+@contextmanager
+def intercept_close(log, exc=SystemExit):
+    """
+    Usage:
+
+    with intercept_close():
+        # e.g. status_message(...)
+
+    If the updater window is closed, or if something else goes wrong with the
+    UI, control will not return to the caller. By default, the updater will
+    terminate. If instead the problem should raise an exception, pass that
+    exception class to intercept_close():
+
+    with intercept_close(UpdateError):
+        # e.g. status_message(...)
+    """
+    try:
+        yield
+    except AppDestroyed as err:
+        message = 'Updater window was closed'
+        log.error(message)
+        raise exc(message)
+    except Exception as err:
+        message = 'Failed to update UI: %s' % err
+        log.exception(message)
+        raise exc(message)
 
 # ****************************************************************************
 #   Tk root window
@@ -267,6 +296,15 @@ def status_message(text):
         # text=None means: make the StatusMessage window go away
         log.info("(close)")
         root().hide()
+
+def safe_status_message(text, exc=SystemExit):
+    """
+    Display status_message(), but if the user closes the updater window (or if
+    something else goes wrong), don't return to the caller -- instead raise
+    exc, which by default will terminate the updater.
+    """
+    with intercept_close(exc):
+        status_message(text)
 
 class StatusMessage(ModalRoot, Common):
     """

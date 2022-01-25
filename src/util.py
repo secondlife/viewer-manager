@@ -300,14 +300,10 @@ class SL_Logging(object):
         if os.path.exists(new_name) and os.path.getsize(new_name) >= maxsize:
             old_name=basename+'.old'
             if os.path.exists(old_name):
-                try:
+                with contextlib.suppress(Exception):
                     os.remove(old_name)
-                except:
-                    pass # nothing to be done about this
-            try:
+            with contextlib.suppress(Exception):
                 os.rename(new_name, old_name)
-            except:
-                pass # nothing to be done about this either
         return new_name
 
 # ****************************************************************************
@@ -654,10 +650,8 @@ def subprocess_args(include_stdout=True, log_stream=None):
 # ****************************************************************************
 def put_marker_file(dir, ext):
     #mkstemp() returns (file handle, abspath)
-    try:
+    with contextlib.suppress(OSError):
         os.close(tempfile.mkstemp(suffix=ext, dir=dir)[0])
-    except OSError:
-        pass
 
 # ****************************************************************************
 #   MergedSettings

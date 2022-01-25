@@ -35,6 +35,7 @@ from util import Application, BuildData, SL_Logging, log_calls, pass_logger, sub
 from llbase import llsd, llrest
 
 import apply_update
+from contextlib import suppress
 import download_update
 import errno
 import glob
@@ -96,13 +97,10 @@ def make_download_dir(new_version):
     #format: ../user_settings/downloads/1.2.3.456789
     #we do this so that multiple viewers on the same host can update separately
     #this also functions as a getter 
-    try:
+    #Directory already exists, that's okay.  Other OSErrors are not okay.
+    with suppress(FileExistsError):
         download_dir = os.path.join(Application.userpath(), "downloads", new_version)
         os.makedirs(download_dir)
-    except OSError as hell:
-        #Directory already exists, that's okay.  Other OSErrors are not okay.
-        if not (hell.errno == errno.EEXIST and os.path.isdir(download_dir)):
-            raise
     return download_dir
 
 def check_for_completed_download(download_dir, expected_size = 0):
@@ -226,11 +224,10 @@ def get_settings(settings_file):
         settings = llsd.parse(open(settings_file, 'rb').read())
     except llsd.LLSDParseError as lpe:
         log.warning("Could not parse settings file %r: %s", os.path.abspath(settings_file), lpe)
+    except FileNotFoundError:
+        log.info("No settings file at %r", os.path.abspath(settings_file))
     except OSError as err:
-        if err.errno == errno.ENOENT:
-            log.info("No settings file at %r", os.path.abspath(settings_file))
-        else:
-            log.warning("OS error reading settings file %r: %s" % (os.path.abspath(settings_file), err))
+        log.warning("OS error reading settings file %r: %s" % (os.path.abspath(settings_file), err))
     except Exception as e:
         log.warning("Could not read settings file %r: %s", os.path.abspath(settings_file), e)
     else:
@@ -735,23 +732,16 @@ def download(url, version, download_dir, size, hash, ui):
                   (version, url)
         log.error(message)
         if ui:
-            try:
+            with InstallerUserMessage.intercept_close(UpdateError):
                 InstallerUserMessage.basic_message(message)
-            except Exception as e:
-                # We are already raising an exception, so just log
-                log.exception("Failed to show message")
 
         raise UpdateError(message)
 
 @pass_logger
 def install(log, runner, platform_key, installer):
-    try:
-        InstallerUserMessage.status_message("New version downloaded.\n"
-                                        "Installing now, please wait.")
-    except InstallerUserMessage.AppDestroyed as e:
-        raise UpdateError("App was destreoyed")
-    except Exception as e:
-        raise UpdateError("Failed to update InstallerUserMessage")
+    InstallerUserMessage.safe_status_message("New version downloaded.\n"
+                                             "Installing now, please wait.",
+                                             UpdateError)
     # We expect the new installer to be located in a directory whose name is
     # the version to which we're updating. That's okay because we only use
     # 'version' for informational messages anyway.
@@ -791,13 +781,9 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
 
     Raises UpdateError in various failure cases.
     """
-    try:
-        InstallerUserMessage.status_message("Checking for updates\n"
-                                        "This may take a few moments...")
-    except InstallerUserMessage.AppDestroyed as e:
-        raise UpdateError("App was destreoyed")
-    except Exception as e:
-        raise UpdateError("Failed to update InstallerUserMessage")
+    InstallerUserMessage.safe_status_message("Checking for updates\n"
+                                             "This may take a few moments...",
+                                             UpdateError)
 
     # It is reported that on Windows 10, some graphics cards cannot deal with
     # our viewer's video benchmarking -- but that if we skip it, things run
@@ -1099,7 +1085,7 @@ def check_install_privs(log):
         InstallerUserMessage.basic_message(
             "Please find a system admin to upgrade Second Life")
     except Exception as e:
-        # already quiting
+        # already quitting
         log.exception("Failed to show message")
     return False
 

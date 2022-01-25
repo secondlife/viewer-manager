@@ -42,11 +42,14 @@ if platform.system() == 'Darwin' and sys.version_info[:2] >= (3, 9):
 import apply_update
 from SL_Launcher import capture_vmp_args
 from runner import Runner, PopenRunner
-from InstallerUserMessage import status_message, basic_message, AppDestroyed
+from InstallerUserMessage import safe_status_message
 import update_manager
 from leapcomm import ViewerClient, RedirectUnclaimedReqid, ViewerShutdown
 
 # dict mapping { startup state string name: enum value }
+# We expect to override this dict at runtime by querying the running viewer
+# for its real values. The initial values here are fallback in case we need
+# them before that query succeeds.
 # These default definitions are based on the viewer's llstartup.h: if
 # EStartupState changes, so must they. Much as we would prefer to rely on
 # string names alone, we must divide the viewer session into "before clicking
@@ -130,24 +133,10 @@ def precheck(log, viewer, args):
         log.error("Update manager raised %r" % err)
         # use status_message() so the frame will persist until this process
         # terminates
-        try:
-            status_message('%s\nViewer will launch momentarily.' % err)
-        except AppDestroyed as e:
-            log.exception("User attempted to quit")
-            sys.exit(1)
-        except Exception as e:
-            log.exception("Failed to update UI")
-            sys.exit(-1)
+        safe_status_message('%s\nViewer will launch momentarily.' % err)
 
     # Clear any existing status message: we're about to launch the viewer.
-    try:
-        status_message(None)
-    except AppDestroyed as e:
-        log.exception("User attempted to quit")
-        sys.exit(1)
-    except Exception as e:
-        log.exception("Failed to update UI")
-        sys.exit(-1)
+    safe_status_message(None)
 
     # If runner is actually an ExecRunner, or if the launch attempt fails,
     # this run() call won't return.

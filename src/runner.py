@@ -10,7 +10,7 @@ Copyright (c) 2017, Linden Research, Inc.
 $/LicenseInfo$
 """
 
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 import logging
 import os
 import platform
@@ -83,11 +83,9 @@ class Runner(object):
                 message = "Failed to launch %s, see log for details" % self._command[0]
             else:
                 message = "Failed to launch %r\n%r" % (self._command, err)
-            try:
+            # Already quitting
+            with suppress(Exception):
                 InstallerUserMessage.basic_message(message)
-            except:
-                # Already quiting
-                pass
             sys.exit(-1)
 
     def Popen(self, command, **kwds):
@@ -140,13 +138,11 @@ class Runner(object):
             return subprocess.Popen(command, **kwds)
         finally:
             # try to restore previous directory
-            try:
+            # restoring the previous directory is best effort (because in
+            # the non-ASCII case, we might get an unusable path back from
+            # getcwd()), but frankly we don't much care
+            with suppress(OSError):
                 os.chdir(olddir)
-            except OSError:
-                # restoring the previous directory is best effort (because in
-                # the non-ASCII case, we might get an unusable path back from
-                # getcwd()), but frankly we don't much care
-                pass        
 
 class PopenRunner(Runner):
     def run(self):

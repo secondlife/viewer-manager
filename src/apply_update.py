@@ -38,6 +38,7 @@ from util import subprocess_args, pass_logger, SL_Logging, BuildData, Applicatio
 import distutils
 from distutils import dir_util
 
+from contextlib import suppress
 import errno
 import glob
 import InstallerUserMessage as IUM
@@ -136,10 +137,7 @@ def apply_update(runner, installable, platform_key):
 def apply_linux_update(runner, installable):
     # UNTESTED
     log = SL_Logging.getLogger("SL_Apply_Update")
-    try:
-        IUM.status_message("Installing from tarball...")
-    except Exception as e:
-        raise ApplyError("Failed to update IUM %r" % e)
+    IUM.safe_status_message("Installing from tarball...", ApplyError)
     
     #which install the updater is run from
     install_dir = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
@@ -165,10 +163,7 @@ def apply_mac_update(runner, installable):
     log = SL_Logging.getLogger("SL_Apply_Update")
 
     #verify dmg file
-    try:
-        IUM.status_message("Verifying installer image...")
-    except Exception as e:
-        raise ApplyError("Failed to update IUM %r" % e)
+    IUM.safe_status_message("Verifying installer image...", ApplyError)
     
     try:
         verify_cmd=["hdiutil", "verify", installable]
@@ -186,10 +181,7 @@ def apply_mac_update(runner, installable):
     # from this function should remove it.
     try:
 
-        try:
-            IUM.status_message("Mounting installer image...")
-        except Exception as e:
-            raise ApplyError("Failed to update IUM %r" % e)
+        IUM.safe_status_message("Mounting installer image...", ApplyError)
             
         try:
             hdiutil_cmd=["hdiutil", "attach", installable, "-mountroot", tmpdir]
@@ -229,10 +221,7 @@ def apply_mac_update(runner, installable):
 
             #do the install, finally       
             #copy over the new bits
-            try:
-                IUM.status_message("Copying updated viewer...")            
-            except Exception as e:
-                raise ApplyError("Failed to update IUM %r" % e)
+            IUM.safe_status_message("Copying updated viewer...", ApplyError)
                 
             try:
                 # in the future, we may want to make this $HOME/Applications ...
@@ -240,12 +229,11 @@ def apply_mac_update(runner, installable):
                 log.debug("deploy target path: %r" % deploy_path)
                 try:
                     shutil.rmtree(deploy_path)
-                except OSError as e:
+                except FileNotFoundError as e:
                     #if we fail to delete something that isn't there, that's okay
-                    if e.errno == errno.ENOENT:
-                        pass
-                    else:
-                        raise ApplyError("failed to remove existing install %s: %r" % (deploy_path, e))
+                    pass
+                except OSError as e:
+                    raise ApplyError("failed to remove existing install %s: %r" % (deploy_path, e))
 
                 output = distutils.dir_util.copy_tree(mounted_appdir,
                                                       deploy_path,
@@ -275,18 +263,13 @@ def apply_mac_update(runner, installable):
             # but carry on: we may be in the middle of processing some OTHER
             # exception; don't let this one discard that one
 
-    try:
+    #if we fail to delete something that isn't there, that's okay
+    with suppress(FileNotFoundError):
         # Clean up viewer saved state 
         # (see MAINT-3331; this caused a crash on OSX 10.7.5)
         STATE_DIR = os.path.expanduser(os.path.join("~/Library", "Saved Application State",
                                                     bundle_id + ".savedState"))
         shutil.rmtree(STATE_DIR)  
-    except OSError as e:
-        #if we fail to delete something that isn't there, that's okay
-        if e.errno == errno.ENOENT:
-            pass
-        else:
-            raise
     
     os.remove(installable)
     # replace the original executable in the command, but pass through all
@@ -298,10 +281,7 @@ def apply_mac_update(runner, installable):
     #                   *runner.command()[1:])
 
 def apply_windows_update(runner, installable):
-    try:
-        IUM.status_message("Launching installer...")
-    except Exception as e:
-        raise ApplyError("Failed to update IUM %r" % e)
+    IUM.safe_status_message("Launching installer...", ApplyError)
     # Pass back the installer; SL_Launcher will exec it and replace this process.
     # Ignore the incoming runner; we can't pass its command-line arguments through
     # the NSIS installer to the next viewer anyway. If they're arguments we
