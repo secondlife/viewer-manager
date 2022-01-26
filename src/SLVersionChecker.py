@@ -77,22 +77,6 @@ class Error(Exception):
 def precheck(log, viewer, args):
     # cf. SL_Launcher.main()
 
-    # SL-10153: If the viewer is installed on a path that includes non-ASCII
-    # characters, we fail to launch it because non-ASCII characters are
-    # replaced with ASCII '?'. Since the NSIS installer supports Unicode,
-    # presumably its Exec verb uses CreateProcessW(), which can presumably
-    # pass non-ASCII command-line arguments. However, Python 2 doesn't seem to
-    # deal well with non-ASCII command-line parsing. Thing is, we should
-    # already be able to determine the name of our target executable.
-    executable = Application.executable()
-    if executable != viewer:
-        # SL-13792: If this is still happening with Python 3, rub the
-        # developer's nose in it. Our fervent hope is that this whole stanza
-        # can be deleted -- but if testing still drives it, do something more
-        # blatant than logging a warning message.
-        basic_message("Viewer passed '%s' rather than '%s'" % (viewer, executable))
-        sys.exit(1)
-
     # We use a number of other modules, including 'requests'. We want every
     # single module that performs network I/O, or other conventional
     # operations, to perform it using eventlet magic.
@@ -117,14 +101,9 @@ def precheck(log, viewer, args):
     # explorer.exe only accepts one argument, pass it the shortcut, which
     # packages up all other arguments of interest.
     # But since the shortcut's name varies, read it from BuildData.
-    # Because the viewer's directory pathname might contain non-ASCII
-    # characters, direct PopenRunner to navigate to that directory and then
-    # point explorer.exe to the shortcut name.
-    # Prepend os.curdir to prevent Windows from launching whichever shortcut
-    # by that name is on the current PATH.
     runner = PopenRunner(os.path.join(os.environ['WINDIR'], 'explorer.exe'),
-                         os.path.join(os.curdir, BuildData.get('AppName') + '.lnk'),
-                         cwd=os.path.dirname(viewer))
+                         os.path.join(os.path.dirname(viewer),
+                                      BuildData.get('AppName') + '.lnk'))
 
     try:
         # update_manager() returns a Runner instance -- or raises UpdateError.
@@ -569,10 +548,14 @@ def capture_vmp_args(log, arg_list, cmd_line = None):
     # the settings set with --set.  All such settings have only one argument.
     vmp_setters = ('UpdaterServiceSetting', 'UpdaterWillingToTest', 'ForceAddressSize')
 
-    # Here turn the list into a queue, popping off the left as we go. Note that deque() makes a copy by value, not by reference
-    # Because of the complexity introduced by the uncertainty of how many options a parameter can take, this is far less complicated code than the more
-    # pythonic (x,y) = <some generator> since we will sometimes have (x), sometimes (x,y) and sometimes (x,y,z)
-    # also, because the pop is destructive, we prevent ourselves from iterating back over list elements that iterator methods would peek ahead at
+    # Here turn the list into a queue, popping off the left as we go. Note
+    # that deque() makes a copy by value, not by reference. Because of the
+    # complexity introduced by the uncertainty of how many options a parameter
+    # can take, this is far less complicated code than the more pythonic (x,y)
+    # = <some generator> since we will sometimes have (x), sometimes (x,y) and
+    # sometimes (x,y,z). Also, because the pop is destructive, we prevent
+    # ourselves from iterating back over list elements that iterator methods
+    # would peek ahead at.
     if arg_list is not None:
         log.info("Parsing passed arguments: %r" % arg_list)
         vmp_queue = collections.deque(arg_list)

@@ -41,25 +41,6 @@ import platform
 import time
 import traceback
 
-# MAINT-8087: There is an unfortunate interaction between Pyinstaller and
-# Tkinter. On Windows, Tkinter imports a helper module FixTk.py to set
-# environment variables "TCL_LIBRARY", "TK_LIBRARY" and "TIX_LIBRARY" based on
-# sys.prefix/tcl. But Pyinstaller unpacks all these modules into the running
-# user's temp directory and sets sys.prefix accordingly. On modern Windows
-# systems, the temp directory is found under c:\Users\<username> -- but when
-# <username> includes non-ASCII characters, FixTk gets flummoxed and blows up.
-# Fortunately, if "TCL_LIBRARY", "TK_LIBRARY" or "TIX_LIBRARY" are already set
-# in the environment, it skips the check. It seems that Pyinstaller already
-# sets "TCL_LIBRARY" and "TK_LIBRARY" but not "TIX_LIBRARY" -- having skipped
-# lightly past the first two, it's the search for the last that actually blows
-# up. We don't believe we ever try to engage tix; if we ever do, we hope that
-# Pyinstaller will notice, build it in and set "TIX_LIBRARY" as well. For now
-# it shouldn't (!) matter what is the value of "TIX_LIBRARY". Just make sure
-# it HAS a value, to skip the fatal check in FixTk.py. Using setdefault()
-# should ensure that if/when Pyinstaller actually sets it, we won't stomp it.
-if platform.system() == 'Windows':
-    os.environ.setdefault("TIX_LIBRARY", "")
-
 import tkinter as tk
 from tkinter import ttk
 from tkinter.simpledialog import Dialog

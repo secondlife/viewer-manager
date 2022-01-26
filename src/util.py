@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import os.path
+from pathlib import Path
 import platform
 from io import StringIO
 import subprocess
@@ -25,23 +26,17 @@ class Error(Exception):
 # ****************************************************************************
 #   ufile(), udir()
 # ****************************************************************************
-# MAINT-8161: When the viewer is installed into a Mac directory with a Unicode
-# pathname, __file__ is utf8-encoded. If we pass that encoded pathname into
-# os.path functions, we're likely to blow up with an exception of the form:
-# UnicodeDecodeError: 'ascii' codec can't decode byte xx: ordinal not in range(128)
-# The fix is simply to ensure that every time we go to reference __file__, we
-# apply decode('utf8') first. This function does that for us.
-if platform.system() != 'Darwin':
-    def ufile(file=__file__):
-        return file
-else:
-    def ufile(file=__file__):
-        """
-        Caller may pass own __file__ if desired; or if ufile() is just being
-        used to locate the directory path, ufile() suffices since most of our
-        callers are in the same directory as this __file__.
-        """
-        return file.decode('utf8')
+# MAINT-8161: In Python 2 days, in a Mac directory with a Unicode pathname,
+# __file__ contained utf8-encoded bytes. Passing that encoded pathname into
+# os.path functions would blow up with UnicodeDecodeError. ufile() and udir()
+# were to work around that. The workaround is no longer needed.
+def ufile(file=__file__):
+    """
+    Caller may pass own __file__ if desired; or if ufile() is just being
+    used to locate the directory path, ufile() suffices since most of our
+    callers are in the same directory as this __file__.
+    """
+    return file
 
 def udir(file=__file__):
     """
@@ -357,15 +352,10 @@ class Application(object):
                 # the install directory we must ask for the main executable --
                 # which, with PyInstaller, is the generated exe rather than a
                 # separate Python interpreter in a system install.
-                # Unfortunately (MAINT-8078) with Python 2, if the install
-                # directory contains non-ASCII characters, neither
-                # sys.executable nor sys.argv[0] is usable: Python 2 uses the
-                # ASCII variants of the Windows APIs, so any non-ASCII
-                # characters in the pathname are translated to plain ASCII
-                # question marks. We must ask Windows ourselves.
-                return os.path.dirname(Application.get_executable_name())
+                return os.path.dirname(sys.executable)
 
         elif platform.system() == "Darwin":
+            # TODO: This must change for PyInstaller on Mac!
             # On Darwin, what do we mean by the install directory? Is that the
             # Second Life.app, or the Contents directory, or MacOS, or
             # Resources?
@@ -373,13 +363,12 @@ class Application(object):
             # Contents, or MacOS, or Resources, but the .app directory itself.
             # __file__ should be:
             # somepath/Second Life.app/Contents/Resources/updater/util.py
-            pieces = os.path.abspath(ufile()).rsplit(os.sep, 4)
+            pieces = Path(ufile()).resolve().parts
             try:
                 if (pieces[-5].endswith(".app")
-                    and pieces[-4:-1] == ["Contents", "Resources", "updater"]):
-                    # because we limited rsplit() to 4 splits, pieces[-5] is
-                    # "somepath/Second Life.app"
-                    return pieces[-5]
+                    and pieces[-4:-1] == ("Contents", "Resources", "updater")):
+                    # include everything up until Mumble.app
+                    return str(Path(*pieces[:-4]))
                 # developer work area: we're not in the Resources/updater
                 # subdirectory at all
             except IndexError:
@@ -429,15 +418,10 @@ class Application(object):
             base_dir = os.path.join(os.path.expanduser('~'),
                                     'Library','Application Support',app_element_nowhite)
         elif (running_on == 'Linux'): 
-            base_dir = os.path.join(os.path.expanduser('~'), app_element_nowhite)
+            base_dir = os.path.join(os.path.expanduser('~'),
+                                    '.' + app_element_nowhite.lower())
         elif (running_on == 'Windows'):
             appdata = getenv('APPDATA')
-            # We could have received a plain-ASCII pathname string in which
-            # non-ASCII characters have been munged to '?'; or decoding
-            # could have produced garbage rather than raising an exception.
-            # Does the putative pathname actually exist?
-            if not os.path.exists(appdata):
-                appdata = Application.get_folder_path(Application.CSIDL_APPDATA)
             base_dir = os.path.join(appdata, app_element_nowhite)
         else:
             raise ValueError("Unsupported platform '%s'" % running_on)
@@ -477,63 +461,6 @@ class Application(object):
         # Discard HRESULT; trust the oledll assertion documented above.
         dll.SHGetFolderPathW(None, id, None, 0, buf)
         return buf.value
-
-    @staticmethod
-    def get_executable_name():
-        """
-        Windows-only function to return the name by which the current process
-        was launched. We *should* be able to get this from sys.executable
-        and/or sys.argv[0], but Python 2.7 uses ASCII-only versions of the
-        applicable Windows APIs, so when the executable pathname contains
-        non-ASCII characters, they get translated to question marks. The
-        resulting pathname is useless because it doesn't map to anything on
-        the actual filesystem.
-        """
-        # At first we tried to use CommandLineToArgvW():
-        # https://msdn.microsoft.com/en-us/library/windows/desktop/bb776391(v=vs.85).aspx
-        # This says of CommandLineToArgvW()'s first parameter:
-        # "Pointer to a null-terminated Unicode string that contains the full
-        # command line. If this parameter is an empty string the function
-        # returns the path to the current executable file."
-        # GOTCHA (MAINT-8135): If you call CommandLineToArgvW() with an empty
-        # string, and the path to the current executable file contains spaces
-        # (e.g. "c:\Program Files\Something\Something"), then you get back a
-        # list containing [u'C:\\Program', u'Files\\Something\\Something']:
-        # the well-known Windows idiocy concerning pathnames with spaces.
-        # (Empirically, rejoining those entries with a single space doesn't
-        # work because the scan treats multiple spaces as a single space.)
-        # (Rejoining them with '*' and passing the result through glob.glob()
-        # is TOO inclusive: you also get names without spaces at all, and with
-        # other characters instead of spaces.)
-        # GOTCHA (MAINT-8150): If you actually call GetCommandLineW() and pass
-        # *that* string to CommandLineToArgvW(), then the complete command,
-        # spaces and all, is returned in the first entry. However, if the user
-        # typed the command at a Command Prompt, you do NOT get the full
-        # pathname of the executable -- only what the user typed.
-        # Mere eyerolling is inadequate for the occasion.
-        # GetModuleFileNameW() *seems* to work better:
-        # https://msdn.microsoft.com/en-us/library/windows/desktop/ms683197(v=vs.85).aspx
-        # although: 'The string returned will use the same format that was
-        # specified when the module was loaded. Therefore, the path can be a
-        # long or short file name, and can use the prefix "\\?\".'
-        # The following is adapted from:
-        # http://nullege.com/codes/search/ctypes.windll.kernel32.GetModuleFileNameW
-        name = ctypes.create_unicode_buffer(1024)
-        # "If this [hModule] parameter is NULL [i.e. None], GetModuleFileName
-        # retrieves the path of the executable file of the current process."
-        rc = ctypes.windll.kernel32.GetModuleFileNameW(None, name, len(name))
-        # "If the function fails, the return value is 0 (zero). To get
-        # extended error information, call GetLastError."
-        if not rc:
-            # https://docs.python.org/2/library/ctypes.html#return-types
-            # "WinError is a function which will call Windows FormatMessage()
-            # api to get the string representation of an error code, and
-            # returns an exception. WinError takes an optional error code
-            # parameter, if no one is used, it calls GetLastError() to
-            # retrieve it."
-            raise ctypes.WinError()
-        # must've worked
-        return name.value
 
     @staticmethod
     def user_settings_path():

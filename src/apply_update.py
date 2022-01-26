@@ -283,27 +283,11 @@ def apply_mac_update(runner, installable):
 def apply_windows_update(runner, installable):
     IUM.safe_status_message("Launching installer...", ApplyError)
     # Pass back the installer; SL_Launcher will exec it and replace this process.
-    # Ignore the incoming runner; we can't pass its command-line arguments through
-    # the NSIS installer to the next viewer anyway. If they're arguments we
-    # injected, it's okay because the installer will launch (the new)
-    # SL_Launcher.
-    # SL-10030: Try using a .bat file to run the installer, instead of running
-    # it directly.
-    # SL-10153: When the installable path includes non-ASCII characters
-    # because it's a subdirectory of the user's home directory, it doesn't
-    # work to pass the full pathname into the .bat file: the pathname gets
-    # mangled. Work around that by writing the .bat file into the same
-    # directory as the installer exe, then passing only the installer's
-    # basename (which is ASCII-only) into the .bat file.
-    exedir, executable = os.path.split(installable)
-    bat_path = os.path.join(exedir, 'nextviewer.bat')
-    # Is it better to write path into file directly?
-    with open(bat_path, "w") as batfile:
-        batfile.write("%*")
-
+    # Ignore all command-line arguments; we can't pass them through the NSIS
+    # installer to the next viewer anyway.
     # Direct the NSIS installer to create a marker file for cleanup next run.
-    # Suppress the .bat file's DOS box window.
-    return ExecRunner(bat_path, executable, "/marker", window=False)
+    # Suppress the DOS box window.
+    return ExecRunner(installable, "/marker", window=False)
 
 def main():
     import argparse

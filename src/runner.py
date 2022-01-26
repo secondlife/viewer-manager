@@ -26,15 +26,11 @@ class Runner(object):
         Pass the command line to run, broken into the command and individual
         arguments as for subprocess.Popen.
 
-        The keyword-only argument cwd=path specifies the new child process's
-        current working directory.
-
         On Windows, the keyword-only argument window=False (default True)
         hides the new child process's window.
         """
         self._command = command
         self.window   = kwds.pop("window", True)
-        self.cwd      = kwds.pop("cwd", None)
 
     def command(self):
         return self._command
@@ -88,62 +84,6 @@ class Runner(object):
                 InstallerUserMessage.basic_message(message)
             sys.exit(-1)
 
-    def Popen(self, command, **kwds):
-        """
-        This Popen() method is intended as a plug-compatible wrapper for
-        subprocess.Popen().
-
-        On Windows, with Python 2, passing a Unicode command pathname fails
-        due to encoding issues. What works is to split() the pathname, change
-        to the containing directory and then execute the filename.
-        """
-        log = SL_Logging.getLogger('Popen')
-        if platform.system() != "Windows":
-            # If we were instantiated with a specific cwd= parameter, pass
-            # that through.
-            if self.cwd:
-                kwds['cwd'] = self.cwd
-                log.info("  in '%s'", self.cwd.encode('utf-8'))
-            return subprocess.Popen(command, **kwds)
-
-        # On Windows, it matters in which directory we attempt to find the
-        # program of interest: if a command pathname contains non-ASCII
-        # characters, Python 2 fails to properly pass them through Popen. Our
-        # consumer might pass cwd= to our constructor to bypass that problem.
-        if self.cwd:
-            # If we were instantiated with a specific cwd= parameter, use that
-            # as the directory to which we change.
-            progdir = self.cwd
-            log.info("  forcing cwd '%s'", progdir.encode('utf-8'))
-        else:
-            # No cwd= override: infer progdir from command[0] per MAINT-8087.
-            # Get command as a list.
-            if isinstance(command, str):
-                command = [command]
-            else:
-                command = list(command)
-
-            # DON'T pass subprocess the whole pathname, just the unqualified
-            # program name. (We assume a command[0]. If you pass an empty list,
-            # you get what you deserve.)
-            progdir, prog = os.path.split(command[0])
-            command[0] = prog
-            log.info("  inferring cwd '%s'", progdir.encode('utf-8'))
-
-        # Change to the program's directory. And no, empirically it doesn't
-        # work simply to pass cwd=progdir to subprocess.Popen.
-        olddir = os.getcwd()
-        os.chdir(progdir)
-        try:
-            return subprocess.Popen(command, **kwds)
-        finally:
-            # try to restore previous directory
-            # restoring the previous directory is best effort (because in
-            # the non-ASCII case, we might get an unusable path back from
-            # getcwd()), but frankly we don't much care
-            with suppress(OSError):
-                os.chdir(olddir)
-
 class PopenRunner(Runner):
     def run(self):
         """
@@ -168,7 +108,7 @@ class PopenRunner(Runner):
             kwds = subprocess_args(log_stream=open(os.devnull, "w"))
             # Do NOT let subprocess_args() suppress the viewer window!
             kwds = self.fix_show_window(kwds)
-            viewer_process = self.Popen(self._command, **kwds)
+            viewer_process = subprocess.Popen(self._command, **kwds)
 
         log.info("Successfully launched %s", self._command)
         return viewer_process
@@ -192,7 +132,7 @@ class ExecRunner(Runner):
                 # see comment about log_stream in PopenRunner.run()
                 kwds = subprocess_args(log_stream=open(os.devnull, "w"))
                 kwds = self.fix_show_window(kwds)
-                self.Popen(self._command, **kwds)
+                subprocess.Popen(self._command, **kwds)
 
             # If we succeeded, terminate immediately so installer can replace
             # this running executable.
