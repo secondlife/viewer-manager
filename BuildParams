@@ -7,6 +7,5 @@ public_build = true
 #nothing to configure, either
 build_autobuild_configure = false
 
-# On our TC Windows build hosts, it's important to select 32-bit Python
-CYGWIN.PYTHON_COMMAND = /cygdrive/c/Python27x86/python.exe
-CYGWIN.PYTHON_PATH    = C:\\Python27x86\\lib\\site-packages
+# tell buildscripts to use Python 3
+BUILDSCRIPTS_PY3 = true
