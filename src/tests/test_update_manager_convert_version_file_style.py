@@ -28,7 +28,7 @@ $/LicenseInfo$
 """
 
 
-from nose.tools import assert_equal
+from nose_tools import assert_equal
 
 import update_manager
 

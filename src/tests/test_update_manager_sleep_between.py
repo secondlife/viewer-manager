@@ -10,7 +10,7 @@ Copyright (c) 2017, Linden Research, Inc.
 $/LicenseInfo$
 """
 
-from nose.tools import *
+from nose_tools import *
 import update_manager
 from patch import patch
 

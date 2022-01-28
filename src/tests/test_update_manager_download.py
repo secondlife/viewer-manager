@@ -28,7 +28,7 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
-from nose.tools import *
+from nose_tools import *
 
 #this is here to mark as done and not missed
 #this is just a retry wrapper around download_update which has its own unit test

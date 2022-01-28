@@ -27,7 +27,7 @@ $/LicenseInfo$
 """
 from llbase import llsd
 
-from nose.tools import *
+from nose_tools import *
 
 import os
 import with_setup_args

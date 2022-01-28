@@ -28,8 +28,7 @@ Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
 $/LicenseInfo$
 """
 
-from nose.tools import *
-from nose import with_setup
+from nose_tools import *
 
 import os
 import platform

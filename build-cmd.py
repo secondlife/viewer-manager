@@ -55,7 +55,7 @@ cgitb.enable(format='text')
 BUILD_DEPS = dict(
     eventlet='eventlet',
     llbase='llbase',
-    nose='nose2',
+    pytest='pytest',
     PyInstaller='pyinstaller',
     requests='requests',
 )
@@ -139,34 +139,32 @@ def main():
         # Python interpreter.)
         print('The Windows VMP must be built using 32-bit python', file=sys.stderr)
 
-    #run nosetests
-    nose_env = os.environ.copy()
+    #run pytest
+    test_env = os.environ.copy()
     #stupid windows limit:
     # TypeError: encoded string too long (547, maximum length 519)
     #so nuke a few env vars we aren't using for this
     if system() == 'Windows' and getAddressSize() == 32:
-        nose_env.pop('LIB', None)
-        nose_env.pop('WINDOWSSDK_EXECUTABLEPATH_X64', None)
+        test_env.pop('LIB', None)
+        test_env.pop('WINDOWSSDK_EXECUTABLEPATH_X64', None)
 
-    # If we were to run nosetests installed in system Python, as opposed to
+    # If we were to run pytest installed in system Python, as opposed to
     # our virtualenv, then the scripts under test won't be able to import
     # (e.g.) eventlet -- which is only in our virtualenv, not system Python.
     # The tricky thing is that if system Python already contains an up-to-date
-    # version of nose, 'pip install -U nose' won't actually write anything to
+    # version of pytest, 'pip install -U pytest' won't actually write anything to
     # our virtualenv.
-    # So instead, invoke nosetests using the alternate tactic in which we
-    # explicitly run python, the one from our virtualenv, explicitly passing
-    # the nose.core module pathname:
-    # http://nose.readthedocs.io/en/latest/usage.html
-    # Defer importing nose to this point in case we DID pip install it.
-    import nose.core
-    command = [sys.executable, nose.core.__file__, tests]
+    # So instead, invoke pytest using the alternate tactic in which we
+    # explicitly run python, the one from our virtualenv, explicitly invoking
+    # the pytest module:
+    # https://docs.pytest.org/en/latest/how-to/usage.html#calling-pytest-through-python-m-pytest
+    command = [sys.executable, '-m', 'pytest', tests]
     print("About to call %s\n"
           "from %s" % (command, src))
     try:
-        #print("nose environment: %r" % nose_env)
+        #print("test environment: %r" % test_env)
         output = subprocess.check_output(command,
-                                         stderr=subprocess.STDOUT, env=nose_env,
+                                         stderr=subprocess.STDOUT, env=test_env,
                                          universal_newlines=True,
                                          cwd=src)
     except subprocess.CalledProcessError as e:
@@ -177,7 +175,7 @@ def main():
         #more debug is best effort
         raise Error("%s didn't run: %s: %s" % (command, e.__class__.__name__, e)) from e
 
-    print("Successful nosetest output:")
+    print("Successful pytest output:")
     print('\n'.join(line for line in output.splitlines()
                    if 'Ran' in line or 'OK' in line))
            
