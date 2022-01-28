@@ -30,13 +30,14 @@ $/LicenseInfo$
 
 from nose.tools import *
 
+from get_cmd_line import get_cmd_line
 import os
 import os.path
 import platform
 import shutil
 import with_setup_args
 from util import BuildData
-import SL_Launcher as SLL
+import SLVersionChecker as SLL
 
 #the {Resources}/app_settings dir is a sibling of the parent of the script dir
 source_dir = os.path.join(os.path.dirname(SLL.__file__), os.pardir)
@@ -61,21 +62,21 @@ def capture_vmp_args_teardown():
 
 @with_setup_args.with_setup_args(capture_vmp_args_setup, capture_vmp_args_teardown)
 def test_capture_vmp_args_empty():
-    cmd_settings_file = SLL.get_cmd_line(test_file)
+    cmd_settings_file = get_cmd_line(test_file)
     overrides = SLL.capture_vmp_args(None, cmd_settings_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
     assert_equal(overrides.get('channel'), None)
 
 @with_setup_args.with_setup_args(capture_vmp_args_setup, capture_vmp_args_teardown)
 def test_capture_vmp_args_simple():
-    cmd_settings_file = SLL.get_cmd_line(test_file) 
+    cmd_settings_file = get_cmd_line(test_file) 
     overrides = SLL.capture_vmp_args(['--channel', 'Bat'], cmd_settings_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
     assert_equal(overrides['channel'], 'Bat')
 
 @with_setup_args.with_setup_args(capture_vmp_args_setup, capture_vmp_args_teardown)
 def test_capture_vmp_args_setter(): 
-    cmd_settings_file = SLL.get_cmd_line(test_file)
+    cmd_settings_file = get_cmd_line(test_file)
     overrides = SLL.capture_vmp_args(['--set', 'UpdaterServiceSetting', '2'], cmd_settings_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
     assert_equal(overrides['set']['UpdaterServiceSetting'], '2')

@@ -63,11 +63,8 @@ def test_get_settings_bad_key(tmpdir1):
     try:
         settings_llsd['LagAmount']['Value']
     except KeyError:
-        assert True
-    except Exception as e:
-        print("Non KeyError from bad key test: %r" % e)
-        assert False
-        
+        pass
+
 @with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
 def test_get_settings_bad_path(tmpdir1):
     settings_llsd = update_manager.get_settings(os.path.dirname(data_dir))

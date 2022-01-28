@@ -30,12 +30,13 @@ $/LicenseInfo$
 
 from nose.tools import *
 
+from get_cmd_line import get_cmd_line
 import os
 import os.path
 import platform
 import shutil
 from util import BuildData
-import SL_Launcher as SLL
+import SLVersionChecker as SLL
 import with_setup_args
 
 #the {Resources}/app_settings dir is a sibling of the parent of the script dir
@@ -64,6 +65,6 @@ def get_cmd_line_teardown():
 #which throws off various mechanisms that look for things relative to where they are.
 @with_setup_args.with_setup_args(get_cmd_line_setup, get_cmd_line_teardown)
 def test_get_cmd_line(): 
-    result = SLL.get_cmd_line(test_file)
+    result = get_cmd_line(test_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
     assert_equal(result['set']['count'], 2)

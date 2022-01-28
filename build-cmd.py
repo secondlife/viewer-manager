@@ -55,8 +55,8 @@ cgitb.enable(format='text')
 BUILD_DEPS = dict(
     eventlet='eventlet',
     llbase='llbase',
-    nose='nose',
-    PyInstaller='pyinstaller==3.5',
+    nose='nose2',
+    PyInstaller='pyinstaller',
     requests='requests',
 )
 

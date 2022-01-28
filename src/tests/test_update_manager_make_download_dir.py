@@ -37,10 +37,6 @@ def test_make_download_dir():
     BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
     key = Application.platform_key()
     version = '1.2.3.456789'
-    try:
-        download_dir = update_manager.make_download_dir(version)
-    except OSError as e:
-        print("make_download_dir failed to eat OSError %s" % e, file=sys.stderr)
-        assert False
+    download_dir = update_manager.make_download_dir(version)
 
     assert download_dir, "make_download_dir returned None for version %s" % version

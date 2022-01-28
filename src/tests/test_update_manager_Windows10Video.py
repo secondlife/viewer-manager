@@ -89,7 +89,7 @@ class testWindowsVideo(object):
 
     def testBadIntelHDGraphics(self):
         def wmic(*args):
-            if args[0] is 'path':
+            if args[0] == 'path':
                 return 'Name                      \r\r\n'\
                        'Intel(R) HD Graphics      \r\r\n'\
                        '\r\r\n'
@@ -102,7 +102,7 @@ class testWindowsVideo(object):
 
     def testGoodIntelHDGraphics(self):
         def wmic(*args):
-            if args[0] is 'path':
+            if args[0] == 'path':
                 return 'Name                      \r\r\n'\
                        'Intel(R) HD Graphics      \r\r\n'\
                        '\r\r\n'
