@@ -398,11 +398,12 @@ class Application(object):
 
     @staticmethod
     def _darwin_viewer_app_contents_path():
-        # On macOS, we're running in an 'updater' directory nested under the
-        # Second Life.app/Contents/Resources directory.
-        # This file lives under $myapp/Contents/Resources/updater. udir() is
-        # updater; realpath(updater/../..) should get us Contents.
-        return os.path.realpath(os.path.join(udir(), os.pardir, os.pardir))
+        # On macOS, the updater lives in an 'updater' directory nested under
+        # the Second Life.app/Contents/Resources directory.
+        # sys.executable should be updater/SLVersionChecker;
+        # realpath(updater/../..) should get us Contents.
+        return os.path.realpath(os.path.join(os.path.dirname(sys.executable),
+                                             os.pardir, os.pardir))
 
     @staticmethod
     def userpath():
