@@ -48,7 +48,17 @@ import errno
 import re
 import sys
 from llbase import llsd
+# We only expect to need one helper thread; the default is 20.
+import os
+os.environ['EVENTLET_THREADPOOL_SIZE'] = '2'
 from eventlet import tpool
+
+# It's important to wrap sys.stdin in a tpool.Proxy. We want to be able to
+# block one eventlet coroutine waiting for data on stdin, WITHOUT blocking the
+# whole process.
+# In Python 3, because we must read bytes rather than characters, wrap
+# stdin.buffer rather than stdin itself, which adds the decoding layer.
+stdin_proxy = tpool.Proxy(sys.stdin.buffer)
 
 class ProtocolError(Exception):
     def __init__(self, msg, data):
@@ -84,10 +94,6 @@ def __init__():
     # guard against duplicate calls
     if _reply is not None:
         return
-    # It's important to wrap sys.stdin in a tpool.Proxy. We want to be able to
-    # block one eventlet coroutine waiting for data on stdin, WITHOUT blocking the
-    # whole process.
-    sys.stdin = tpool.Proxy(sys.stdin)
     # This will throw if the initial write to stdin doesn't follow len:data
     # protocol, or if the viewer doesn't send a dict in the form we expect.
     # Note that no matter what features have been added to the LEAP protocol,
@@ -107,11 +113,11 @@ def get(f=None):
     """Read LLSD from the passed open file-like object (default sys.stdin)"""
     # Note: 'f' should be open in 'rb' mode: llsd.parse() expects a stream of
     # bytes, not chars, when that matters.
-    data = _get(f or sys.stdin)
+    data = _get(f or stdin_proxy)
     try:
         return llsd.parse(data)
     except llsd.LLSDParseError as e:
-        msg = 'Bad received packet (%s)' % e
+        msg = 'Bad received packet (%r)' % e
         print('%s, %s bytes:' % (msg, len(data)), file=sys.stderr)
         showmax = 40
         # We've observed failures with very large packets;
@@ -138,16 +144,17 @@ def get(f=None):
 
 def _get(f):
     """Read raw string data in length:data protocol form"""
-    hdr = ''
-    while ':' not in hdr and len(hdr) < 20:
+    hdr = b''
+    while b':' not in hdr and len(hdr) < 20:
         hdr += f.read(1)
         if not hdr:
             # Here if read(1) returned empty string, i.e. EOF
             raise ViewerShutdown()
 ##         print >>sys.stderr, "_get(): hdr = %r" % hdr
-    if not hdr.endswith(':'):
+    if not hdr.endswith(b':'):
         raise ProtocolError('Expected len:data, got %r' % hdr, hdr)
     try:
+        # works even when hdr is bytes
         length = int(hdr[:-1])
     except ValueError:
         raise ProtocolError('Non-numeric len %r' % hdr[:-1], hdr[:-1])
@@ -159,7 +166,7 @@ def _get(f):
         received += len(parts[-1])
 ##         print >>sys.stderr, "_get(): received %s of %s bytes: %s" % \
 ##               (received, length, ''.join(parts)[:50])
-    data = ''.join(parts)
+    data = b''.join(parts)
     assert len(data) == length
     return data
 
@@ -167,9 +174,9 @@ def put(req, f=None):
     # Note: 'f' should be open in 'wb' mode: llsd.format_notation() produces a
     # stream of bytes, not chars, when that matters.
     if f is None:
-        f = sys.stdout
+        f = sys.stdout.buffer
     try:
-        f.write(':'.join((str(len(req)), req)))
+        f.write(b'%d:%s' % (len(req), req))
         f.flush()
     except OSError as err:
         if err.errno == errno.EINVAL:
