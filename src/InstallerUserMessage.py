@@ -305,8 +305,8 @@ class StatusMessage(ModalRoot, Common):
         #https://stackoverflow.com/q/3352918/5533635
         # The constants below are to adjust for typical overhead from the
         # frame borders.
-        self.xp = (self.winfo_screenwidth()  / 2) - (width  / 2) - 8
-        self.yp = (self.winfo_screenheight() / 2) - (height / 2) - 20
+        self.xp = int((self.winfo_screenwidth()  - width)  / 2) - 8
+        self.yp = int((self.winfo_screenheight() - height) / 2) - 20
         self.geometry('{0}x{1}+{2}+{3}'.format(width, height, self.xp, self.yp))
 
         if platform.system() == 'Windows':
