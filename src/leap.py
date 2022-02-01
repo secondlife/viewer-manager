@@ -53,12 +53,16 @@ import os
 os.environ['EVENTLET_THREADPOOL_SIZE'] = '2'
 from eventlet import tpool
 
-# It's important to wrap sys.stdin in a tpool.Proxy. We want to be able to
-# block one eventlet coroutine waiting for data on stdin, WITHOUT blocking the
-# whole process.
-# In Python 3, because we must read bytes rather than characters, wrap
-# stdin.buffer rather than stdin itself, which adds the decoding layer.
-stdin_proxy = tpool.Proxy(sys.stdin.buffer)
+# When the Windows NSIS installer runs SLVersionChecker before the viewer to
+# determine whether to install a viewer built for a different address size, we
+# have no stdin, hence sys.stdin is None.
+if sys.stdin:
+    # It's important to wrap sys.stdin in a tpool.Proxy. We want to be able to
+    # block one eventlet coroutine waiting for data on stdin, WITHOUT blocking
+    # the whole process.
+    # In Python 3, because we must read bytes rather than characters, wrap
+    # stdin.buffer rather than stdin itself, which adds the decoding layer.
+    stdin_proxy = tpool.Proxy(sys.stdin.buffer)
 
 class ProtocolError(Exception):
     def __init__(self, msg, data):
