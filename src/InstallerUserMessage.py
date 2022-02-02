@@ -173,8 +173,9 @@ class Common(object):
             # Unlike almost everything else we look for, our icons are in
             # our own updater/icons directory rather than the containing
             # viewer app. So instead of calling Application.app_data_path(),
-            # just look relative to __file__.
-            self.icon_path = os.path.join(udir(), "icons")
+            # just look relative to sys.executable, which should be the
+            # PyInstaller-generated executable SLVersionChecker.
+            self.icon_path = os.path.join(os.path.dirname(sys.executable), "icons")
         else:
             #not mac, so icons are not in ../Resources, but in a subdir of the app dir
             self.icon_path = os.path.join(Application.install_path(), 'vmp_icons')

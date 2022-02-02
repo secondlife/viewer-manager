@@ -355,15 +355,14 @@ class Application(object):
                 return os.path.dirname(sys.executable)
 
         elif platform.system() == "Darwin":
-            # TODO: This must change for PyInstaller on Mac!
             # On Darwin, what do we mean by the install directory? Is that the
             # Second Life.app, or the Contents directory, or MacOS, or
             # Resources?
             # We choose to return the Second Life.app directory -- not its
             # Contents, or MacOS, or Resources, but the .app directory itself.
-            # __file__ should be:
-            # somepath/Second Life.app/Contents/Resources/updater/util.py
-            pieces = Path(ufile()).resolve().parts
+            # sys.executable should be:
+            # .../Second Life.app/Contents/Resources/updater/SLVersionChecker
+            pieces = Path(sys.executable).resolve().parts
             try:
                 if (pieces[-5].endswith(".app")
                     and pieces[-4:-1] == ("Contents", "Resources", "updater")):
@@ -373,7 +372,7 @@ class Application(object):
                 # subdirectory at all
             except IndexError:
                 # developer work area: there just aren't that many path
-                # components in __file__
+                # components in sys.executable
                 pass
 
         # Here we're either not on Windows or Mac, or just running developer
