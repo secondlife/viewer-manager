@@ -40,6 +40,7 @@ import os.path
 from platform import system
 from pprint import pprint
 import re
+import shlex
 import subprocess
 import sys
 import struct
@@ -255,8 +256,7 @@ def run(*command, **kwds):
     return subprocess.check_call(command, **kwds)
 
 def print_command(*command):
-    print(' '.join((("'%s'" % word) if ' ' in word else word)
-                   for word in command), flush=True)
+    print(' '.join(shlex.quote(word) for word in command), flush=True)
 
 if __name__ == '__main__':
     #trace is used as the pythonic equivalent of set -x in build_cmd.sh files, to produce output for TeamCity logs.
