@@ -35,7 +35,6 @@ call it with subprocess.
 """
 import os
 from contextlib import suppress
-from datetime import datetime
 import errno
 import glob
 import InstallerUserMessage as IUM
