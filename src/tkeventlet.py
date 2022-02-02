@@ -15,8 +15,6 @@ $/LicenseInfo$
 
 import eventlet
 from functools import partial
-import itertools
-import sys
 import tkinter as tk
 
 class Error(Exception):
