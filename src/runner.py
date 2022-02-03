@@ -108,7 +108,7 @@ class PopenRunner(Runner):
             kwds = subprocess_args(log_stream=open(os.devnull, "w"))
             # Do NOT let subprocess_args() suppress the viewer window!
             kwds = self.fix_show_window(kwds)
-            viewer_process = subprocess.Popen(self._command, **kwds)
+            viewer_process = subprocess.Popen(self._command, **kwds, shell=True)
 
         log.info("Successfully launched %s", self._command)
         return viewer_process
@@ -132,7 +132,7 @@ class ExecRunner(Runner):
                 # see comment about log_stream in PopenRunner.run()
                 kwds = subprocess_args(log_stream=open(os.devnull, "w"))
                 kwds = self.fix_show_window(kwds)
-                subprocess.Popen(self._command, **kwds)
+                subprocess.Popen(self._command, **kwds, shell=True)
 
             # If we succeeded, terminate immediately so installer can replace
             # this running executable.
