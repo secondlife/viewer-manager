@@ -201,14 +201,15 @@ def apply_mac_update(runner, installable):
             #verify plist
             mounted_appdir = None
             for appdir in glob.glob(os.path.join(tmpdir, '*', MAC_APP_GLOB)):
-                try:
-                    plist = os.path.join(appdir, "Contents", "Info.plist")
-                    CFBundleIdentifier = plistlib.readPlist(plist)["CFBundleIdentifier"]
+                plist = os.path.join(appdir, "Contents", "Info.plist")
+                # there are multiple directories that legimately don't have
+                # what we are looking for
+                with suppress(IOError, KeyError):
+                    with open(plist, 'rb') as plf:
+                        CFBundleIdentifier = plistlib.load(plf)["CFBundleIdentifier"]
+                    # we only reach this point if open(), load() and [] succeed
                     mounted_appdir = appdir
                     break
-                except:
-                    #there is no except for this try because there are multiple directories that legimately don't have what we are looking for
-                    pass
             else:
                 raise ApplyError("Could not find app bundle in dmg %s." % (installable,))
 
