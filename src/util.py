@@ -1,6 +1,5 @@
 import cgitb
 import contextlib
-import ctypes
 import errno
 import functools
 import itertools
@@ -426,41 +425,6 @@ class Application(object):
         else:
             raise ValueError("Unsupported platform '%s'" % running_on)
         return base_dir
-
-    # Folder ID values for get_folder_path()
-    CSIDL_PROGRAMS         = 0x0002
-    CSIDL_DESKTOPDIRECTORY = 0x0010
-    CSIDL_APPDATA          = 0x001a
-    CSIDL_LOCAL_APPDATA    = 0x001c
-
-    @staticmethod
-    def get_folder_path(id):
-        """
-        Windows-only function to return the special folder pathname
-        corresponding to the passed ID value.
-        """
-        # https://docs.python.org/2.7/library/ctypes.html#loading-dynamic-link-libraries
-        # "windll libraries call functions using the stdcall calling
-        # convention. oledll also uses the stdcall calling convention, and
-        # assumes the functions return a Windows HRESULT error code. The error
-        # code is used to automatically raise a WindowsError exception when
-        # the function call fails."
-        dll = ctypes.oledll.shell32
-        buf = ctypes.create_unicode_buffer(300)
-        # SHGetFolderPath():
-        # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762181(v=vs.85).aspx
-        # This says new code should use SHGetKnownFolderPath():
-        # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762188(v=vs.85).aspx
-        # However, the parameters to SHGetKnownFolderPath() are more
-        # complicated (therefore harder to fake up with Python ctypes) --
-        # you need an entire Python module just to make that one call:
-        # https://gist.github.com/mkropat/7550097
-        # Therefore just use SHGetFolderPath(), whose parameters are
-        # decimal integers documented here:
-        # https://msdn.microsoft.com/en-us/library/windows/desktop/bb762494(v=vs.85).aspx
-        # Discard HRESULT; trust the oledll assertion documented above.
-        dll.SHGetFolderPathW(None, id, None, 0, buf)
-        return buf.value
 
     @staticmethod
     def user_settings_path():
