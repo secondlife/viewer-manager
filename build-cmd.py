@@ -57,7 +57,7 @@ BUILD_DEPS = dict(
     eventlet='eventlet',
     llbase='llbase',
     pytest='pytest',
-    PyInstaller='pyinstaller==4.6',
+    PyInstaller='pyinstaller==4.5',
     requests='requests',
 )
 
