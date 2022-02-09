@@ -24,7 +24,6 @@ $/LicenseInfo$
 """
 
 
-
 # Check https://wiki.lindenlab.com/wiki/How_To_Start_Using_Autobuild/Examples for info on how to build this package
 from shutil import copy, rmtree
 
