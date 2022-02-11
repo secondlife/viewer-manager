@@ -35,8 +35,11 @@ Applies an already downloaded update.
 
 from util import subprocess_args, pass_logger, SL_Logging, BuildData, Application
 
-import distutils
-from distutils import dir_util
+# SL:16842: Even though file_util isn't explicitly mentioned in this module,
+# import it right away because it's lazily imported by dir_util. If we wait
+# until then, we can end up trying to import it after the previous
+# SLVersionChecker executable has been moved or deleted, which fails.
+from distutils import dir_util, file_util
 
 from contextlib import suppress
 import errno
@@ -236,11 +239,11 @@ def apply_mac_update(runner, installable):
                 except OSError as e:
                     raise ApplyError("failed to remove existing install %s: %r" % (deploy_path, e))
 
-                output = distutils.dir_util.copy_tree(mounted_appdir,
-                                                      deploy_path,
-                                                      preserve_mode=1,
-                                                      preserve_symlinks=1,
-                                                      preserve_times=1)
+                output = dir_util.copy_tree(mounted_appdir,
+                                            deploy_path,
+                                            preserve_mode=1,
+                                            preserve_symlinks=1,
+                                            preserve_times=1)
                 #This creates a huge amount of output.  Left as comment for future dev debug, but 
                 #should not be in normal use.
                 #log.debug("Distutils output: %r" % output)
