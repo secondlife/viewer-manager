@@ -35,12 +35,6 @@ Applies an already downloaded update.
 
 from util import subprocess_args, pass_logger, SL_Logging, BuildData, Application
 
-# SL:16842: Even though file_util isn't explicitly mentioned in this module,
-# import it right away because it's lazily imported by dir_util. If we wait
-# until then, we can end up trying to import it after the previous
-# SLVersionChecker executable has been moved or deleted, which fails.
-from distutils import dir_util, file_util
-
 from contextlib import suppress
 import errno
 import glob
@@ -48,6 +42,7 @@ import InstallerUserMessage as IUM
 import itertools
 import os
 import os.path
+from pathlib import Path
 import plistlib
 from runner import Runner, ExecRunner
 import shutil
@@ -221,38 +216,47 @@ def apply_mac_update(runner, installable):
                 raise ApplyError("Wrong bundle identifier for dmg %s.  "
                                  "Bundle identifier: %s, expecting %s" %
                                  (installable, CFBundleIdentifier, bundle_id))
-            log.debug("Found application directory at %r" % mounted_appdir)
+            log.debug("Found application directory at '%s'", mounted_appdir)
+
+            IUM.safe_status_message("Removing old viewer...", ApplyError)
+
+            # in the future, we may want to make this $HOME/Applications ...
+            deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
+            log.debug("deploy target path: %r" % deploy_path)
+            try:
+                shutil.rmtree(deploy_path)
+            except FileNotFoundError as e:
+                #if we fail to delete something that isn't there, that's okay
+                pass
+            except OSError as e:
+                raise ApplyError("failed to remove existing install %s: %r" % (deploy_path, e))
+
+            # How many files will we try to copy from mounted_appdir? Count
+            # only files because shutil.copytree()'s copy_function is only
+            # called for files. Don't count symlinks (even though is_file()
+            # returns True for a symlink to a file) because copy_function
+            # isn't called for them either. Rather than collecting all paths
+            # into a list and then taking its len(), count them on the fly.
+            total = sum(1 for f in Path(mounted_appdir).rglob('*')
+                        if f.is_file() and not f.is_symlink())
+            log.debug("%s files in application directory tree", total)
 
             #do the install, finally       
             #copy over the new bits
-            IUM.safe_status_message("Copying updated viewer...", ApplyError)
-                
-            try:
-                # in the future, we may want to make this $HOME/Applications ...
-                deploy_path = os.path.join("/Applications", os.path.basename(mounted_appdir))
-                log.debug("deploy target path: %r" % deploy_path)
-                try:
-                    shutil.rmtree(deploy_path)
-                except FileNotFoundError as e:
-                    #if we fail to delete something that isn't there, that's okay
-                    pass
-                except OSError as e:
-                    raise ApplyError("failed to remove existing install %s: %r" % (deploy_path, e))
+            with IUM.intercept_close(ApplyError,
+                                     'installation from %s to %s failed' %
+                                     (installable, deploy_path)), \
+                 ProgressCopyTree("Copying updated viewer...", total) as copier:
+                # Specifying our ProgressCopyTree as the copy_function
+                # lets us tick the progress bar every time we copy a file.
+                shutil.copytree(mounted_appdir,
+                                deploy_path,
+                                symlinks=True,
+                                copy_function=copier)
+                # grab count of files copied before copier goes out of scope
+                copied = copier.count
 
-                output = dir_util.copy_tree(mounted_appdir,
-                                            deploy_path,
-                                            preserve_mode=1,
-                                            preserve_symlinks=1,
-                                            preserve_times=1)
-                #This creates a huge amount of output.  Left as comment for future dev debug, but 
-                #should not be in normal use.
-                #log.debug("Distutils output: %r" % output)
-                # 'output' is a list of copied files, which is why it's reasonable
-                # to report len(output)
-                log.info("Copied %r files from installer." % len(output))
-            except Exception as e:
-                raise ApplyError("installation from %s to %s failed: %r" %
-                                 (installable, deploy_path, e))
+            IUM.safe_status_message("Copied %r files from installer." % copied)
 
         finally:
             # okay, done with mounted .dmg, try to unmount
@@ -283,6 +287,27 @@ def apply_mac_update(runner, installable):
     # Alternatively:
     # return ExecRunner(os.path.join(deploy_path, "Contents", "MacOS", "SecondLife"),
     #                   *runner.command()[1:])
+
+class ProgressCopyTree:
+    def __init__(self, message, total):
+        self.message = message
+        self.total = total
+        self.count = 0
+
+    def __enter__(self):
+        # display the progress bar
+        IUM.root().progress_bar(self.message, self.total)
+        return self
+
+    def __call__(self, source, dest):
+        shutil.copy2(source, dest)
+        IUM.root().step(1)
+        self.count += 1
+
+    def __exit__(self, *exc_info):
+        IUM.root().progress_done()
+        # do not swallow exceptions
+        return False
 
 def apply_windows_update(runner, installable):
     IUM.safe_status_message("Launching installer...", ApplyError)

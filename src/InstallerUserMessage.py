@@ -58,7 +58,7 @@ class AppDestroyed(Exception):
 
 @pass_logger
 @contextmanager
-def intercept_close(log, exc=SystemExit):
+def intercept_close(log, exc=SystemExit, message='Failed to update UI'):
     """
     Usage:
 
@@ -76,11 +76,11 @@ def intercept_close(log, exc=SystemExit):
     try:
         yield
     except AppDestroyed as err:
-        message = 'Updater window was closed'
+        message += ': updater window was closed'
         log.error(message)
         raise exc(message)
     except Exception as err:
-        message = 'Failed to update UI: %s' % err
+        message = '%s: %s' % (message, err)
         log.exception(message)
         raise exc(message)
 
