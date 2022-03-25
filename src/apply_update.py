@@ -88,9 +88,10 @@ def try_dismount(installable, tmpdir):
         #Filesystem   512-blocks   Used Available Capacity iused  ifree %iused  Mounted on
         #/dev/disk1s2    2047936 643280   1404656    32%   80408 175582   31%   /private/tmp/mnt/Second Life Installer
         command = ["df", os.path.join(tmpdir, "Second Life Installer")]
-        output = subprocess.check_output(command,
-                                         **subprocess_args(include_stdout=False,
-                                                           log_stream=SL_Logging.stream_from_process(command)))
+        output = subprocess.check_output(
+            command,
+            **subprocess_args(include_stdout=False,
+                              log_stream=SL_Logging.stream_from_process(command)))
         log.debug("result of subprocess call to find dmg mount point: %r" % output)
         #No point in trying to umount an fs that doesn't exist. 
         #This could happen, for example, if the user manually umounts it first
@@ -102,20 +103,18 @@ def try_dismount(installable, tmpdir):
         mnt_dev = output.split('\n')[1].split()[0]
         #do the dismount
         command = ["hdiutil", "detach", "-force", mnt_dev]
-        output = subprocess.check_output(command,
-                                         **subprocess_args(include_stdout=False,
-                                                           log_stream=SL_Logging.stream_from_process(command)))
-        log.info("result of subprocess call to detach dmg mount point: %r" % output)
+        subprocess.check_call(
+            command,
+            **subprocess_args(log_stream=SL_Logging.stream_from_process(command)))
         log.info("hdiutil detach succeeded")  
     except Exception as e:
         log.error("Could not detach dmg file %s.  Error messages: %s" % (installable, e))  
         #try harder, more forcibly
         try:
             command = ["diskutil", "umount", mnt_dev]
-            output = subprocess.check_output(command,
-                                                 **subprocess_args(include_stdout=False,
-                                                                   log_stream=SL_Logging.stream_from_process(command)))
-            log.info("result of subprocess call to unmount dmg mount point: %r" % output)
+            subprocess.check_call(
+                command,
+                **subprocess_args(log_stream=SL_Logging.stream_from_process(command)))
         except Exception as e:
             log.error("Could not umount dmg file %s.  Error messages: %s" % (installable, e))    
 
@@ -165,10 +164,10 @@ def apply_mac_update(runner, installable):
     
     try:
         verify_cmd=["hdiutil", "verify", installable]
-        output = subprocess.check_output(verify_cmd, **subprocess_args(include_stdout=False,
-                                                                       log_stream=SL_Logging.stream_from_process(verify_cmd)))
-
-        log.info("result of subprocess call to verify dmg file: %r" % output)
+        # log both stdout and stderr to our log file
+        subprocess.check_call(
+            verify_cmd,
+            **subprocess_args(log_stream=SL_Logging.stream_from_process(verify_cmd)))
         log.info("dmg verification succeeded")
     except Exception as e:
         raise ApplyError("Could not verify dmg file %s.  Error messages: %r" % (installable, e))
@@ -183,10 +182,10 @@ def apply_mac_update(runner, installable):
             
         try:
             hdiutil_cmd=["hdiutil", "attach", installable, "-mountroot", tmpdir]
-            output = subprocess.check_output(hdiutil_cmd,
-                                             **subprocess_args(include_stdout=False,
-                                                               log_stream=SL_Logging.stream_from_process(hdiutil_cmd)))
-            log.info("result of subprocess call to attach dmg to mount point: %r" % output)
+            # log both stdout and stderr to our log file
+            subprocess.check_call(
+                hdiutil_cmd,
+                **subprocess_args(log_stream=SL_Logging.stream_from_process(hdiutil_cmd)))
             log.info("hdiutil attach succeeded")
         except Exception as e:
             raise ApplyError("Could not attach dmg file %s.  Error messages: %s" %
