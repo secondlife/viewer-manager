@@ -1,13 +1,10 @@
 <?xml version="1.0" ?>
 <llsd>
 <map>
-    <key>installables</key>
-    <map>
-    </map>
     <key>package_description</key>
     <map>
       <key>canonical_repo</key>
-      <string>https://bitbucket.org/lindenlab/viewer-manager</string>
+      <string>https://github.com/secondlife/viewer-manager</string>
       <key>copyright</key>
       <string>Copyright (c) 2000-2012, Linden Research, Inc.</string>
       <key>description</key>
