@@ -330,6 +330,8 @@ class StatusMessage(ModalRoot, Common):
         # https://stackoverflow.com/a/10268076
         self.progress.grid_remove()
 
+        self.attributes("-topmost", True)
+
     def _delete_window(self):
         try:
             self.destroy()
