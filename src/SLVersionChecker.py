@@ -26,19 +26,31 @@ if __name__ == '__main__':
     # even a crash on import will get logged properly.
     SL_Logging.getLogger('SLVersionChecker')
 
+# On Mac with Python 3.9, we must use the poll hub rather than the
+# default kevent hub.
+# https://github.com/eventlet/eventlet/issues/670
+if platform.system() == 'Darwin' and sys.version_info[:2] == (3, 9):
+    os.environ['EVENTLET_HUB'] = 'poll'
 # Temporary workaround for "import eventlet" crash SL-11563,
-# normaly eventlet should not reqire any pre-improting
+# normally eventlet should not reqire any pre-importing
 import dns
 from eventlet.hubs import epolls
 from eventlet.hubs import kqueue
 from eventlet.hubs import poll
 from eventlet.hubs import selects
 import eventlet
-# On Mac with Python 3.9, we must use the poll hub rather than the
-# default kevent hub.
-# https://github.com/eventlet/eventlet/issues/670
-if platform.system() == 'Darwin' and sys.version_info[:2] >= (3, 9):
-    os.environ['EVENTLET_HUB'] = 'poll'
+
+# Call monkey_patch() before ALL other imports:
+# https://github.com/gevent/gevent/issues/1016
+# We use a number of other modules, including 'requests'. We want every
+# single module that performs network I/O, or other conventional
+# operations, to perform it using eventlet magic.
+# On Posix, we must pass os=True.
+# On Windows, we must NOT pass os=True.  :-P
+# https://github.com/eventlet/eventlet/issues/483
+eventlet.monkey_patch(os=(platform.system() != 'Windows'),
+                      select=True, socket=True, time=True,
+                      builtins=True, subprocess=True)
 
 import apply_update
 from runner import Runner, PopenRunner
@@ -76,17 +88,6 @@ class Error(Exception):
 @pass_logger
 def precheck(log, viewer, args):
     # cf. SL_Launcher.main()
-
-    # We use a number of other modules, including 'requests'. We want every
-    # single module that performs network I/O, or other conventional
-    # operations, to perform it using eventlet magic.
-    # On Posix, we must pass os=True.
-    # On Windows, we must NOT pass os=True.  :-P
-    # https://github.com/eventlet/eventlet/issues/483
-    eventlet.monkey_patch(os=(platform.system() != 'Windows'),
-                          select=True, socket=True, time=True,
-                          builtins=True, subprocess=True)
-
     log.info("Viewer version {} ({} bit)"
              .format(BuildData.get('Version'), BuildData.get('Address Size')))
     log.debug("viewer binary name: %s", viewer)
