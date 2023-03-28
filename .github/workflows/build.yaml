@@ -13,7 +13,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install Python packages
-        run: pip install -U eventlet llbase pytest PyInstaller requests
+        run: pip3 install -U eventlet llbase pytest PyInstaller requests
       - uses: secondlife/action-autobuild@v3
         with:
           addrsize: ${{ matrix.addrsize }}
