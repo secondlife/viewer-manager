@@ -4,7 +4,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-2022, macos-11, ubuntu-22.04]
+        os: [macos-11, ubuntu-22.04]
         addrsize: ["64"]
         include:
           - os: windows-2022
@@ -12,6 +12,8 @@ jobs:
     continue-on-error: true
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Install Python packages
+        run: pip install -U eventlet llbase pytest PyInstaller requests
       - uses: secondlife/action-autobuild@v3
         with:
           addrsize: ${{ matrix.addrsize }}
@@ -20,6 +22,6 @@ jobs:
     runs-on: [ubuntu-latest]
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
-      - uses: secondlife/action-autobuild-release@v1
+      - uses: secondlife/action-autobuild-release@v2
         with:
           public: true

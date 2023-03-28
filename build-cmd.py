@@ -27,7 +27,6 @@ $/LicenseInfo$
 # Check https://wiki.lindenlab.com/wiki/How_To_Start_Using_Autobuild/Examples for info on how to build this package
 from shutil import copy, rmtree
 
-import cgitb
 from collections import deque
 from contextlib import suppress
 import errno
@@ -46,19 +45,12 @@ import struct
 import trace
 
 # set this up early to report crashes in anything that follows
-cgitb.enable(format='text')
-
-# Python packages on which our build depends. Each entry maps a package name
-# (the name you would 'import') to the string you would use to 'pip install'
-# that package. That may include any version qualifiers, or whatever,
-# recognized by pip.
-BUILD_DEPS = dict(
-    eventlet='eventlet',
-    llbase='llbase',
-    pytest='pytest',
-    PyInstaller='pyinstaller',
-    requests='requests',
-)
+try:
+    import cgitb
+    cgitb.enable(format='text')
+except ImportError:
+    # sigh, they should not have deprecated and removed this
+    pass
 
 class Error(Exception):
     pass
@@ -88,29 +80,6 @@ def main():
     stage_VMP = os.path.join(stage, "VMP")
     build = os.path.join(top, 'build')
 
-    # ensure we're running in a virtualenv
-    try:
-        virtualenv = os.environ["VIRTUAL_ENV"]
-    except KeyError as err:
-        raise Error('Run %s within a virtualenv: it uses pip install' % scriptname) from err
-
-    # Install the Python packages on which this build depends.
-    # iterating over a dict produces just its keys
-    print("Installing %s into virtualenv: %s" %
-          (', '.join(BUILD_DEPS), virtualenv))
-
-    try:
-        # 'python -m pip' is recommended since, if you just invoke 'pip', you
-        # could end up finding a different pip than the one associated with
-        # the Python interpreter running the current script.
-        # https://pip.pypa.io/en/latest/user_guide/#using-pip-from-your-program
-        # -U means: even if we already have an older version of (say) requests
-        # in the system image, ensure our virtualenv has the version specified
-        # in RUNTIME_DEPS (or the latest version if not version-locked).
-        run(sys.executable, '-m', 'pip', 'install', '-U', *BUILD_DEPS.values())
-    except RunError as err:
-        raise Error(str(err)) from err
-
     # Make sure our staging area is clean because our manifest sweeps up
     # whatever's in this directory.
     with suppress(FileNotFoundError):
@@ -137,15 +106,8 @@ def main():
         test_env.pop('LIB', None)
         test_env.pop('WINDOWSSDK_EXECUTABLEPATH_X64', None)
 
-    # If we were to run pytest installed in system Python, as opposed to
-    # our virtualenv, then the scripts under test won't be able to import
-    # (e.g.) eventlet -- which is only in our virtualenv, not system Python.
-    # The tricky thing is that if system Python already contains an up-to-date
-    # version of pytest, 'pip install -U pytest' won't actually write anything to
-    # our virtualenv.
-    # So instead, invoke pytest using the alternate tactic in which we
-    # explicitly run python, the one from our virtualenv, explicitly invoking
-    # the pytest module:
+    # Invoke pytest using the alternate tactic in which we explicitly run
+    # python, our own interpreter, explicitly invoking the pytest module:
     # https://docs.pytest.org/en/latest/how-to/usage.html#calling-pytest-through-python-m-pytest
     command = [sys.executable, '-m', 'pytest', tests]
     print("About to call %s\n"
@@ -241,18 +203,10 @@ def pyinstaller(mainfile, dstdir, icon, manifest_from_build=None):
         manifest = os.path.join(manifest_from_build, basebase, basebase + '.exe.manifest')
         # https://msdn.microsoft.com/en-us/library/ms235591.aspx
         try:
-            run('mt.exe', '-manifest', manifest, '-outputresource:%s;1' % exe)
-        except RunError as e:
+            subprocess.check_call(
+                ['mt.exe', '-manifest', manifest, '-outputresource:%s;1' % exe])
+        except subprocess.CalledProcessError as e:
             raise Error("Couldn't embed manifest %s in %s: %s" % (manifest, exe, e)) from e
-
-# We don't bother to catch CalledProcessError and reraise it as RunError; we
-# just alias the original exception.
-RunError = subprocess.CalledProcessError
-
-def run(*command, **kwds):
-    print_command(*command)
-    # it's caller's responsibility to catch RunError
-    return subprocess.check_call(command, **kwds)
 
 def print_command(*command):
     print(' '.join(shlex.quote(word) for word in command), flush=True)
