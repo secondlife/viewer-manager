@@ -6,17 +6,24 @@ jobs:
       matrix:
         os: [macos-11, ubuntu-22.04]
         addrsize: ["64"]
+        python-architecture: ["x64"]
         include:
           - os: windows-2022
             addrsize: "32"
+            python-architecture: "x86"
     continue-on-error: true
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+          architecture: ${{ matrix.python-architecture }}
       - name: Install Python packages
         run: pip3 install -U eventlet llbase pytest PyInstaller requests
       - uses: secondlife/action-autobuild@signal/archive-format
         with:
           addrsize: ${{ matrix.addrsize }}
+          setup-python: false
           archive-format: tbz2
   release:
     needs: build
