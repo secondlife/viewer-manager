@@ -14,9 +14,10 @@ jobs:
     steps:
       - name: Install Python packages
         run: pip3 install -U eventlet llbase pytest PyInstaller requests
-      - uses: secondlife/action-autobuild@v3
+      - uses: secondlife/action-autobuild@signal/archive-format
         with:
           addrsize: ${{ matrix.addrsize }}
+          archive-format: tbz2
   release:
     needs: build
     runs-on: [ubuntu-latest]
