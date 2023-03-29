@@ -6,10 +6,14 @@ jobs:
       matrix:
         os: [macos-11, ubuntu-22.04]
         addrsize: ["64"]
+        archive-format: "tzst"
         python-architecture: ["x64"]
         include:
           - os: windows-2022
             addrsize: "32"
+            # workaround for zstandard/pyzstd memory issues on 32-bit
+            # pyzstd.ZstdError: Unable to compress zstd data: Allocation error : not enough memory
+            archive-format: "tbz2"
             python-architecture: "x86"
     continue-on-error: true
     runs-on: ${{ matrix.os }}
@@ -20,11 +24,11 @@ jobs:
           architecture: ${{ matrix.python-architecture }}
       - name: Install Python packages
         run: pip3 install -U eventlet llbase pytest PyInstaller requests
-      - uses: secondlife/action-autobuild@signal/archive-format
+      - uses: secondlife/action-autobuild@v3
         with:
           addrsize: ${{ matrix.addrsize }}
           setup-python: false
-          archive-format: tbz2
+          archive-format: ${{ matrix.archive-format }}
   release:
     needs: build
     runs-on: [ubuntu-latest]
