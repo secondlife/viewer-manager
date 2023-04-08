@@ -1,21 +1,10 @@
-Viewer Management Process
-=========================
+# Viewer Manager 
 
-This is the master process that is launched for the Second Life
-Viewer (https://bitbucket.org/lindenlab/viewer-release). It manages
-updates and will soon manage crash data collection and reporting.
+[Second Life client](https://github.com/secondlife/viewer) updater.
 
-To build it, you'll need to have the python 'nose' package installed.
-You need the 'nose' package (a python testing framework) installed:
-
-`pip install nose`
-
-and set the `nosetests` environment to the location of the `nosetests`
-executable. If you installed nose such that it is in your path, this
-will work:
+## Building
 
 ```
-export nosetests=nosetests;
 autobuild build
 autobuild package
 ```
