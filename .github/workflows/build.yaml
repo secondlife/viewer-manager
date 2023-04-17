@@ -15,7 +15,7 @@ jobs:
             # pyzstd.ZstdError: Unable to compress zstd data: Allocation error : not enough memory
             archive-format: "tbz2"
             python-architecture: "x86"
-    continue-on-error: true
+    continue-on-error: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/setup-python@v4
@@ -26,6 +26,7 @@ jobs:
         run: pip3 install -U eventlet llbase pytest PyInstaller requests
       - uses: secondlife/action-autobuild@v3
         with:
+          build-variables-ref: viewer-c++17
           addrsize: ${{ matrix.addrsize }}
           archive-format: ${{ matrix.archive-format }}
           setup-python: false
