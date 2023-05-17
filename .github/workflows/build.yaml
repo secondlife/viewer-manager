@@ -13,7 +13,7 @@ jobs:
             addrsize: "32"
             # workaround for zstandard/pyzstd memory issues on 32-bit
             # pyzstd.ZstdError: Unable to compress zstd data: Allocation error : not enough memory
-            archive-format: "tbz2"
+            archive-format: "tgz"
             python-architecture: "x86"
     continue-on-error: false
     runs-on: ${{ matrix.os }}
