@@ -4,17 +4,20 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-11, ubuntu-22.04]
+        os: [macos-11, ubuntu-22.04, windows-2022]
         addrsize: ["64"]
         archive-format: ["tzst"]
         python-architecture: ["x64"]
-        include:
-          - os: windows-2022
-            addrsize: "32"
-            # workaround for zstandard/pyzstd memory issues on 32-bit
-            # pyzstd.ZstdError: Unable to compress zstd data: Allocation error : not enough memory
-            archive-format: "tgz"
-            python-architecture: "x86"
+##      As of 2023-05-17, the autobuild package produced by either "tbz2" or "tgz"
+##      is unreadable by the Python 3.10 or 3.11 tarfile module. But as the "tzst"
+##      issue remains with 32-bit Python, use 64-bit Python for all platforms.
+##      include:
+##        - os: windows-2022
+##          addrsize: "32"
+##          # workaround for zstandard/pyzstd memory issues on 32-bit
+##          # pyzstd.ZstdError: Unable to compress zstd data: Allocation error : not enough memory
+##          archive-format: "tbz2"
+##          python-architecture: "x86"
     continue-on-error: false
     runs-on: ${{ matrix.os }}
     steps:
