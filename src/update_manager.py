@@ -50,6 +50,7 @@ from runner import PopenRunner
 import shutil
 import subprocess
 import tempfile
+import time
 import threading
 # specifically import the sleep() function for testability
 from time import sleep
@@ -1093,6 +1094,22 @@ def check_install_privs(log):
 def cleanup_previous_download(log, platform_key):
     # clean up any previous download dir on windows, see apply_update.apply_update()
     if platform_key == 'win':
+        #remove everything from ../user_settings/downloads
+        #that is older than 60 days
+        download_dir = os.path.join(Application.userpath(), "downloads")
+        try:
+            now = time.time()
+            cmp_time = now - 60 * 86400
+            pattern = re.compile("^[0-9]{1,2}[.][0-9]{1,2}[.][0-9]{1,2}[.][0-9]{6,}")
+            with os.scandir(download_dir) as iter:
+                for entry in iter:
+                    if entry.stat().st_mtime < cmp_time and pattern.match(entry.name):
+                        old_dir = os.path.join(download_dir, entry.name)
+                        log.debug('Cleaning past directory %s', old_dir)
+                        shutil.rmtree(old_dir)
+        except:
+            log.debug('Failed to clean download directory %s', download_dir)
+
         # It has happened that we've hit an exception even before assigning to
         # past_download_dir, in which case the original exception is masked by
         # an unbound local variable exception. Provide a placeholder value.
