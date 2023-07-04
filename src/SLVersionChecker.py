@@ -55,6 +55,7 @@ eventlet.monkey_patch(os=(platform.system() != 'Windows'),
 import apply_update
 from runner import Runner, PopenRunner
 from InstallerUserMessage import safe_status_message
+from InstallerUserMessage import basic_message
 import update_manager
 from leapcomm import ViewerClient, RedirectUnclaimedReqid, ViewerShutdown
 
@@ -603,6 +604,10 @@ def capture_vmp_args(log, arg_list, cmd_line = None):
 #   main()
 # ****************************************************************************
 def main(*raw_args):
+    if len(raw_args) == 0:
+        safe_status_message(None)
+        basic_message("Please launch Second Life viewer directly, SLVersionChecker isn't a standalone application")
+        sys.exit(-1)
     from argparse import ArgumentParser, REMAINDER
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(title='subcommands',
