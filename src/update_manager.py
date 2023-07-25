@@ -61,12 +61,13 @@ import uuid
 import warnings
 from xml.etree import ElementTree
 
+if platform.system() == 'Windows':
+    import wmi
+    wmiapi = wmi.WMI()
+
 DEFAULT_UPDATE_SERVICE = 'https://update.secondlife.com/update'
 
 class UpdateError(Exception):
-    pass
-
-class WmicError(UpdateError):
     pass
 
 #module globals
@@ -265,19 +266,11 @@ def make_VVM_UUID_hash(platform_key):
         muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
         log.debug("result of subprocess call to get mac MUUID: %r" % muuid)
     elif (platform_key == 'win'):
-        try:
-            # wmic csproduct get UUID | grep -v UUID
-            muuid = wmic('csproduct','get','UUID')
-        except WmicError as err:
-            log.warning(err)
-            muuid = None
-        else:
-            #outputs two visible rows:
-            #UUID
-            #XXXXXXX-XXXX...
-            # but splitlines() produces a whole lot of empty strings.
-            muuid = [line for line in muuid.splitlines() if line][-1].rstrip()
-            log.debug("result of subprocess call to get win MUUID: %r" % muuid)
+        # wmic csproduct get UUID | grep -v UUID
+        # Win32_ComputerSystemProduct() returns a 1-entry list
+        csproduct = wmiapi.Win32_ComputerSystemProduct()[0]
+        muuid = csproduct.UUID
+        log.debug("win MUUID: %r" % muuid)
             
     if muuid is None:
         #fake it
@@ -301,44 +294,6 @@ def getBitness(platform_key):
         bits = 64
     log.debug("returning %d bit" % bits)
     return bits
-
-def wmic(*args):
-    """
-    Run the Windows wmic command with specified arguments, returning its
-    stdout (or raising an exception).
-
-    Breaking this out as a separate function improves testability.
-    """
-    try:
-        # MAINT-9014: There are a couple possibilities for finding wmic.
-        try:
-            # It has a canonical pathname that might or might not be on the PATH.
-            return _wmic("c:/Windows/System32/Wbem/wmic", *args)
-        except WindowsError as err:
-            # Only retry for "not found" -- anything else is a genuine problem.
-            if err.errno != errno.ENOENT:
-                raise
-            # wmic not in usual place -- better hope it's on PATH! Let any
-            # exceptions from this call propagate to outer 'try'.
-            # Tempting though it is to memoize the knowledge that the usual
-            # path doesn't work, the fact is that we only invoke wmic a couple
-            # times.
-            return _wmic("wmic", *args)
-    except subprocess.CalledProcessError as err:
-        # https://docs.python.org/2/library/subprocess.html#subprocess.CalledProcessError
-        # When check_output() raises CalledProcessError, it stores collected
-        # output into err.output.
-        raise WmicError("wmic error: %s\n%s" % (err, err.output))
-    except WindowsError as winerr:
-        if winerr.errno == errno.ENOENT:
-            raise WmicError("No wmic command found - bad Windows install?")
-        raise WmicError("wmic command failed; error %s %s" % (winerr.winerror, winerr.strerror))
-
-def _wmic(*wmic_cmd):
-    return subprocess.check_output(
-        wmic_cmd,
-        **subprocess_args(include_stdout=False,
-                          log_stream=SL_Logging.stream_from_process(wmic_cmd)))
 
 @pass_logger
 def query_vvm_from_settings(log, platform_key, settings):
@@ -435,18 +390,57 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
     return result_data
 
 class WindowsVideo(object):
-    hasOnlyUnsupported = None # so that we only call wmic once
+    hasOnlyUnsupported = None # so that we only query WMI once
 
     # Empirically, we find that the 64-bit viewer will not run on certain versions
     # of Windows with certain graphics cards. This module contains logic to detect
     # those situations and specifically run the 32-bit viewer.
-    #This is an exclusion list created by experimental techniques
-    #and research that is extrinsic to VMP.  64bit viewer does not run on these.
-    #
-    #Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
-    #so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
-    #hence the strange equality test for 'Graphics' when we pop the last word off the string.
+    # This is an exclusion list created by experimental techniques
+    # and research that is extrinsic to VMP.  64bit viewer does not run on these.
+    Intel_Graphics = "Intel(R) HD Graphics"
+
+    # Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
+    # so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
+    # hence the strange equality test for 'Graphics' when we pop the last word off the string.
     NO64_GRAPHICS_LIST = ['Graphics', '2000', '3000']
+
+    # When the GPU is reported as "Intel(R) HD Graphics", we check the CPU for
+    # certain models that we've observed to fail with 64 bits.
+    CPU_MODELS = (
+        # HD 2000/3000
+        ('Intel HD 2000/3000', re.compile(r"(\si[0-9]-2[0-9]{3}[EKLMSTXQ\s])|(E3-1260L)")),
+        # IntelR HD Graphics for Previous Generation IntelR Processors
+        ('Intel HD Graphics',
+         re.compile(r"(\si[0-9]-[0-9]{3}[ELMU\s])|(Processor\sP[46][0-6]0[05]\s)|"
+                    r"(Processor\sU[35][46]0[05]\s)")),
+        ('Intel HD Graphics', re.compile(r"(CPU\sP[46][0-6]0[05]\s)|(CPU\sU[35][46]0[05]\s)")),
+        # IntelR HD Graphics for 2nd Generation IntelR Processors
+        ('Intel 2nd Generation', re.compile(r"(Processor\s[BG]*[0-9]{3}[ET\s])")),
+        ('Intel 2nd Generation', re.compile(r"(CPU\s[BG]*[0-9]{3}[ET\s])")),
+        # IntelR HD Graphics for 3rd Generation IntelR Processors
+        ('3rd Generation', re.compile(r"(Processor\s[G]*[12][016][0-4][05-9][YTUME\s])|"
+                                      r"(Processor\s927UE)|(Processor\sA1018)")),
+        ('3rd Generation', re.compile(r"(CPU\s[G]*[12][016][0-4][05-9][YTUME\s])|"
+                                      r"(CPU\s927UE)|(CPU\sA1018)")),
+        # IntelR HD Graphics for 4th Generation IntelR Processors
+        # Partial overlap with 3rd gen due to Processor 2000E
+        ('Intel HD Graphics for 4th Generation',
+         re.compile(r"(Processor\s[G]*3[2-5][2-9][0168][YTUME\s])|"
+                    r"(Processor\s2[09][05-8][0-9][YTUME\s])|"
+                    r"(Processor\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)")),
+        ('Intel HD Graphics for 4th Generation',
+         re.compile(r"(CPU\s[G]*3[2-5][2-9][0168][YTUME\s])|"
+                    r"(CPU\s2[09][05-8][0-9][YTUME\s])|"
+                    r"(CPU\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)")),
+        # Some celeron CPUs might output 'Intel64 Family' as a name
+        ('unrecognized Intel64 Family CPU', re.compile(r"Intel64\sFamily\s")),
+    )
+    # Does not cover, due to supposedly up to date drivers:
+    # IntelR HD Graphics for Intel AtomR Processor Z3700 Series
+    # IntelR HD Graphics for IntelR CeleronR Processor N3000 Series (HD 400)
+    #
+    # IntelR HD Graphics for 4th Generation IntelR also have an up to date
+    # driver, but for now we consider it as 32 bit.
 
     @staticmethod
     def onNo64Windows():
@@ -471,11 +465,10 @@ class WindowsVideo(object):
             log = SL_Logging.getLogger('windows_video')
 
             # There are video cards that are not supported for the 64bit build on Windows 10,
-            # so find out what the video controller is
-            try:
-                wmic_graphics = wmic('path','Win32_VideoController','get','NAME')
-            except WmicError as err:
-                log.warning(err)
+            # so find out what the video controllers are
+            wmic_list = [video.NAME for video in wmiapi.Win32_VideoController()]
+            if not wmic_list:
+                log.warning("WMI did not return any video cards")
                 # MAINT-8200: If we can't get information about the video
                 # card, conservatively assume we'll need the 32-bit viewer.
                 # The downside if we guess wrong is a performance hit, which
@@ -483,122 +476,49 @@ class WindowsVideo(object):
                 # guess the other way, the downside is a viewer crash.
                 WindowsVideo.hasOnlyUnsupported = True
             else:
-                log.debug("wmic graphics card info: %r", wmic_graphics)
-                # first rstrip() every line, then discard any that are completely blank
-                # the first line of the response is always the string literal 'Name'
-                wmic_list = [line for line in
-                                 (ln.rstrip() for ln in wmic_graphics.splitlines())
-                                 if line][1:]
-                if wmic_list:
-                    good_cards = []
-                    # The logic here is a little complicated:
-                    # - If there's no bad card, we're good.
-                    # - If there's a bad card AND some other card, still good.
-                    # - If the only card(s) present are bad cards, not good.
-                    for line in wmic_list:
-                        if not ("Intel(R) HD Graphics" in line and
-                                 line.split()[-1] in WindowsVideo.NO64_GRAPHICS_LIST):
-                            # Card not in the list, pass
+                good_cards = []
+                # The logic here is a little complicated:
+                # - If there's no bad card, we're good.
+                # - If there's a bad card AND some other card, still good.
+                # - If the only card(s) present are bad cards, not good.
+                for line in wmic_list:
+                    lastword = line.split()[-1]
+                    if not (WindowsVideo.Intel_Graphics in line and
+                            lastword in WindowsVideo.NO64_GRAPHICS_LIST):
+                        # Card not in the list, pass
+                        good_cards.append(line)
+                        continue
+                    # else
+                    if (WindowsVideo.Intel_Graphics in line and lastword == "Graphics"):
+                        # Last word is "Graphics", i.e. no specific model.
+                        # This is either a generic Intel(R) HD Graphics or
+                        # some mislabeled supported GPU. To distinguish them
+                        # we will have to check CPU model.
+                        cpus = [cpu.NAME for cpu in wmiapi.Win32_Processor()]
+                        for description, regexp in WindowsVideo.CPU_MODELS:
+                            if regexp.search(cpus[0]):
+                                log.debug("cpu corresponds to %s: %r",
+                                          description, cpus)
+                                break
+                        else:
+                            # No regex matches, assume a good card
+                            log.debug("No known CPU regex matches, assume a good card: %r", cpus)
                             good_cards.append(line)
-                            continue
-                        # else
-                        if ("Intel(R) HD Graphics" in line and line.split()[-1] in "Graphics"):
-                            # Last word is "Graphics"
-                            # This is either a generic Intel(R) HD Graphics or some mislabeled supported GPU
-                            # To distinguish them we will have to check CPU model
-                            try:
-                                wmic_cpus = wmic('cpu','get','NAME')
-                            except WmicError as err:
-                                log.warning(err)
-                                continue
-                            else:
-                                cpus = [line1 for line1 in
-                                             (ln.rstrip() for ln in wmic_cpus.splitlines())
-                                              if line1][1:] #drop first line
 
-                                # HD 2000/3000
-                                cpu = re.search("(\si[0-9]-2[0-9]{3}[EKLMSTXQ\s])|(E3-1260L)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD 2000/3000: %r", cpus)
-                                    continue
-
-                                # IntelR HD Graphics for Previous Generation IntelR Processors
-                                cpu = re.search("(\si[0-9]-[0-9]{3}[ELMU\s])|(Processor\sP[46][0-6]0[05]\s)|(Processor\sU[35][46]0[05]\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics: %r", cpus)
-                                    continue
-
-                                cpu = re.search("(CPU\sP[46][0-6]0[05]\s)|(CPU\sU[35][46]0[05]\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics: %r", cpus)
-                                    continue
-                                
-                                # IntelR HD Graphics for 2nd Generation IntelR Processors
-                                cpu = re.search("(Processor\s[BG]*[0-9]{3}[ET\s])", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel 2nd Generation: %r", cpus)
-                                    continue
-                                
-                                cpu = re.search("(CPU\s[BG]*[0-9]{3}[ET\s])", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel 2nd Generation: %r", cpus)
-                                    continue
-
-                                # IntelR HD Graphics for 3rd Generation IntelR Processors
-                                cpu = re.search("(Processor\s[G]*[12][016][0-4][05-9][YTUME\s])|(Processor\s927UE)|(Processor\sA1018)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to 3rd Generation: %r", cpus)
-                                    continue
-
-                                cpu = re.search("(CPU\s[G]*[12][016][0-4][05-9][YTUME\s])|(CPU\s927UE)|(CPU\sA1018)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to 3rd Generation: %r", cpus)
-                                    continue
-
-                                # IntelR HD Graphics for 4th Generation IntelR Processors
-                                # Partial overlap with 3rd gen due to Processor 2000E
-                                cpu = re.search("(Processor\s[G]*3[2-5][2-9][0168][YTUME\s])|(Processor\s2[09][05-8][0-9][YTUME\s])|(Processor\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics for 4th Generation: %r", cpus)
-                                    continue
-
-                                cpu = re.search("(CPU\s[G]*3[2-5][2-9][0168][YTUME\s])|(CPU\s2[09][05-8][0-9][YTUME\s])|(CPU\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics for 4th Generation: %r", cpus)
-                                    continue
-
-                                # Some celeron CPUs might output 'Intel64 Family' as a name
-                                cpu = re.search("Intel64\sFamily\s", cpus[0])
-                                if cpu:
-                                    log.debug("Unrecognized Intel64 Family CPU: %r", cpus)
-                                    continue
-
-                                # Does not cover, due to supposedly up to date drivers:
-                                # IntelR HD Graphics for Intel AtomR Processor Z3700 Series
-                                # IntelR HD Graphics for IntelR CeleronR Processor N3000 Series (HD 400)
-                                #
-                                # IntelR HD Graphics for 4th Generation IntelR also have an up to date driver, but for now we consider it as 32 bit.
-
-                                # No regex matches, assume a good card
-                                log.debug("No CPU regex matches, assume a good card: %r", cpus)
-                                good_cards.append(line)
-                    # There's no order guarantee from wmic, this is to prevent an
-                    # HD card discovered after a good card from overwriting the state variable
-                    # by specification, a machine is bad iff ALL of the cards on the machine are bad ones
-                    if good_cards:
-                        WindowsVideo.hasOnlyUnsupported = False
-                        log.debug("Found at least one good graphics card: '%s'",
-                                  "', '".join(good_cards))
-                    else:
-                        # all we found were cards that are not supported in the Windows 64bit build
-                        WindowsVideo.hasOnlyUnsupported = True
-                        log.warning("Found only graphics cards not supported in Windows 8.1 or 10: "
-                                    "'%s'; should switch to the 32 bit build",
-                                    "', '".join(wmic_list))
+                # There's no order guarantee from WMI, this is to prevent an
+                # HD card discovered after a good card from overwriting the
+                # state variable by specification, a machine is bad iff ALL of
+                # the cards on the machine are bad ones
+                if good_cards:
+                    WindowsVideo.hasOnlyUnsupported = False
+                    log.debug("Found at least one good graphics card: '%s'",
+                              "', '".join(good_cards))
                 else:
-                    log.warning("wmic did not return any video cards")
-                    # use MAINT-8200 reasoning described above
+                    # all we found were cards that are not supported in the Windows 64bit build
                     WindowsVideo.hasOnlyUnsupported = True
+                    log.warning("Found only graphics cards not supported in Windows 8.1 or 10: "
+                                "'%s'; should switch to the 32 bit build",
+                                "', '".join(wmic_list))
 
         return WindowsVideo.hasOnlyUnsupported
 

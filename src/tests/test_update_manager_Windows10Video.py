@@ -40,6 +40,23 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import update_manager
 
+class FakeWMI:
+    def __init__(self, *videos):
+        self.videos = videos
+    def Win32_VideoController(self):
+        return [Named(name) for name in self.videos]
+
+class FakeWMIOn(FakeWMI):
+    def __init__(self, cpu, *videos):
+        super().__init__(*videos)
+        self.cpu = cpu
+    def Win32_Processor(self):
+        return [Named(self.cpu)]
+
+class Named:
+    def __init__(self, name):
+        self.NAME = name
+
 class testWindowsVideo(object):
 
     def setup(self):
@@ -47,68 +64,29 @@ class testWindowsVideo(object):
         os.environ['APP_DATA_DIR'] = os.path.dirname(os.path.abspath(__file__))
 
     def testOnlyOneGoodCard(self):
-        with patch(update_manager, "wmic",
-                   lambda *args:
-                   # This string literal is actual observed wmic output on a Windows 7
-                   # machine. No idea why it uses '\r\r\n' as end-of-line. <eyeroll/>
-                   'Name                    \r\r\n'
-                   'NVIDIA GeForce GTS 450  \r\r\n'
-                   '\r\r\n'):
+        with patch(update_manager, "wmiapi", FakeWMI('NVIDIA GeForce GTS 450')):
             assert_false(update_manager.WindowsVideo.isUnsupported())
 
     def testOneBadOneGood(self):
-        with patch(update_manager, "wmic",
-                       lambda *args:
-                       'Name                      \r\r\n'
-                       'Intel(R) HD Graphics 2000 \r\r\n'
-                       'NVIDIA GeForce GTS 450    \r\r\n'
-                       '\r\r\n'):
+        with patch(update_manager, "wmiapi",
+                   FakeWMI('Intel(R) HD Graphics 2000', 'NVIDIA GeForce GTS 450')):
             assert_false(update_manager.WindowsVideo.isUnsupported())
 
     def testTwoBad(self):
-        with patch(update_manager, "wmic", 
-                       lambda *args: 
-                       'Name                    \r\r\n' 
-                       'Intel(R) HD Graphics 2000 \r\r\n' 
-                       'Intel(R) HD Graphics 3000 \r\r\n'
-                       '\r\r\n'): 
+        with patch(update_manager, "wmiapi",
+                   FakeWMI('Intel(R) HD Graphics 2000', 'Intel(R) HD Graphics 3000')):
             assert_equal(update_manager.WindowsVideo.isUnsupported(), True)
 
     def testNoCards(self):
-        with patch(update_manager, "wmic", 
-                       lambda *args: 
-                       'Name                    \r\r\n' 
-                       '\r\r\n'): 
-            assert_true(update_manager.WindowsVideo.isUnsupported())
-
-    def testBadWmic(self):
-        def wmic(*args):
-            raise update_manager.WmicError("fake error")
-        with patch(update_manager, "wmic", wmic):
+        with patch(update_manager, "wmiapi", FakeWMI()):
             assert_true(update_manager.WindowsVideo.isUnsupported())
 
     def testBadIntelHDGraphics(self):
-        def wmic(*args):
-            if args[0] == 'path':
-                return 'Name                      \r\r\n'\
-                       'Intel(R) HD Graphics      \r\r\n'\
-                       '\r\r\n'
-            else:
-                return 'Name                                    \r\r\n'\
-                       'Intel(R) Core(TM) i7-2600 CPU @ 3.20GHz \r\r\n'\
-                       '\r\r\n'
-        with patch(update_manager, "wmic", wmic):
+        with patch(update_manager, "wmiapi",
+                   FakeWMIOn('Intel(R) Core(TM) i7-2600 CPU @ 3.20GHz', 'Intel(R) HD Graphics')):
             assert_true(update_manager.WindowsVideo.isUnsupported())
 
     def testGoodIntelHDGraphics(self):
-        def wmic(*args):
-            if args[0] == 'path':
-                return 'Name                      \r\r\n'\
-                       'Intel(R) HD Graphics      \r\r\n'\
-                       '\r\r\n'
-            else:
-                return 'Name                                     \r\r\n'\
-                       'Intel(R) Core(TM) i5-6600K CPU @ 3.20GHz \r\r\n'\
-                       '\r\r\n'
-        with patch(update_manager, "wmic", wmic):
+        with patch(update_manager, "wmiapi",
+                   FakeWMIOn('Intel(R) Core(TM) i5-6600K CPU @ 3.20GHz', 'Intel(R) HD Graphics')):
             assert_false(update_manager.WindowsVideo.isUnsupported())
