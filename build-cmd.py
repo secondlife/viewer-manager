@@ -60,6 +60,7 @@ BUILD_DEPS = dict(
     requests='requests',
 )
 if system() == 'Windows':
+    BUILD_DEPS['cryptography'] = 'cryptography'
     BUILD_DEPS['wmi'] = 'wmi'
 
 class Error(Exception):
