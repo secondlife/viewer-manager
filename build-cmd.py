@@ -54,16 +54,6 @@ except ImportError:
 
 class Error(Exception):
     pass
-
-#correctly return bitness
-def getAddressSize():
-    # The question we ask in this function isn't what the CPU is capable of,
-    # nor whether the Windows OS is 32-bit or 64-bit. The question is how the
-    # Python interpreter was built. PyInstaller builds a 32-bit executable
-    # from 32-bit Python, a 64-bit executable from 64-bit Python. To be able
-    # to run the updater on all potential Windows target hosts, we must build
-    # it using 32-bit Python.
-    return 8*struct.calcsize('P')
     
 def main():
     print("Python version string: %s" % sys.version)
@@ -89,23 +79,6 @@ def main():
     with suppress(FileExistsError):
         os.makedirs(stage)
 
-    #We ship a 32 bit VMP with 64 bit viewers
-    if system() == 'Windows' and getAddressSize() == 64:
-        # The production updater must be 32-bit, but this is only a warning so
-        # that devs can build even with 64-bit Python. (The address size of the
-        # executable produced by PyInstaller depends on the address size of the
-        # Python interpreter.)
-        print('The Windows VMP must be built using 32-bit python', file=sys.stderr)
-
-    #run pytest
-    test_env = os.environ.copy()
-    #stupid windows limit:
-    # TypeError: encoded string too long (547, maximum length 519)
-    #so nuke a few env vars we aren't using for this
-    if system() == 'Windows' and getAddressSize() == 32:
-        test_env.pop('LIB', None)
-        test_env.pop('WINDOWSSDK_EXECUTABLEPATH_X64', None)
-
     # Invoke pytest using the alternate tactic in which we explicitly run
     # python, our own interpreter, explicitly invoking the pytest module:
     # https://docs.pytest.org/en/latest/how-to/usage.html#calling-pytest-through-python-m-pytest
@@ -113,9 +86,8 @@ def main():
     print("About to call %s\n"
           "from %s" % (command, src))
     try:
-        #print("test environment: %r" % test_env)
         output = subprocess.check_output(command,
-                                         stderr=subprocess.STDOUT, env=test_env,
+                                         stderr=subprocess.STDOUT,
                                          universal_newlines=True,
                                          cwd=src)
     except subprocess.CalledProcessError as e:
@@ -135,7 +107,7 @@ def main():
     with open(sourceVersionFile, 'r') as svf:
         sourceVersion = svf.read().strip()
     with open(os.path.join(stage,"VERSION.txt"), 'w') as packageVersionFile:
-        packageVersionFile.write("%s.%s" % (sourceVersion, os.getenv('AUTOBUILD_BUILD_ID','0')))
+        packageVersionFile.write("%s-%s" % (sourceVersion, os.getenv('AUTOBUILD_BUILD_ID','0')))
 
     sourceLicenseFile = os.path.join(top, "LICENSE")
     copy(sourceLicenseFile, stage)
@@ -189,9 +161,9 @@ def pyinstaller(mainfile, dstdir, icon, manifest_from_build=None):
     # PyInstaller, use the one in this directory.
     command.append('--additional-hooks-dir=' + os.path.dirname(__file__))
 
-    print_command('pyinstaller', *command)
     # https://pyinstaller.readthedocs.io/en/stable/usage.html#running-pyinstaller-from-python-code
     import PyInstaller.__main__
+    print_command(PyInstaller.__main__.__file__, *command)
     try:
         PyInstaller.__main__.run(command)
     except Exception as e:
