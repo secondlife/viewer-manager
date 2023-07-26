@@ -60,8 +60,11 @@ BUILD_DEPS = dict(
     requests='requests',
 )
 if system() == 'Windows':
-    BUILD_DEPS['cryptography'] = 'cryptography'
-    BUILD_DEPS['wmi'] = 'wmi'
+    BUILD_DEPS.update(
+        cryptography='cryptography',
+        pywintypes='pywintypes',
+        wmi='wmi',
+    )
 
 class Error(Exception):
     pass
