@@ -243,7 +243,8 @@ def leap_body(install_key, channel, testok, width):
     # Adjust the target platform as needed before querying the VVM
     target_platform = update_manager.pick_target_platform(platform_key, width)
 
-    result = update_manager.query_vvm(platform_key=target_platform,
+    result = update_manager.query_vvm(platform_key=platform_key,
+                                      target_platform=target_platform,
                                       channel=channel,
                                       UpdaterWillingToTest=testok)
     if not result:

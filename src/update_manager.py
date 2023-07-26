@@ -285,7 +285,7 @@ def getBitness(platform_key):
     log=SL_Logging.getLogger('getBitness')
     bits = 0
     # log.debug("getBitness called with: %r and %r" % (platform_key, settings))
-    if platform_key in ['lnx', 'mac']:
+    if any(platform_key.startswith(p) for p in ['mac', 'lnx']):
         bits = 64
     # always Windows from here down...
     elif 'PROGRAMFILES(X86)' not in os.environ:
@@ -296,7 +296,7 @@ def getBitness(platform_key):
     return bits
 
 @pass_logger
-def query_vvm_from_settings(log, platform_key, settings):
+def query_vvm_from_settings(log, platform_key, target_platform, settings):
     channelname = BuildData.get('Channel')
 
     UpdaterWillingToTest = settings.get('UpdaterWillingToTest', 1)
@@ -314,11 +314,12 @@ def query_vvm_from_settings(log, platform_key, settings):
                       UpdaterWillingToTest, bad)
 
     return query_vvm(platform_key=platform_key,
+                     target_platform=target_platform,
                      channel=channelname,
                      UpdaterWillingToTest=UpdaterWillingToTest)
 
 @pass_logger
-def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
+def query_vvm(log, platform_key, target_platform, channel, UpdaterWillingToTest):
     """
     Ask the viewer version manager what builds are available for me
     given my platform and version.
@@ -338,12 +339,6 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
     #suppress warning we get in dev env for altname cert 
     if update_service != DEFAULT_UPDATE_SERVICE:
         warnings.simplefilter('ignore', urllib3.exceptions.SecurityWarning)
-
-    bitness = getBitness(platform_key)
-
-    # Ask the VVM with the most specific form of our platform (including bitness)
-    # so that if it can be configured with more specific rules
-    VVM_platform = "%s%d" % (platform_key, bitness)
 
     # we need to use the dotted versions of the platform versions in order to be compatible with VVM rules and arithmetic
     if platform_key == 'win':
@@ -366,8 +361,8 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
         log.error("Invalid value for UpdaterWillingToTest, assuming %s is True",
                       UpdaterWillingToTest)
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
-             (channel, version, VVM_platform, platform_version, test_ok, UUID))
-    update_urlpath =  urllib.parse.quote('/'.join(['v1.2', channel, version, VVM_platform, platform_version, test_ok, UUID]))
+             (channel, version, target_platform, platform_version, test_ok, UUID))
+    update_urlpath =  urllib.parse.quote('/'.join(['v1.2', channel, version, target_platform, platform_version, test_ok, UUID]))
     # if debugging, ask the VVM to explain how it got the response
     debug_param= {'explain': 1} if log.isEnabledFor(DEBUG) else {}
     log.debug("Sending query to VVM: query %s/%s%s",
@@ -818,7 +813,8 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
     cleanup_previous_download(platform_key)
 
     #  On launch, the Viewer Manager should query the Viewer Version Manager update api.
-    result_data = query_vvm_from_settings(platform_key=target_platform,
+    result_data = query_vvm_from_settings(platform_key=platform_key,
+                                          target_platform=target_platform,
                                           settings=settings)
 
     #nothing to do or error
