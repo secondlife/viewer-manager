@@ -121,12 +121,15 @@ def test_query_vvm():
     matt.setDaemon(True)    
     matt.start()
 
+    platform_key = Application.platform_key()
+
     # This test CANNOT succeed with $http_proxy in the environment.
     os.environ.pop("http_proxy", None)
     os.environ["SL_UPDATE_SERVICE"] = 'http://localhost:%s/update' % port
     try:
         results = update_manager.query_vvm_from_settings(
-            platform_key=Application.platform_key(),
+            platform_key=platform_key,
+            target_platform=platform_key + '64',
             settings={})
     finally:
         os.environ.pop("SL_UPDATE_SERVICE")
