@@ -100,6 +100,10 @@ def main():
         # -U means: even if we already have an older version of (say) requests
         # in the system image, ensure our virtualenv has the version specified
         # in RUNTIME_DEPS (or the latest version if not version-locked).
+        # But first, update pip and ensure wheel is present: as of 2023-07-26,
+        # we couldn't install the cryptography package on Windows, possibly
+        # because of absence of wheel or a pip that was too old.
+        run(sys.executable, '-m', 'pip', 'install', '-U', 'pip', 'wheel')
         run(sys.executable, '-m', 'pip', 'install', '-U', *BUILD_DEPS.values())
     except RunError as err:
         raise Error(str(err)) from err
