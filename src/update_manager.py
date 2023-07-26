@@ -604,7 +604,7 @@ class WindowsVideo(object):
         return WindowsVideo.hasOnlyUnsupported
 
 @pass_logger
-def choose_update(log, platform_key, ForceAddressSize, vvm_response):
+def choose_update(log, platform_key, target_platform, vvm_response):
     """
     This is where we do the hard stuff - picking which result applies to this system
 
@@ -612,45 +612,8 @@ def choose_update(log, platform_key, ForceAddressSize, vvm_response):
        required, channel, version, url, size, hash, more_info, platform
     or, if no update is chosen, an empty dict
     """
-    chosen_result = dict()
-
-    current_build = "%s%d" % (BuildData.get('Platform'), int(BuildData.get('Address Size')))
-    target_platform = "%s%d" % (platform_key, getBitness(platform_key))
-    log.debug("Current build is %s; tentative target is %s" % (current_build, target_platform))
-
-    if platform_key == 'win':
-        # for Windows, there's more to it than that....
-        if current_build == 'win64' and target_platform == 'win32':
-            log.info("This is a 64 bit build, but this system is 32 bit; looking for a 32 bit build")
-
-        elif target_platform == 'win64' and WindowsVideo.onNo64Windows() and WindowsVideo.isUnsupported():
-            log.warning("Your video card(s) are not supported for 64-bit on Windows 8.1 or 10; "
-                        "switching you to the 32bit build, "
-                        "which runs in a compatibility mode that works better")
-            target_platform = 'win32'
-
-    # We could have done this check earlier, but by waiting we can make the warnings more specific
-    if ForceAddressSize:
-        try:
-            forced_bitness = int(ForceAddressSize)
-        except ValueError:
-            log.warning("Invalid value %r for ForceAddressSize setting; disregarding",
-                        ForceAddressSize)
-        else:
-            log.debug("ForceAddressSize setting: %d", forced_bitness)
-            if target_platform == 'win32' and forced_bitness == 64:
-                log.warning("ForceAddressSize 64 may not work, but trying anyway...")
-                target_platform = 'win64'
-            elif target_platform == 'win64' and forced_bitness == 32:
-                log.warning("ForceAddressSize 32: your system may work with 64 - consider omitting")
-                target_platform = 'win32'
-            else:
-                log.info("target platform is %s, ForceAddressSize is %d; no effect",
-                         target_platform, forced_bitness)
-
-    # Ok... now we know what the target_platform is ...
-
     # Get all the VVM results that are not platform dependent
+    chosen_result = dict()
     for key in ['required', 'version', 'channel', 'more_info']:
         try:
             chosen_result[key] = vvm_response[key]
@@ -690,9 +653,46 @@ def choose_update(log, platform_key, ForceAddressSize, vvm_response):
 
     return chosen_result
 
-def download(url, version, download_dir, size, hash, ui):
-    log=SL_Logging.getLogger('download')
+@pass_logger
+def pick_target_platform(log, platform_key, ForceAddressSize):
+    current_build = "%s%d" % (BuildData.get('Platform'), int(BuildData.get('Address Size')))
+    target_platform = "%s%d" % (platform_key, getBitness(platform_key))
+    log.debug("Current build is %s; tentative target is %s" % (current_build, target_platform))
 
+    if platform_key == 'win':
+        # for Windows, there's more to it than that....
+        if current_build == 'win64' and target_platform == 'win32':
+            log.info("This is a 64 bit build, but this system is 32 bit; looking for a 32 bit build")
+
+        elif target_platform == 'win64' and WindowsVideo.onNo64Windows() and WindowsVideo.isUnsupported():
+            log.warning("Your video card(s) are not supported for 64-bit on Windows 8.1 or 10; "
+                        "switching you to the 32bit build, "
+                        "which runs in a compatibility mode that works better")
+            target_platform = 'win32'
+
+    # We could have done this check earlier, but by waiting we can make the warnings more specific
+    if ForceAddressSize:
+        try:
+            forced_bitness = int(ForceAddressSize)
+        except ValueError:
+            log.warning("Invalid value %r for ForceAddressSize setting; disregarding",
+                        ForceAddressSize)
+        else:
+            log.debug("ForceAddressSize setting: %d", forced_bitness)
+            if target_platform == 'win32' and forced_bitness == 64:
+                log.warning("ForceAddressSize 64 may not work, but trying anyway...")
+                target_platform = 'win64'
+            elif target_platform == 'win64' and forced_bitness == 32:
+                log.warning("ForceAddressSize 32: your system may work with 64 - consider omitting")
+                target_platform = 'win32'
+            else:
+                log.info("target platform is %s, ForceAddressSize is %d; no effect",
+                         target_platform, forced_bitness)
+
+    return target_platform
+
+@pass_logger
+def download(log, url, version, download_dir, size, hash, ui):
     ground = "foreground" if ui else "background"
 
     log.info("Preparing to download new version %s to %s in %s",
@@ -875,6 +875,9 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
     # 'settings' is from the settings file. Now apply command-line overrides.
     settings.override_with(cli_overrides.get('set', {}))
 
+    ForceAddressSize = settings.get('ForceAddressSize')
+    target_platform = pick_target_platform(platform_key, ForceAddressSize)
+
     # If cli_overrides['set']['UpdaterServiceSetting'], use that; else if
     # settings['UpdaterServiceSetting']['Value'], use that; if none of the
     # above, or if value is not valid, use default from decode_install_mode().
@@ -896,7 +899,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
     cleanup_previous_download(platform_key)
 
     #  On launch, the Viewer Manager should query the Viewer Version Manager update api.
-    result_data = query_vvm_from_settings(platform_key=platform_key,
+    result_data = query_vvm_from_settings(platform_key=target_platform,
                                           settings=settings)
 
     #nothing to do or error
@@ -905,8 +908,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
         # run already-installed viewer
         return existing_viewer
 
-    ForceAddressSize = settings.get('ForceAddressSize')
-    chosen_result = choose_update(platform_key, ForceAddressSize, result_data)
+    chosen_result = choose_update(platform_key, target_platform, result_data)
     if not chosen_result:
         # We didn't find anything better than what we've got, so run that
         return existing_viewer

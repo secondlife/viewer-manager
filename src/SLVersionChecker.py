@@ -241,7 +241,10 @@ def leap_body(install_key, channel, testok, width):
     platform_key = Application.platform_key() # e.g. "mac"
     install_mode = update_manager.decode_install_mode(install_key)
 
-    result = update_manager.query_vvm(platform_key=platform_key,
+    # Adjust the target platform as needed before querying the VVM
+    target_platform = update_manager.pick_target_platform(platform_key, width)
+
+    result = update_manager.query_vvm(platform_key=target_platform,
                                       channel=channel,
                                       UpdaterWillingToTest=testok)
     if not result:
@@ -256,7 +259,7 @@ def leap_body(install_key, channel, testok, width):
     else:
         post_guessed_relnotes(viewer)
 
-    result = update_manager.choose_update(platform_key, width, result)
+    result = update_manager.choose_update(platform_key, target_platform, result)
     if not result:
         update_manager.cleanup_previous_download(platform_key)
         return
