@@ -62,7 +62,7 @@ BUILD_DEPS = dict(
 if system() == 'Windows':
     BUILD_DEPS.update(
         cryptography='cryptography',
-        pywintypes='pywintypes',
+        pywin32='pywin32',
         wmi='wmi',
     )
 
