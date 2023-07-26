@@ -202,9 +202,9 @@ def pyinstaller(mainfile, dstdir, icon, manifest_from_build=None):
     # PyInstaller, use the one in this directory.
     command.append('--additional-hooks-dir=' + os.path.dirname(__file__))
 
-    print_command('pyinstaller', *command)
     # https://pyinstaller.readthedocs.io/en/stable/usage.html#running-pyinstaller-from-python-code
     import PyInstaller.__main__
+    print_command(PyInstaller.__main__.__file__, *command)
     try:
         PyInstaller.__main__.run(command)
     except Exception as e:
