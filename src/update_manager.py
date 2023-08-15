@@ -71,6 +71,30 @@ class UpdateError(Exception):
 class PShellError(UpdateError):
     pass
 
+class PlatformData:
+    def __init__(self):
+        self.key = Application.platform_key()
+        self.current = '%s%d' % (BuildData.get('Platform'), int(BuildData.get('Address Size')))
+        self.target = '%s%d' % (self.key, self.getBitness(self.key))
+
+    def __str__(self):
+        return f'<PlatformData key={self.key}, current={self.current}, target={self.target}>'
+
+    @staticmethod
+    def getBitness(platform_key):
+        """Return the maximum possible address size for this system"""
+        log=SL_Logging.getLogger('getBitness')
+        bits = 0
+        if any(platform_key.startswith(p) for p in ['mac', 'lnx']):
+            bits = 64
+        # always Windows from here down...
+        elif 'PROGRAMFILES(X86)' not in os.environ:
+            bits = 32
+        else:
+            bits = 64
+        log.debug("returning %d bit" % bits)
+        return bits
+
 #module globals
 
 def md5file(fname):
@@ -288,20 +312,6 @@ def make_VVM_UUID_hash(platform_key):
     hash = hashlib.md5(muuid.encode('utf8')).hexdigest()
     return hash
 
-def getBitness(platform_key):
-    """Return the maximum possible address size for this system"""
-    log=SL_Logging.getLogger('getBitness')
-    bits = 0
-    # log.debug("getBitness called with: %r and %r" % (platform_key, settings))
-    if any(platform_key.startswith(p) for p in ['mac', 'lnx']):
-        bits = 64
-    # always Windows from here down...
-    elif 'PROGRAMFILES(X86)' not in os.environ:
-        bits = 32
-    else:
-        bits = 64
-    log.debug("returning %d bit" % bits)
-    return bits
 
 def pshell(*args):
     """
@@ -342,7 +352,7 @@ def _pshell(*pshell_cmd):
                           log_stream=SL_Logging.stream_from_process(pshell_cmd)))
 
 @pass_logger
-def query_vvm_from_settings(log, platform_key, target_platform, settings):
+def query_vvm_from_settings(log, platform_data, settings):
     channelname = BuildData.get('Channel')
 
     UpdaterWillingToTest = settings.get('UpdaterWillingToTest', 1)
@@ -359,13 +369,12 @@ def query_vvm_from_settings(log, platform_key, target_platform, settings):
             log.error("Invalid value for UpdaterWillingToTest, assuming %s: %r",
                       UpdaterWillingToTest, bad)
 
-    return query_vvm(platform_key=platform_key,
-                     target_platform=target_platform,
+    return query_vvm(platform_data=platform_data,
                      channel=channelname,
                      UpdaterWillingToTest=UpdaterWillingToTest)
 
 @pass_logger
-def query_vvm(log, platform_key, target_platform, channel, UpdaterWillingToTest):
+def query_vvm(log, platform_data, channel, UpdaterWillingToTest):
     """
     Ask the viewer version manager what builds are available for me
     given my platform and version.
@@ -387,14 +396,14 @@ def query_vvm(log, platform_key, target_platform, channel, UpdaterWillingToTest)
         warnings.simplefilter('ignore', urllib3.exceptions.SecurityWarning)
 
     # we need to use the dotted versions of the platform versions in order to be compatible with VVM rules and arithmetic
-    if platform_key == 'win':
+    if platform_data.key == 'win':
         platform_version = platform.win32_ver()[1]
-    elif platform_key == 'mac':
+    elif platform_data.key == 'mac':
         platform_version = platform.mac_ver()[0]
     else:
         platform_version = platform.release()
     #this will always return something usable, error handling in method
-    UUID = str(make_VVM_UUID_hash(platform_key))
+    UUID = str(make_VVM_UUID_hash(platform_data.key))
 
     # UpdaterWillingToTest is expected to be either 0 or 1, either string or int
     test_ok = 'testok'
@@ -407,8 +416,8 @@ def query_vvm(log, platform_key, target_platform, channel, UpdaterWillingToTest)
         log.error("Invalid value for UpdaterWillingToTest, assuming %s is True",
                       UpdaterWillingToTest)
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
-             (channel, version, target_platform, platform_version, test_ok, UUID))
-    update_urlpath =  urllib.parse.quote('/'.join(['v1.2', channel, version, target_platform, platform_version, test_ok, UUID]))
+             (channel, version, platform_data.target, platform_version, test_ok, UUID))
+    update_urlpath =  urllib.parse.quote('/'.join(['v1.2', channel, version, platform_data.target, platform_version, test_ok, UUID]))
     # if debugging, ask the VVM to explain how it got the response
     debug_param= {'explain': 1} if log.isEnabledFor(DEBUG) else {}
     log.debug("Sending query to VVM: query %s/%s%s",
@@ -599,7 +608,7 @@ class WindowsVideo(object):
         return WindowsVideo.hasOnlyUnsupported
 
 @pass_logger
-def choose_update(log, platform_key, target_platform, vvm_response):
+def choose_update(log, platform_data, vvm_response):
     """
     This is where we do the hard stuff - picking which result applies to this system
 
@@ -616,9 +625,9 @@ def choose_update(log, platform_key, target_platform, vvm_response):
             log.error("Viewer Version Manager response is missing '%s'; not updating" % key)
             return {}
 
-    if target_platform != current_build:
+    if platform_data.target != platform_data.current:
         log.info("Current build platform is '%s', but we need '%s', so update is required",
-                 current_build, target_platform)
+                 platform_data.current, platform_data.target)
         chosen_result['required'] = True
 
     elif vvm_response['version'] == BuildData.get('Version'):
@@ -630,61 +639,62 @@ def choose_update(log, platform_key, target_platform, vvm_response):
     # See if the VVM gave us a result for the target_platform; if not, check
     # to see if a result not qualified by address_size is in the results
     try:
-        target_result = platforms[target_platform]
+        target_result = platforms[platform_data.target]
     except KeyError:
         try:
-            target_result = platforms[platform_key]
+            target_result = platforms[platform_data.key]
         except KeyError:
-            log.warning("No update result found for '%s' or '%s'" % (target_platform, platform_key))
+            log.warning("No update result found for '%s' or '%s'" % (platform_data.target, platform_data.key))
             return {}
         else:
             log.warning("No update result found for '%s' but found '%s', so updating to that",
-                        target_platform, platform_key)
-            target_platform = platform_key
+                        platform_data.target, platform_data.key)
+            platform_data.target = platform_data.key
 
     # add the target we picked
-    chosen_result['platform'] = target_platform
+    chosen_result['platform'] = platform_data.target
     chosen_result.update(target_result)
 
     return chosen_result
 
 @pass_logger
-def pick_target_platform(log, platform_key, ForceAddressSize):
-    current_build = "%s%d" % (BuildData.get('Platform'), int(BuildData.get('Address Size')))
-    target_platform = "%s%d" % (platform_key, getBitness(platform_key))
-    log.debug("Current build is %s; tentative target is %s" % (current_build, target_platform))
+def pick_target_platform(log, ForceAddressSize):
+    platdata = PlatformData()
+    log.debug("tentative: %s", platdata)
 
-    if platform_key == 'win':
+    if platdata.key == 'win':
         # for Windows, there's more to it than that....
-        if current_build == 'win64' and target_platform == 'win32':
-            log.info("This is a 64 bit build, but this system is 32 bit; looking for a 32 bit build")
+        if platdata.current == 'win64' and platdata.target == 'win32':
+            log.info("This is a 64 bit build, but this system is 32 bit; "
+                     "looking for a 32 bit build")
 
-        elif target_platform == 'win64' and WindowsVideo.onNo64Windows() and WindowsVideo.isUnsupported():
+        elif platdata.target == 'win64' and WindowsVideo.onNo64Windows() and WindowsVideo.isUnsupported():
             log.warning("Your video card(s) are not supported for 64-bit on Windows 8.1 or 10; "
                         "switching you to the 32bit build, "
                         "which runs in a compatibility mode that works better")
-            target_platform = 'win32'
+            platdata.target = 'win32'
 
-    # We could have done this check earlier, but by waiting we can make the warnings more specific
-    if ForceAddressSize:
-        try:
-            forced_bitness = int(ForceAddressSize)
-        except ValueError:
-            log.warning("Invalid value %r for ForceAddressSize setting; disregarding",
-                        ForceAddressSize)
-        else:
-            log.debug("ForceAddressSize setting: %d", forced_bitness)
-            if target_platform == 'win32' and forced_bitness == 64:
-                log.warning("ForceAddressSize 64 may not work, but trying anyway...")
-                target_platform = 'win64'
-            elif target_platform == 'win64' and forced_bitness == 32:
-                log.warning("ForceAddressSize 32: your system may work with 64 - consider omitting")
-                target_platform = 'win32'
+        # We could have done this check earlier, but by waiting we can make the warnings more specific
+        if ForceAddressSize:
+            try:
+                forced_bitness = int(ForceAddressSize)
+            except ValueError:
+                log.warning("Invalid value %r for ForceAddressSize setting; disregarding",
+                            ForceAddressSize)
             else:
-                log.info("target platform is %s, ForceAddressSize is %d; no effect",
-                         target_platform, forced_bitness)
+                log.debug("ForceAddressSize setting: %d", forced_bitness)
+                if platdata.target == 'win32' and forced_bitness == 64:
+                    log.warning("ForceAddressSize 64 may not work, but trying anyway...")
+                    platdata.target = 'win64'
+                elif platdata.target == 'win64' and forced_bitness == 32:
+                    log.warning("ForceAddressSize 32: your system may work with 64 - "
+                                "consider omitting")
+                    platdata.target = 'win32'
+                else:
+                    log.info("target platform is %s, ForceAddressSize is %d; no effect",
+                             platdata.target, forced_bitness)
 
-    return target_platform
+    return platdata
 
 @pass_logger
 def download(log, url, version, download_dir, size, hash, ui):
@@ -709,7 +719,7 @@ def download(log, url, version, download_dir, size, hash, ui):
         except Exception as e:
             # Might be caused by user closing manager
             log.error("Failed to download new version %s in %s downloader: %s: %s",
-                      version, ground, e.__class__.__name__, e)
+                      version, ground, type(e).__name__, e)
         else:
             #check to make sure the downloaded file is correct
             down_hash = md5file(filename)
@@ -811,7 +821,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
             # So we'll have to write it from scratch -- no prior settings.
             install_settings = {}
             log.debug("No previous settings_install.xml file, proceeding: %s: %s",
-                      err.__class__.__name__, err)
+                      type(err).__name__, err)
         else:
             log.debug("Read existing install settings file at %s", install_settings_file)
 
@@ -839,7 +849,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
                     Value=True)
                 log.debug("Can't get SkipBenchmark definition from %s: %s: %s; "
                           "using fake SkipBenchmark: %s",
-                          app_settings_file, err.__class__.__name__, err, SkipBenchmark)
+                          app_settings_file, type(err).__name__, err, SkipBenchmark)
             else:
                 # We DID retrieve SkipBenchmark from app_settings.
                 log.debug("Using SkipBenchmark from %s: %s", app_settings_file, SkipBenchmark)
@@ -857,21 +867,20 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
                 outf.write(llsd.format_pretty_xml(install_settings))
         except (OSError, IOError) as err:
             log.warning("Can't update %s: %s: %s", install_settings_file,
-                        err.__class__.__name__, err)
+                        type(err).__name__, err)
         else:
             log.debug("Wrote updated settings to %s", install_settings_file)
 
     # cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments
 
     #setup and getting initial parameters
-    platform_key = Application.platform_key() # e.g. "mac"
     settings = get_settings(cli_overrides.get('settings') or Application.user_settings_path())
 
     # 'settings' is from the settings file. Now apply command-line overrides.
     settings.override_with(cli_overrides.get('set', {}))
 
     ForceAddressSize = settings.get('ForceAddressSize')
-    target_platform = pick_target_platform(platform_key, ForceAddressSize)
+    platdata = pick_target_platform(ForceAddressSize)
 
     # If cli_overrides['set']['UpdaterServiceSetting'], use that; else if
     # settings['UpdaterServiceSetting']['Value'], use that; if none of the
@@ -891,12 +900,10 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
     
     # Clean previous download of current version before starting next update
     # This only deletes installer that was marked as 'winstall' (was already installed)
-    cleanup_previous_download(platform_key)
+    cleanup_previous_download(platdata.key)
 
     #  On launch, the Viewer Manager should query the Viewer Version Manager update api.
-    result_data = query_vvm_from_settings(platform_key=platform_key,
-                                          target_platform=target_platform,
-                                          settings=settings)
+    result_data = query_vvm_from_settings(platform_data=platdata, settings=settings)
 
     #nothing to do or error
     if not result_data:
@@ -904,7 +911,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
         # run already-installed viewer
         return existing_viewer
 
-    chosen_result = choose_update(platform_key, target_platform, result_data)
+    chosen_result = choose_update(platform_data=platdata, vvm_response=result_data)
     if not chosen_result:
         # We didn't find anything better than what we've got, so run that
         return existing_viewer
@@ -920,7 +927,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
     try:
         download_dir = make_download_dir(chosen_result['version'])
     except Exception as e:
-        log.error("Error trying to make download dir: %s: %s", e.__class__.__name__, e)
+        log.error("Error trying to make download dir: %s: %s", type(e).__name__, e)
         return existing_viewer
 
     # determine if we've tried this download before
@@ -942,7 +949,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
         else:
             installer = apply_update.get_filename(download_dir)
         # Do the install
-        return install(existing_viewer, platform_key = platform_key, installer=installer)
+        return install(existing_viewer, platform_key = platdata.key, installer=installer)
     elif 'Install_manual' == install_mode:
         # The user has chosen to install only required updates, and this one is optional,
         # so just run the already-installed viewer. We don't even download the optional
@@ -985,7 +992,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
 
             if 'Install_automatically' == install_mode:
                 log.info("updating automatically")
-                return install(existing_viewer, platform_key = platform_key, installer=installer)
+                return install(existing_viewer, platform_key = platdata.key, installer=installer)
 
             else: # 'Install_ask'
                 # ask the user what to do with the optional update
@@ -998,7 +1005,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
                 update_action = skip_frame.choice3.get()
                 if update_action == 1:
                     log.info("User chose 'Install'")
-                    return install(existing_viewer, platform_key = platform_key, installer=installer)
+                    return install(existing_viewer, platform_key = platdata.key, installer=installer)
                 elif update_action == 2:
                     log.info("User chose 'Skip'")
                     put_marker_file(download_dir, ".skip")
@@ -1125,7 +1132,7 @@ def cleanup_previous_download(log, platform_key):
         except Exception as e:
             #cleanup is best effort
             log.error("Caught exception cleaning up download dir %r: %s: %s; skipping",
-                      past_download_dir, e.__class__.__name__, e)
+                      past_download_dir, type(e).__name__, e)
 
 if __name__ == '__main__':
     #there is no argument parsing or other main() work to be done

@@ -35,17 +35,17 @@ import update_manager
 from patch import patch, patch_dict, DELETE
 
 def test_linux():
-    bitness = update_manager.getBitness('lnx')
+    bitness = update_manager.PlatformData.getBitness('lnx')
     assert_equal(bitness, 64)
 
 def test_mac():
-    bitness = update_manager.getBitness('mac')
+    bitness = update_manager.PlatformData.getBitness('mac')
     assert_equal(bitness, 64)
 
 def test_win32():
     with patch_dict(os.environ, 'PROGRAMFILES(X86)', 'present'):
-        assert_equal(update_manager.getBitness('win'), 64)
+        assert_equal(update_manager.PlatformData.getBitness('win'), 64)
     with patch_dict(os.environ, 'PROGRAMFILES(X86)', DELETE):
-        assert_equal(update_manager.getBitness('win'), 32)
+        assert_equal(update_manager.PlatformData.getBitness('win'), 32)
 
 
