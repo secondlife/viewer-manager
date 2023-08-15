@@ -1,4 +1,16 @@
-import cgitb
+try:
+    import cgitb
+except ImportError:
+    # sigh
+    class cgitb:
+        class Hook:
+            def __init__(self, file=sys.stderr, format="text"):
+                self.file = file
+                self.format = format
+            def handle(self):
+                print("(cgitb unavailable)", file=self.file)
+                traceback.print_exc(file=self.file)
+
 import contextlib
 import ctypes
 import errno
