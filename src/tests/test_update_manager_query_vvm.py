@@ -83,53 +83,54 @@ def test_query_vvm():
     channel_pattern = re.compile("SecondLife")
     url_pattern = re.compile("Second_Life_4_0_1_310054")
     log.info("Starting Query VVM Test")
-    
+
     #cygwin artifact: the installed llbase is in a cygwin directory but we
     #use system python and it doesn't know from cygpaths, so the import misses
     #and we get the system llbase instead.
     windows = re.compile('win')
-    if windows.search(sys.platform.lower()):                     
-        local_llbase = os.path.join(os.path.dirname(os.path.abspath(os.getcwd())), 
+    if windows.search(sys.platform.lower()):
+        local_llbase = os.path.join(os.path.dirname(os.path.abspath(os.getcwd())),
             'stage', 'packages', 'lib', 'python')
         os.environ['PYTHONPATH'] = local_llbase
         sys.path.insert(0, local_llbase)
     from llbase import llsd
-    from llbase import llrest    
+    from llbase import llrest
     log.error("llrest location in unit test: %r" % llrest.__file__)
-    import update_manager    
-    
-    #for unit testing purposes, just testing a value from results.  
+    import update_manager
+
+    #for unit testing purposes, just testing a value from results.
     #for formal QA see:
     #   https://docs.google.com/document/d/1WNjOPdKlq0j_7s7gdNe_3QlyGnQDa3bFNvtyVM6Hx8M/edit
     #   https://wiki.lindenlab.com/wiki/Login_Test#Test_Viewer_Updater
     #for test plans on all cases, as it requires setting up a truly functional fake VVM service
     #pick a random, unused port to serve on
-    
+
     while True:
-        port = random.randint(1025,65535) 
+        port = random.randint(1025,65535)
         log.info("trying a port for server: " + str(port))
         try:
-            httpd = Server(('', port), TestHTTPRequestHandler)    
+            httpd = Server(('', port), BogusHTTPRequestHandler)
         except:
             continue
         else:
             break
     log.info("httpd: %r" % httpd)
     log.info("found a port for server: " + str(port))
-    
-    matt = threading.Thread(name='vvm_daemon', args=(httpd,), target=vvm_daemon)
-    matt.setDaemon(True)    
+
+    matt = threading.Thread(name='vvm_daemon', args=(httpd,), target=vvm_daemon,
+                            daemon=True)
     matt.start()
 
-    platform_key = Application.platform_key()
+    platform_data = update_manager.PlatformData()
+    # fake this for testing
+    platform_data.target = platform_data.key + '64'
 
     # This test CANNOT succeed with $http_proxy in the environment.
     os.environ.pop("http_proxy", None)
     os.environ["SL_UPDATE_SERVICE"] = 'http://localhost:%s/update' % port
     try:
         results = update_manager.query_vvm_from_settings(
-            platform_key=platform_key,
-            target_platform=platform_key + '64',
+            platform_data=platform_data,
             settings={})
     finally:
         os.environ.pop("SL_UPDATE_SERVICE")
@@ -148,8 +149,8 @@ def vvm_daemon(webserver):
     webserver.serve_forever()
     log.info("Daemon webserver exiting")
 
-class TestHTTPRequestHandler(BaseHTTPRequestHandler):
-    log=SL_Logging.getLogger('TestHTTPRequestHandler', verbosity='DEBUG')
+class BogusHTTPRequestHandler(BaseHTTPRequestHandler):
+    log=SL_Logging.getLogger('BogusHTTPRequestHandler', verbosity='DEBUG')
     def do_GET(self, withdata=True):
         self.log.info("Answering URI request %r "% self.path)
         try:
@@ -160,9 +161,9 @@ class TestHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_header("X-LL-Special", "Mememememe");
             self.end_headers()
             if withdata:
-                self.wfile.write(response.encode('utf8'))            
+                self.wfile.write(response.encode('utf8'))
         except Exception as e:
-            print("Exception during GET (ignoring): %s" % e, file=sys.stderr)    
+            print("Exception during GET (ignoring): %s" % e, file=sys.stderr)
 
 #ripped from llcorehttp tests
 class Server(HTTPServer):

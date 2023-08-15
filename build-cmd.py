@@ -113,22 +113,12 @@ def main():
     print("About to call %s\n"
           "from %s" % (command, src))
     try:
-        #print("test environment: %r" % test_env)
-        output = subprocess.check_output(command,
-                                         stderr=subprocess.STDOUT, env=test_env,
-                                         universal_newlines=True,
-                                         cwd=src)
+        output = subprocess.check_call(command, cwd=src)
     except subprocess.CalledProcessError as e:
-        # output attribute only exists on CalledProcessError
-        raise Error("Tests failed: %s\n"
-                    "output:\n%s" % (e, e.output)) from e
+        raise Error("Tests failed: %s" % e) from e
     except Exception as e:
         #more debug is best effort
-        raise Error("%s didn't run: %s: %s" % (command, e.__class__.__name__, e)) from e
-
-    print("Successful pytest output:")
-    print('\n'.join(line for line in output.splitlines()
-                   if 'Ran' in line or 'OK' in line))
+        raise Error("%s didn't run: %s: %s" % (command, type(e).__name__, e)) from e
            
     #the version file consists of one line with the version string in it
     sourceVersionFile = os.path.join(top, "VERSION.txt")
