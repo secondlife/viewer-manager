@@ -288,7 +288,7 @@ def make_VVM_UUID_hash(platform_key):
         #findall[0] does the grep for the value we are looking for: "Serial Number (system): XXXXXXXX"
         #split(:)[1] gets us the XXXXXXX part
         #lstrip shaves off the leading space that was after the colon
-        muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
+        muuid = re.split(":", re.findall(r'Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
         log.debug("result of subprocess call to get mac MUUID: %r" % muuid)
     elif (platform_key == 'win'):
         try:
