@@ -32,7 +32,8 @@ $/LicenseInfo$
 from logging import DEBUG
 from util import Application, BuildData, SL_Logging, log_calls, pass_logger, subprocess_args, \
      put_marker_file, MergedSettings, ufile
-from llbase import llsd, llrest
+from llbase import llrest
+import llsd
 
 import apply_update
 from contextlib import suppress
