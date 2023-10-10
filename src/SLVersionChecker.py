@@ -238,16 +238,18 @@ def leap_body(install_key, channel, testok, width):
     # with its index. We need a lookup in the other direction: name->index.
     STARTUP_STATES = {name: index for index, name in enumerate(table)}
 
-    platform_key = Application.platform_key() # e.g. "mac"
     install_mode = update_manager.decode_install_mode(install_key)
 
-    result = update_manager.query_vvm(platform_key=platform_key,
+    # Adjust the target platform as needed before querying the VVM
+    platdata = update_manager.pick_target_platform(width)
+
+    result = update_manager.query_vvm(platform_data=platdata,
                                       channel=channel,
                                       UpdaterWillingToTest=testok)
     if not result:
         log.info("No update.")
         post_guessed_relnotes(viewer)
-        update_manager.cleanup_previous_download(platform_key)
+        update_manager.cleanup_previous_download(platdata.key)
         return
 
     relnotes = result.get('more_info')
@@ -256,9 +258,9 @@ def leap_body(install_key, channel, testok, width):
     else:
         post_guessed_relnotes(viewer)
 
-    result = update_manager.choose_update(platform_key, width, result)
+    result = update_manager.choose_update(platdata, result)
     if not result:
-        update_manager.cleanup_previous_download(platform_key)
+        update_manager.cleanup_previous_download(platdata.key)
         return
 
     log.debug("Chosen result: %s", result)
@@ -270,7 +272,7 @@ def leap_body(install_key, channel, testok, width):
     try:
         download_dir = update_manager.make_download_dir(result['version'])
     except Exception as e:
-        log.error("Error trying to make download dir: %s: %s", e.__class__.__name__, e)
+        log.error("Error trying to make download dir: %s: %s", type(e).__name__, e)
         return
 
     # determine if we've tried this download before
@@ -289,7 +291,7 @@ def leap_body(install_key, channel, testok, width):
             else:
                 installer = apply_update.get_filename(download_dir)
             # Presumably we've just downloaded the new installer.
-            install(platform_key=platform_key, installer=installer)
+            install(platform_key=platdata.key, installer=installer)
 
         else:
             # We did NOT catch the viewer before login.
@@ -325,7 +327,7 @@ def leap_body(install_key, channel, testok, width):
         # If we're still sitting at the Login screen, may as well proceed.
         process_optional_update(
             viewer=viewer, installer=installer, result=result,
-            install_mode=install_mode, platform_key=platform_key)
+            install_mode=install_mode, platform_key=platdata.key)
         return
 
     if downloaded in ('done', 'next'):
@@ -334,7 +336,7 @@ def leap_body(install_key, channel, testok, width):
         installer = apply_update.get_filename(download_dir)
         process_optional_update(
             viewer=viewer, installer=installer, result=result,
-            install_mode=install_mode, platform_key=platform_key)
+            install_mode=install_mode, platform_key=platdata.key)
         return
 
     # should never get here

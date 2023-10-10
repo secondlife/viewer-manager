@@ -63,13 +63,38 @@ import uuid
 import warnings
 from xml.etree import ElementTree
 
+if platform.system() == 'Windows':
+    import wmi
+    wmiapi = wmi.WMI()
+
 DEFAULT_UPDATE_SERVICE = 'https://update.secondlife.com/update'
 
 class UpdateError(Exception):
     pass
 
-class WmicError(UpdateError):
-    pass
+class PlatformData:
+    def __init__(self):
+        self.key = Application.platform_key()
+        self.current = '%s%d' % (BuildData.get('Platform'), int(BuildData.get('Address Size')))
+        self.target = '%s%d' % (self.key, self.getBitness(self.key))
+
+    def __str__(self):
+        return f'<PlatformData key={self.key}, current={self.current}, target={self.target}>'
+
+    @staticmethod
+    def getBitness(platform_key):
+        """Return the maximum possible address size for this system"""
+        log=SL_Logging.getLogger('getBitness')
+        bits = 0
+        if any(platform_key.startswith(p) for p in ['mac', 'lnx']):
+            bits = 64
+        # always Windows from here down...
+        elif 'PROGRAMFILES(X86)' not in os.environ:
+            bits = 32
+        else:
+            bits = 64
+        log.debug("returning %d bit" % bits)
+        return bits
 
 #module globals
 
@@ -264,22 +289,14 @@ def make_VVM_UUID_hash(platform_key):
         #findall[0] does the grep for the value we are looking for: "Serial Number (system): XXXXXXXX"
         #split(:)[1] gets us the XXXXXXX part
         #lstrip shaves off the leading space that was after the colon
-        muuid = re.split(":", re.findall('Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
+        muuid = re.split(":", re.findall(r'Serial Number \(system\): \S*', muuid)[0])[1].lstrip()
         log.debug("result of subprocess call to get mac MUUID: %r" % muuid)
     elif (platform_key == 'win'):
-        try:
-            # wmic csproduct get UUID | grep -v UUID
-            muuid = wmic('csproduct','get','UUID')
-        except WmicError as err:
-            log.warning(err)
-            muuid = None
-        else:
-            #outputs two visible rows:
-            #UUID
-            #XXXXXXX-XXXX...
-            # but splitlines() produces a whole lot of empty strings.
-            muuid = [line for line in muuid.splitlines() if line][-1].rstrip()
-            log.debug("result of subprocess call to get win MUUID: %r" % muuid)
+        # wmic csproduct get UUID | grep -v UUID
+        # Win32_ComputerSystemProduct() returns a 1-entry list
+        csproduct = wmiapi.Win32_ComputerSystemProduct()[0]
+        muuid = csproduct.UUID
+        log.debug("win MUUID: %r" % muuid)
             
     if muuid is None:
         #fake it
@@ -289,61 +306,8 @@ def make_VVM_UUID_hash(platform_key):
     hash = hashlib.md5(muuid.encode('utf8')).hexdigest()
     return hash
 
-def getBitness(platform_key):
-    """Return the maximum possible address size for this system"""
-    log=SL_Logging.getLogger('getBitness')
-    bits = 0
-    # log.debug("getBitness called with: %r and %r" % (platform_key, settings))
-    if platform_key in ['lnx', 'mac']:
-        bits = 64
-    # always Windows from here down...
-    elif 'PROGRAMFILES(X86)' not in os.environ:
-        bits = 32
-    else:
-        bits = 64
-    log.debug("returning %d bit" % bits)
-    return bits
-
-def wmic(*args):
-    """
-    Run the Windows wmic command with specified arguments, returning its
-    stdout (or raising an exception).
-
-    Breaking this out as a separate function improves testability.
-    """
-    try:
-        # MAINT-9014: There are a couple possibilities for finding wmic.
-        try:
-            # It has a canonical pathname that might or might not be on the PATH.
-            return _wmic("c:/Windows/System32/Wbem/wmic", *args)
-        except WindowsError as err:
-            # Only retry for "not found" -- anything else is a genuine problem.
-            if err.errno != errno.ENOENT:
-                raise
-            # wmic not in usual place -- better hope it's on PATH! Let any
-            # exceptions from this call propagate to outer 'try'.
-            # Tempting though it is to memoize the knowledge that the usual
-            # path doesn't work, the fact is that we only invoke wmic a couple
-            # times.
-            return _wmic("wmic", *args)
-    except subprocess.CalledProcessError as err:
-        # https://docs.python.org/2/library/subprocess.html#subprocess.CalledProcessError
-        # When check_output() raises CalledProcessError, it stores collected
-        # output into err.output.
-        raise WmicError("wmic error: %s\n%s" % (err, err.output))
-    except WindowsError as winerr:
-        if winerr.errno == errno.ENOENT:
-            raise WmicError("No wmic command found - bad Windows install?")
-        raise WmicError("wmic command failed; error %s %s" % (winerr.winerror, winerr.strerror))
-
-def _wmic(*wmic_cmd):
-    return subprocess.check_output(
-        wmic_cmd,
-        **subprocess_args(include_stdout=False,
-                          log_stream=SL_Logging.stream_from_process(wmic_cmd)))
-
 @pass_logger
-def query_vvm_from_settings(log, platform_key, settings):
+def query_vvm_from_settings(log, platform_data, settings):
     channelname = BuildData.get('Channel')
 
     UpdaterWillingToTest = settings.get('UpdaterWillingToTest', 1)
@@ -360,12 +324,12 @@ def query_vvm_from_settings(log, platform_key, settings):
             log.error("Invalid value for UpdaterWillingToTest, assuming %s: %r",
                       UpdaterWillingToTest, bad)
 
-    return query_vvm(platform_key=platform_key,
+    return query_vvm(platform_data=platform_data,
                      channel=channelname,
                      UpdaterWillingToTest=UpdaterWillingToTest)
 
 @pass_logger
-def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
+def query_vvm(log, platform_data, channel, UpdaterWillingToTest):
     """
     Ask the viewer version manager what builds are available for me
     given my platform and version.
@@ -386,21 +350,15 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
     if update_service != DEFAULT_UPDATE_SERVICE:
         warnings.simplefilter('ignore', urllib3.exceptions.SecurityWarning)
 
-    bitness = getBitness(platform_key)
-
-    # Ask the VVM with the most specific form of our platform (including bitness)
-    # so that if it can be configured with more specific rules
-    VVM_platform = "%s%d" % (platform_key, bitness)
-
     # we need to use the dotted versions of the platform versions in order to be compatible with VVM rules and arithmetic
-    if platform_key == 'win':
+    if platform_data.key == 'win':
         platform_version = platform.win32_ver()[1]
-    elif platform_key == 'mac':
+    elif platform_data.key == 'mac':
         platform_version = platform.mac_ver()[0]
     else:
         platform_version = platform.release()
     #this will always return something usable, error handling in method
-    UUID = str(make_VVM_UUID_hash(platform_key))
+    UUID = str(make_VVM_UUID_hash(platform_data.key))
 
     # UpdaterWillingToTest is expected to be either 0 or 1, either string or int
     test_ok = 'testok'
@@ -413,8 +371,8 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
         log.error("Invalid value for UpdaterWillingToTest, assuming %s is True",
                       UpdaterWillingToTest)
     log.info("Requesting update for channel '%s' version %s platform %s platform version %s allow_test %s id %s" %
-             (channel, version, VVM_platform, platform_version, test_ok, UUID))
-    update_urlpath =  urllib.parse.quote('/'.join(['v1.2', channel, version, VVM_platform, platform_version, test_ok, UUID]))
+             (channel, version, platform_data.target, platform_version, test_ok, UUID))
+    update_urlpath =  urllib.parse.quote('/'.join(['v1.2', channel, version, platform_data.target, platform_version, test_ok, UUID]))
     # if debugging, ask the VVM to explain how it got the response
     debug_param= {'explain': 1} if log.isEnabledFor(DEBUG) else {}
     log.debug("Sending query to VVM: query %s/%s%s",
@@ -437,18 +395,57 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
     return result_data
 
 class WindowsVideo(object):
-    hasOnlyUnsupported = None # so that we only call wmic once
+    hasOnlyUnsupported = None # so that we only query WMI once
 
     # Empirically, we find that the 64-bit viewer will not run on certain versions
     # of Windows with certain graphics cards. This module contains logic to detect
     # those situations and specifically run the 32-bit viewer.
-    #This is an exclusion list created by experimental techniques
-    #and research that is extrinsic to VMP.  64bit viewer does not run on these.
-    #
-    #Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
-    #so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
-    #hence the strange equality test for 'Graphics' when we pop the last word off the string.
+    # This is an exclusion list created by experimental techniques
+    # and research that is extrinsic to VMP.  64bit viewer does not run on these.
+    Intel_Graphics = "Intel(R) HD Graphics"
+
+    # Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
+    # so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
+    # hence the strange equality test for 'Graphics' when we pop the last word off the string.
     NO64_GRAPHICS_LIST = ['Graphics', '2000', '3000']
+
+    # When the GPU is reported as "Intel(R) HD Graphics", we check the CPU for
+    # certain models that we've observed to fail with 64 bits.
+    CPU_MODELS = (
+        # HD 2000/3000
+        ('Intel HD 2000/3000', re.compile(r"(\si[0-9]-2[0-9]{3}[EKLMSTXQ\s])|(E3-1260L)")),
+        # IntelR HD Graphics for Previous Generation IntelR Processors
+        ('Intel HD Graphics',
+         re.compile(r"(\si[0-9]-[0-9]{3}[ELMU\s])|(Processor\sP[46][0-6]0[05]\s)|"
+                    r"(Processor\sU[35][46]0[05]\s)")),
+        ('Intel HD Graphics', re.compile(r"(CPU\sP[46][0-6]0[05]\s)|(CPU\sU[35][46]0[05]\s)")),
+        # IntelR HD Graphics for 2nd Generation IntelR Processors
+        ('Intel 2nd Generation', re.compile(r"(Processor\s[BG]*[0-9]{3}[ET\s])")),
+        ('Intel 2nd Generation', re.compile(r"(CPU\s[BG]*[0-9]{3}[ET\s])")),
+        # IntelR HD Graphics for 3rd Generation IntelR Processors
+        ('3rd Generation', re.compile(r"(Processor\s[G]*[12][016][0-4][05-9][YTUME\s])|"
+                                      r"(Processor\s927UE)|(Processor\sA1018)")),
+        ('3rd Generation', re.compile(r"(CPU\s[G]*[12][016][0-4][05-9][YTUME\s])|"
+                                      r"(CPU\s927UE)|(CPU\sA1018)")),
+        # IntelR HD Graphics for 4th Generation IntelR Processors
+        # Partial overlap with 3rd gen due to Processor 2000E
+        ('Intel HD Graphics for 4th Generation',
+         re.compile(r"(Processor\s[G]*3[2-5][2-9][0168][YTUME\s])|"
+                    r"(Processor\s2[09][05-8][0-9][YTUME\s])|"
+                    r"(Processor\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)")),
+        ('Intel HD Graphics for 4th Generation',
+         re.compile(r"(CPU\s[G]*3[2-5][2-9][0168][YTUME\s])|"
+                    r"(CPU\s2[09][05-8][0-9][YTUME\s])|"
+                    r"(CPU\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)")),
+        # Some celeron CPUs might output 'Intel64 Family' as a name
+        ('unrecognized Intel64 Family CPU', re.compile(r"Intel64\sFamily\s")),
+    )
+    # Does not cover, due to supposedly up to date drivers:
+    # IntelR HD Graphics for Intel AtomR Processor Z3700 Series
+    # IntelR HD Graphics for IntelR CeleronR Processor N3000 Series (HD 400)
+    #
+    # IntelR HD Graphics for 4th Generation IntelR also have an up to date
+    # driver, but for now we consider it as 32 bit.
 
     @staticmethod
     def onNo64Windows():
@@ -473,11 +470,10 @@ class WindowsVideo(object):
             log = SL_Logging.getLogger('windows_video')
 
             # There are video cards that are not supported for the 64bit build on Windows 10,
-            # so find out what the video controller is
-            try:
-                wmic_graphics = wmic('path','Win32_VideoController','get','NAME')
-            except WmicError as err:
-                log.warning(err)
+            # so find out what the video controllers are
+            wmic_list = [video.NAME for video in wmiapi.Win32_VideoController()]
+            if not wmic_list:
+                log.warning("WMI did not return any video cards")
                 # MAINT-8200: If we can't get information about the video
                 # card, conservatively assume we'll need the 32-bit viewer.
                 # The downside if we guess wrong is a performance hit, which
@@ -485,127 +481,54 @@ class WindowsVideo(object):
                 # guess the other way, the downside is a viewer crash.
                 WindowsVideo.hasOnlyUnsupported = True
             else:
-                log.debug("wmic graphics card info: %r", wmic_graphics)
-                # first rstrip() every line, then discard any that are completely blank
-                # the first line of the response is always the string literal 'Name'
-                wmic_list = [line for line in
-                                 (ln.rstrip() for ln in wmic_graphics.splitlines())
-                                 if line][1:]
-                if wmic_list:
-                    good_cards = []
-                    # The logic here is a little complicated:
-                    # - If there's no bad card, we're good.
-                    # - If there's a bad card AND some other card, still good.
-                    # - If the only card(s) present are bad cards, not good.
-                    for line in wmic_list:
-                        if not ("Intel(R) HD Graphics" in line and
-                                 line.split()[-1] in WindowsVideo.NO64_GRAPHICS_LIST):
-                            # Card not in the list, pass
+                good_cards = []
+                # The logic here is a little complicated:
+                # - If there's no bad card, we're good.
+                # - If there's a bad card AND some other card, still good.
+                # - If the only card(s) present are bad cards, not good.
+                for line in wmic_list:
+                    lastword = line.split()[-1]
+                    if not (WindowsVideo.Intel_Graphics in line and
+                            lastword in WindowsVideo.NO64_GRAPHICS_LIST):
+                        # Card not in the list, pass
+                        good_cards.append(line)
+                        continue
+                    # else
+                    if (WindowsVideo.Intel_Graphics in line and lastword == "Graphics"):
+                        # Last word is "Graphics", i.e. no specific model.
+                        # This is either a generic Intel(R) HD Graphics or
+                        # some mislabeled supported GPU. To distinguish them
+                        # we will have to check CPU model.
+                        cpus = [cpu.NAME for cpu in wmiapi.Win32_Processor()]
+                        for description, regexp in WindowsVideo.CPU_MODELS:
+                            if regexp.search(cpus[0]):
+                                log.debug("cpu corresponds to %s: %r",
+                                          description, cpus)
+                                break
+                        else:
+                            # No regex matches, assume a good card
+                            log.debug("No known CPU regex matches, assume a good card: %r", cpus)
                             good_cards.append(line)
-                            continue
-                        # else
-                        if ("Intel(R) HD Graphics" in line and line.split()[-1] in "Graphics"):
-                            # Last word is "Graphics"
-                            # This is either a generic Intel(R) HD Graphics or some mislabeled supported GPU
-                            # To distinguish them we will have to check CPU model
-                            try:
-                                wmic_cpus = wmic('cpu','get','NAME')
-                            except WmicError as err:
-                                log.warning(err)
-                                continue
-                            else:
-                                cpus = [line1 for line1 in
-                                             (ln.rstrip() for ln in wmic_cpus.splitlines())
-                                              if line1][1:] #drop first line
 
-                                # HD 2000/3000
-                                cpu = re.search("(\si[0-9]-2[0-9]{3}[EKLMSTXQ\s])|(E3-1260L)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD 2000/3000: %r", cpus)
-                                    continue
-
-                                # IntelR HD Graphics for Previous Generation IntelR Processors
-                                cpu = re.search("(\si[0-9]-[0-9]{3}[ELMU\s])|(Processor\sP[46][0-6]0[05]\s)|(Processor\sU[35][46]0[05]\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics: %r", cpus)
-                                    continue
-
-                                cpu = re.search("(CPU\sP[46][0-6]0[05]\s)|(CPU\sU[35][46]0[05]\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics: %r", cpus)
-                                    continue
-                                
-                                # IntelR HD Graphics for 2nd Generation IntelR Processors
-                                cpu = re.search("(Processor\s[BG]*[0-9]{3}[ET\s])", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel 2nd Generation: %r", cpus)
-                                    continue
-                                
-                                cpu = re.search("(CPU\s[BG]*[0-9]{3}[ET\s])", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel 2nd Generation: %r", cpus)
-                                    continue
-
-                                # IntelR HD Graphics for 3rd Generation IntelR Processors
-                                cpu = re.search("(Processor\s[G]*[12][016][0-4][05-9][YTUME\s])|(Processor\s927UE)|(Processor\sA1018)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to 3rd Generation: %r", cpus)
-                                    continue
-
-                                cpu = re.search("(CPU\s[G]*[12][016][0-4][05-9][YTUME\s])|(CPU\s927UE)|(CPU\sA1018)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to 3rd Generation: %r", cpus)
-                                    continue
-
-                                # IntelR HD Graphics for 4th Generation IntelR Processors
-                                # Partial overlap with 3rd gen due to Processor 2000E
-                                cpu = re.search("(Processor\s[G]*3[2-5][2-9][0168][YTUME\s])|(Processor\s2[09][05-8][0-9][YTUME\s])|(Processor\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics for 4th Generation: %r", cpus)
-                                    continue
-
-                                cpu = re.search("(CPU\s[G]*3[2-5][2-9][0168][YTUME\s])|(CPU\s2[09][05-8][0-9][YTUME\s])|(CPU\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics for 4th Generation: %r", cpus)
-                                    continue
-
-                                # Some celeron CPUs might output 'Intel64 Family' as a name
-                                cpu = re.search("Intel64\sFamily\s", cpus[0])
-                                if cpu:
-                                    log.debug("Unrecognized Intel64 Family CPU: %r", cpus)
-                                    continue
-
-                                # Does not cover, due to supposedly up to date drivers:
-                                # IntelR HD Graphics for Intel AtomR Processor Z3700 Series
-                                # IntelR HD Graphics for IntelR CeleronR Processor N3000 Series (HD 400)
-                                #
-                                # IntelR HD Graphics for 4th Generation IntelR also have an up to date driver, but for now we consider it as 32 bit.
-
-                                # No regex matches, assume a good card
-                                log.debug("No CPU regex matches, assume a good card: %r", cpus)
-                                good_cards.append(line)
-                    # There's no order guarantee from wmic, this is to prevent an
-                    # HD card discovered after a good card from overwriting the state variable
-                    # by specification, a machine is bad iff ALL of the cards on the machine are bad ones
-                    if good_cards:
-                        WindowsVideo.hasOnlyUnsupported = False
-                        log.debug("Found at least one good graphics card: '%s'",
-                                  "', '".join(good_cards))
-                    else:
-                        # all we found were cards that are not supported in the Windows 64bit build
-                        WindowsVideo.hasOnlyUnsupported = True
-                        log.warning("Found only graphics cards not supported in Windows 8.1 or 10: "
-                                    "'%s'; should switch to the 32 bit build",
-                                    "', '".join(wmic_list))
+                # There's no order guarantee from WMI, this is to prevent an
+                # HD card discovered after a good card from overwriting the
+                # state variable by specification, a machine is bad iff ALL of
+                # the cards on the machine are bad ones
+                if good_cards:
+                    WindowsVideo.hasOnlyUnsupported = False
+                    log.debug("Found at least one good graphics card: '%s'",
+                              "', '".join(good_cards))
                 else:
-                    log.warning("wmic did not return any video cards")
-                    # use MAINT-8200 reasoning described above
+                    # all we found were cards that are not supported in the Windows 64bit build
                     WindowsVideo.hasOnlyUnsupported = True
+                    log.warning("Found only graphics cards not supported in Windows 8.1 or 10: "
+                                "'%s'; should switch to the 32 bit build",
+                                "', '".join(wmic_list))
 
         return WindowsVideo.hasOnlyUnsupported
 
 @pass_logger
-def choose_update(log, platform_key, ForceAddressSize, vvm_response):
+def choose_update(log, platform_data, vvm_response):
     """
     This is where we do the hard stuff - picking which result applies to this system
 
@@ -613,45 +536,8 @@ def choose_update(log, platform_key, ForceAddressSize, vvm_response):
        required, channel, version, url, size, hash, more_info, platform
     or, if no update is chosen, an empty dict
     """
-    chosen_result = dict()
-
-    current_build = "%s%d" % (BuildData.get('Platform'), int(BuildData.get('Address Size')))
-    target_platform = "%s%d" % (platform_key, getBitness(platform_key))
-    log.debug("Current build is %s; tentative target is %s" % (current_build, target_platform))
-
-    if platform_key == 'win':
-        # for Windows, there's more to it than that....
-        if current_build == 'win64' and target_platform == 'win32':
-            log.info("This is a 64 bit build, but this system is 32 bit; looking for a 32 bit build")
-
-        elif target_platform == 'win64' and WindowsVideo.onNo64Windows() and WindowsVideo.isUnsupported():
-            log.warning("Your video card(s) are not supported for 64-bit on Windows 8.1 or 10; "
-                        "switching you to the 32bit build, "
-                        "which runs in a compatibility mode that works better")
-            target_platform = 'win32'
-
-    # We could have done this check earlier, but by waiting we can make the warnings more specific
-    if ForceAddressSize:
-        try:
-            forced_bitness = int(ForceAddressSize)
-        except ValueError:
-            log.warning("Invalid value %r for ForceAddressSize setting; disregarding",
-                        ForceAddressSize)
-        else:
-            log.debug("ForceAddressSize setting: %d", forced_bitness)
-            if target_platform == 'win32' and forced_bitness == 64:
-                log.warning("ForceAddressSize 64 may not work, but trying anyway...")
-                target_platform = 'win64'
-            elif target_platform == 'win64' and forced_bitness == 32:
-                log.warning("ForceAddressSize 32: your system may work with 64 - consider omitting")
-                target_platform = 'win32'
-            else:
-                log.info("target platform is %s, ForceAddressSize is %d; no effect",
-                         target_platform, forced_bitness)
-
-    # Ok... now we know what the target_platform is ...
-
     # Get all the VVM results that are not platform dependent
+    chosen_result = dict()
     for key in ['required', 'version', 'channel', 'more_info']:
         try:
             chosen_result[key] = vvm_response[key]
@@ -659,9 +545,9 @@ def choose_update(log, platform_key, ForceAddressSize, vvm_response):
             log.error("Viewer Version Manager response is missing '%s'; not updating" % key)
             return {}
 
-    if target_platform != current_build:
+    if platform_data.target != platform_data.current:
         log.info("Current build platform is '%s', but we need '%s', so update is required",
-                 current_build, target_platform)
+                 platform_data.current, platform_data.target)
         chosen_result['required'] = True
 
     elif vvm_response['version'] == BuildData.get('Version'):
@@ -673,27 +559,65 @@ def choose_update(log, platform_key, ForceAddressSize, vvm_response):
     # See if the VVM gave us a result for the target_platform; if not, check
     # to see if a result not qualified by address_size is in the results
     try:
-        target_result = platforms[target_platform]
+        target_result = platforms[platform_data.target]
     except KeyError:
         try:
-            target_result = platforms[platform_key]
+            target_result = platforms[platform_data.key]
         except KeyError:
-            log.warning("No update result found for '%s' or '%s'" % (target_platform, platform_key))
+            log.warning("No update result found for '%s' or '%s'" % (platform_data.target, platform_data.key))
             return {}
         else:
             log.warning("No update result found for '%s' but found '%s', so updating to that",
-                        target_platform, platform_key)
-            target_platform = platform_key
+                        platform_data.target, platform_data.key)
+            platform_data.target = platform_data.key
 
     # add the target we picked
-    chosen_result['platform'] = target_platform
+    chosen_result['platform'] = platform_data.target
     chosen_result.update(target_result)
 
     return chosen_result
 
-def download(url, version, download_dir, size, hash, ui):
-    log=SL_Logging.getLogger('download')
+@pass_logger
+def pick_target_platform(log, ForceAddressSize):
+    platdata = PlatformData()
+    log.debug("tentative: %s", platdata)
 
+    if platdata.key == 'win':
+        # for Windows, there's more to it than that....
+        if platdata.current == 'win64' and platdata.target == 'win32':
+            log.info("This is a 64 bit build, but this system is 32 bit; "
+                     "looking for a 32 bit build")
+
+        elif platdata.target == 'win64' and WindowsVideo.onNo64Windows() and WindowsVideo.isUnsupported():
+            log.warning("Your video card(s) are not supported for 64-bit on Windows 8.1 or 10; "
+                        "switching you to the 32bit build, "
+                        "which runs in a compatibility mode that works better")
+            platdata.target = 'win32'
+
+        # We could have done this check earlier, but by waiting we can make the warnings more specific
+        if ForceAddressSize:
+            try:
+                forced_bitness = int(ForceAddressSize)
+            except ValueError:
+                log.warning("Invalid value %r for ForceAddressSize setting; disregarding",
+                            ForceAddressSize)
+            else:
+                log.debug("ForceAddressSize setting: %d", forced_bitness)
+                if platdata.target == 'win32' and forced_bitness == 64:
+                    log.warning("ForceAddressSize 64 may not work, but trying anyway...")
+                    platdata.target = 'win64'
+                elif platdata.target == 'win64' and forced_bitness == 32:
+                    log.warning("ForceAddressSize 32: your system may work with 64 - "
+                                "consider omitting")
+                    platdata.target = 'win32'
+                else:
+                    log.info("target platform is %s, ForceAddressSize is %d; no effect",
+                             platdata.target, forced_bitness)
+
+    return platdata
+
+@pass_logger
+def download(log, url, version, download_dir, size, hash, ui):
     ground = "foreground" if ui else "background"
 
     log.info("Preparing to download new version %s to %s in %s",
@@ -715,7 +639,7 @@ def download(url, version, download_dir, size, hash, ui):
         except Exception as e:
             # Might be caused by user closing manager
             log.error("Failed to download new version %s in %s downloader: %s: %s",
-                      version, ground, e.__class__.__name__, e)
+                      version, ground, type(e).__name__, e)
         else:
             #check to make sure the downloaded file is correct
             down_hash = md5file(filename)
@@ -817,7 +741,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
             # So we'll have to write it from scratch -- no prior settings.
             install_settings = {}
             log.debug("No previous settings_install.xml file, proceeding: %s: %s",
-                      err.__class__.__name__, err)
+                      type(err).__name__, err)
         else:
             log.debug("Read existing install settings file at %s", install_settings_file)
 
@@ -845,7 +769,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
                     Value=True)
                 log.debug("Can't get SkipBenchmark definition from %s: %s: %s; "
                           "using fake SkipBenchmark: %s",
-                          app_settings_file, err.__class__.__name__, err, SkipBenchmark)
+                          app_settings_file, type(err).__name__, err, SkipBenchmark)
             else:
                 # We DID retrieve SkipBenchmark from app_settings.
                 log.debug("Using SkipBenchmark from %s: %s", app_settings_file, SkipBenchmark)
@@ -863,18 +787,20 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
                 outf.write(llsd.format_pretty_xml(install_settings))
         except (OSError, IOError) as err:
             log.warning("Can't update %s: %s: %s", install_settings_file,
-                        err.__class__.__name__, err)
+                        type(err).__name__, err)
         else:
             log.debug("Wrote updated settings to %s", install_settings_file)
 
     # cli_overrides is a dict where the keys are specific parameters of interest and the values are the arguments
 
     #setup and getting initial parameters
-    platform_key = Application.platform_key() # e.g. "mac"
     settings = get_settings(cli_overrides.get('settings') or Application.user_settings_path())
 
     # 'settings' is from the settings file. Now apply command-line overrides.
     settings.override_with(cli_overrides.get('set', {}))
+
+    ForceAddressSize = settings.get('ForceAddressSize')
+    platdata = pick_target_platform(ForceAddressSize)
 
     # If cli_overrides['set']['UpdaterServiceSetting'], use that; else if
     # settings['UpdaterServiceSetting']['Value'], use that; if none of the
@@ -894,11 +820,10 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
     
     # Clean previous download of current version before starting next update
     # This only deletes installer that was marked as 'winstall' (was already installed)
-    cleanup_previous_download(platform_key)
+    cleanup_previous_download(platdata.key)
 
     #  On launch, the Viewer Manager should query the Viewer Version Manager update api.
-    result_data = query_vvm_from_settings(platform_key=platform_key,
-                                          settings=settings)
+    result_data = query_vvm_from_settings(platform_data=platdata, settings=settings)
 
     #nothing to do or error
     if not result_data:
@@ -906,8 +831,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
         # run already-installed viewer
         return existing_viewer
 
-    ForceAddressSize = settings.get('ForceAddressSize')
-    chosen_result = choose_update(platform_key, ForceAddressSize, result_data)
+    chosen_result = choose_update(platform_data=platdata, vvm_response=result_data)
     if not chosen_result:
         # We didn't find anything better than what we've got, so run that
         return existing_viewer
@@ -923,7 +847,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
     try:
         download_dir = make_download_dir(chosen_result['version'])
     except Exception as e:
-        log.error("Error trying to make download dir: %s: %s", e.__class__.__name__, e)
+        log.error("Error trying to make download dir: %s: %s", type(e).__name__, e)
         return existing_viewer
 
     # determine if we've tried this download before
@@ -945,7 +869,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
         else:
             installer = apply_update.get_filename(download_dir)
         # Do the install
-        return install(existing_viewer, platform_key = platform_key, installer=installer)
+        return install(existing_viewer, platform_key = platdata.key, installer=installer)
     elif 'Install_manual' == install_mode:
         # The user has chosen to install only required updates, and this one is optional,
         # so just run the already-installed viewer. We don't even download the optional
@@ -988,7 +912,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
 
             if 'Install_automatically' == install_mode:
                 log.info("updating automatically")
-                return install(existing_viewer, platform_key = platform_key, installer=installer)
+                return install(existing_viewer, platform_key = platdata.key, installer=installer)
 
             else: # 'Install_ask'
                 # ask the user what to do with the optional update
@@ -1001,7 +925,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
                 update_action = skip_frame.choice3.get()
                 if update_action == 1:
                     log.info("User chose 'Install'")
-                    return install(existing_viewer, platform_key = platform_key, installer=installer)
+                    return install(existing_viewer, platform_key = platdata.key, installer=installer)
                 elif update_action == 2:
                     log.info("User chose 'Skip'")
                     put_marker_file(download_dir, ".skip")
@@ -1128,7 +1052,7 @@ def cleanup_previous_download(log, platform_key):
         except Exception as e:
             #cleanup is best effort
             log.error("Caught exception cleaning up download dir %r: %s: %s; skipping",
-                      past_download_dir, e.__class__.__name__, e)
+                      past_download_dir, type(e).__name__, e)
 
 if __name__ == '__main__':
     #there is no argument parsing or other main() work to be done
