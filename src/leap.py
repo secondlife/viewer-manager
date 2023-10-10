@@ -47,7 +47,7 @@ $/LicenseInfo$
 import errno
 import re
 import sys
-from llbase import llsd
+import llsd
 # We only expect to need one helper thread; the default is 20.
 import os
 os.environ['EVENTLET_THREADPOOL_SIZE'] = '2'
