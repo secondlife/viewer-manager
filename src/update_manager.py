@@ -313,7 +313,7 @@ def pshell(*args):
         # MAINT-9014: There are a couple possibilities for finding powershell.
         try:
             # It has a canonical pathname that might or might not be on the PATH.
-            return _pshell("C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", *args)
+            return _pshell("C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe", *args)
         except WindowsError as err:
             # Only retry for "not found" -- anything else is a genuine problem.
             if err.errno != errno.ENOENT:
