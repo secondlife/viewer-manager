@@ -47,68 +47,58 @@ class testWindowsVideo(object):
         os.environ['APP_DATA_DIR'] = os.path.dirname(os.path.abspath(__file__))
 
     def testOnlyOneGoodCard(self):
-        with patch(update_manager, "wmic",
+        with patch(update_manager, "pshell",
                    lambda *args:
-                   # This string literal is actual observed wmic output on a Windows 7
-                   # machine. No idea why it uses '\r\r\n' as end-of-line. <eyeroll/>
-                   'Name                    \r\r\n'
                    'NVIDIA GeForce GTS 450  \r\r\n'
                    '\r\r\n'):
             assert_false(update_manager.WindowsVideo.isUnsupported())
 
     def testOneBadOneGood(self):
-        with patch(update_manager, "wmic",
+        with patch(update_manager, "pshell",
                        lambda *args:
-                       'Name                      \r\r\n'
                        'Intel(R) HD Graphics 2000 \r\r\n'
                        'NVIDIA GeForce GTS 450    \r\r\n'
                        '\r\r\n'):
             assert_false(update_manager.WindowsVideo.isUnsupported())
 
     def testTwoBad(self):
-        with patch(update_manager, "wmic", 
-                       lambda *args: 
-                       'Name                    \r\r\n' 
+        with patch(update_manager, "pshell", 
+                       lambda *args:
                        'Intel(R) HD Graphics 2000 \r\r\n' 
                        'Intel(R) HD Graphics 3000 \r\r\n'
                        '\r\r\n'): 
             assert_equal(update_manager.WindowsVideo.isUnsupported(), True)
 
     def testNoCards(self):
-        with patch(update_manager, "wmic", 
+        with patch(update_manager, "pshell", 
                        lambda *args: 
-                       'Name                    \r\r\n' 
                        '\r\r\n'): 
             assert_true(update_manager.WindowsVideo.isUnsupported())
 
-    def testBadWmic(self):
-        def wmic(*args):
-            raise update_manager.WmicError("fake error")
-        with patch(update_manager, "wmic", wmic):
+    def testBadPShell(self):
+        def pshell(*args):
+            raise update_manager.PShellError("fake error")
+        with patch(update_manager, "pshell", pshell):
             assert_true(update_manager.WindowsVideo.isUnsupported())
 
     def testBadIntelHDGraphics(self):
-        def wmic(*args):
+        def pshell(*args):
             if args[0] == 'path':
-                return 'Name                      \r\r\n'\
-                       'Intel(R) HD Graphics      \r\r\n'\
+                return 'Intel(R) HD Graphics      \r\r\n'\
                        '\r\r\n'
             else:
-                return 'Name                                    \r\r\n'\
-                       'Intel(R) Core(TM) i7-2600 CPU @ 3.20GHz \r\r\n'\
+                return 'Intel(R) Core(TM) i7-2600 CPU @ 3.20GHz \r\r\n'\
                        '\r\r\n'
-        with patch(update_manager, "wmic", wmic):
+        with patch(update_manager, "pshell", pshell):
             assert_true(update_manager.WindowsVideo.isUnsupported())
 
     def testGoodIntelHDGraphics(self):
-        def wmic(*args):
+        def pshell(*args):
             if args[0] == 'path':
-                return 'Name                      \r\r\n'\
-                       'Intel(R) HD Graphics      \r\r\n'\
+                return 'Intel(R) HD Graphics      \r\r\n'\
                        '\r\r\n'
             else:
-                return 'Name                                     \r\r\n'\
-                       'Intel(R) Core(TM) i5-6600K CPU @ 3.20GHz \r\r\n'\
+                return 'Intel(R) Core(TM) i5-6600K CPU @ 3.20GHz \r\r\n'\
                        '\r\r\n'
-        with patch(update_manager, "wmic", wmic):
+        with patch(update_manager, "pshell", pshell):
             assert_false(update_manager.WindowsVideo.isUnsupported())

@@ -67,7 +67,7 @@ DEFAULT_UPDATE_SERVICE = 'https://update.secondlife.com/update'
 class UpdateError(Exception):
     pass
 
-class WmicError(UpdateError):
+class PShellError(UpdateError):
     pass
 
 #module globals
@@ -267,14 +267,13 @@ def make_VVM_UUID_hash(platform_key):
         log.debug("result of subprocess call to get mac MUUID: %r" % muuid)
     elif (platform_key == 'win'):
         try:
-            # wmic csproduct get UUID | grep -v UUID
-            muuid = wmic('csproduct','get','UUID')
-        except WmicError as err:
+            # pshell csproduct get UUID | grep -v UUID
+            muuid = pshell('-Command','Get-WmiObject Win32_ComputerSystemProduct | Select-Object -ExpandProperty UUID')
+        except PShellError as err:
             log.warning(err)
             muuid = None
         else:
-            #outputs two visible rows:
-            #UUID
+            #outputs row:
             #XXXXXXX-XXXX...
             # but splitlines() produces a whole lot of empty strings.
             muuid = [line for line in muuid.splitlines() if line][-1].rstrip()
@@ -303,43 +302,43 @@ def getBitness(platform_key):
     log.debug("returning %d bit" % bits)
     return bits
 
-def wmic(*args):
+def pshell(*args):
     """
-    Run the Windows wmic command with specified arguments, returning its
+    Run the Windows powershell command with specified arguments, returning its
     stdout (or raising an exception).
 
     Breaking this out as a separate function improves testability.
     """
     try:
-        # MAINT-9014: There are a couple possibilities for finding wmic.
+        # MAINT-9014: There are a couple possibilities for finding powershell.
         try:
             # It has a canonical pathname that might or might not be on the PATH.
-            return _wmic("c:/Windows/System32/Wbem/wmic", *args)
+            return _pshell("C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", *args)
         except WindowsError as err:
             # Only retry for "not found" -- anything else is a genuine problem.
             if err.errno != errno.ENOENT:
                 raise
-            # wmic not in usual place -- better hope it's on PATH! Let any
+            # powershell not in usual place -- better hope it's on PATH! Let any
             # exceptions from this call propagate to outer 'try'.
             # Tempting though it is to memoize the knowledge that the usual
-            # path doesn't work, the fact is that we only invoke wmic a couple
-            # times.
-            return _wmic("wmic", *args)
+            # path doesn't work, the fact is that we only invoke powershell a
+            # couple times.
+            return _pshell("powershell", *args)
     except subprocess.CalledProcessError as err:
         # https://docs.python.org/2/library/subprocess.html#subprocess.CalledProcessError
         # When check_output() raises CalledProcessError, it stores collected
         # output into err.output.
-        raise WmicError("wmic error: %s\n%s" % (err, err.output))
+        raise PShellError("pshell error: %s\n%s" % (err, err.output))
     except WindowsError as winerr:
         if winerr.errno == errno.ENOENT:
-            raise WmicError("No wmic command found - bad Windows install?")
-        raise WmicError("wmic command failed; error %s %s" % (winerr.winerror, winerr.strerror))
+            raise PShellError("No powershell found - bad Windows install?")
+        raise PShellError("powershel failed; error %s %s" % (winerr.winerror, winerr.strerror))
 
-def _wmic(*wmic_cmd):
+def _pshell(*pshell_cmd):
     return subprocess.check_output(
-        wmic_cmd,
+        pshell_cmd,
         **subprocess_args(include_stdout=False,
-                          log_stream=SL_Logging.stream_from_process(wmic_cmd)))
+                          log_stream=SL_Logging.stream_from_process(pshell_cmd)))
 
 @pass_logger
 def query_vvm_from_settings(log, platform_key, settings):
@@ -436,7 +435,7 @@ def query_vvm(log, platform_key, channel, UpdaterWillingToTest):
     return result_data
 
 class WindowsVideo(object):
-    hasOnlyUnsupported = None # so that we only call wmic once
+    hasOnlyUnsupported = None # so that we only call powershell once
 
     # Empirically, we find that the 64-bit viewer will not run on certain versions
     # of Windows with certain graphics cards. This module contains logic to detect
@@ -474,8 +473,8 @@ class WindowsVideo(object):
             # There are video cards that are not supported for the 64bit build on Windows 10,
             # so find out what the video controller is
             try:
-                wmic_graphics = wmic('path','Win32_VideoController','get','NAME')
-            except WmicError as err:
+                pshell_graphics = pshell('-Command', 'Get-CimInstance -ClassName Win32_VideoController | Select-Object -ExpandProperty Name')
+            except PShellError as err:
                 log.warning(err)
                 # MAINT-8200: If we can't get information about the video
                 # card, conservatively assume we'll need the 32-bit viewer.
@@ -484,19 +483,19 @@ class WindowsVideo(object):
                 # guess the other way, the downside is a viewer crash.
                 WindowsVideo.hasOnlyUnsupported = True
             else:
-                log.debug("wmic graphics card info: %r", wmic_graphics)
+                log.debug("power shell graphics card info: %r", pshell_graphics)
                 # first rstrip() every line, then discard any that are completely blank
                 # the first line of the response is always the string literal 'Name'
-                wmic_list = [line for line in
-                                 (ln.rstrip() for ln in wmic_graphics.splitlines())
-                                 if line][1:]
-                if wmic_list:
+                pshell_list = [line for line in
+                                 (ln.rstrip() for ln in pshell_graphics.splitlines())
+                                 if line]
+                if pshell_list:
                     good_cards = []
                     # The logic here is a little complicated:
                     # - If there's no bad card, we're good.
                     # - If there's a bad card AND some other card, still good.
                     # - If the only card(s) present are bad cards, not good.
-                    for line in wmic_list:
+                    for line in pshell_list:
                         if not ("Intel(R) HD Graphics" in line and
                                  line.split()[-1] in WindowsVideo.NO64_GRAPHICS_LIST):
                             # Card not in the list, pass
@@ -508,14 +507,14 @@ class WindowsVideo(object):
                             # This is either a generic Intel(R) HD Graphics or some mislabeled supported GPU
                             # To distinguish them we will have to check CPU model
                             try:
-                                wmic_cpus = wmic('cpu','get','NAME')
-                            except WmicError as err:
+                                pshell_cpus = pshell('-Command', 'Get-WmiObject -Class Win32_Processor | Select-Object -ExpandProperty Name')
+                            except PShellError as err:
                                 log.warning(err)
                                 continue
                             else:
                                 cpus = [line1 for line1 in
-                                             (ln.rstrip() for ln in wmic_cpus.splitlines())
-                                              if line1][1:] #drop first line
+                                             (ln.rstrip() for ln in pshell_cpus.splitlines())
+                                              if line1]
 
                                 # HD 2000/3000
                                 cpu = re.search("(\si[0-9]-2[0-9]{3}[EKLMSTXQ\s])|(E3-1260L)", cpus[0])
@@ -583,7 +582,7 @@ class WindowsVideo(object):
                                 # No regex matches, assume a good card
                                 log.debug("No CPU regex matches, assume a good card: %r", cpus)
                                 good_cards.append(line)
-                    # There's no order guarantee from wmic, this is to prevent an
+                    # There's no order guarantee from power shell, this is to prevent an
                     # HD card discovered after a good card from overwriting the state variable
                     # by specification, a machine is bad iff ALL of the cards on the machine are bad ones
                     if good_cards:
@@ -595,9 +594,9 @@ class WindowsVideo(object):
                         WindowsVideo.hasOnlyUnsupported = True
                         log.warning("Found only graphics cards not supported in Windows 8.1 or 10: "
                                     "'%s'; should switch to the 32 bit build",
-                                    "', '".join(wmic_list))
+                                    "', '".join(pshell_list))
                 else:
-                    log.warning("wmic did not return any video cards")
+                    log.warning("power shell did not return any video cards")
                     # use MAINT-8200 reasoning described above
                     WindowsVideo.hasOnlyUnsupported = True
 
