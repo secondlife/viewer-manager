@@ -268,7 +268,7 @@ def make_VVM_UUID_hash(platform_key):
     elif (platform_key == 'win'):
         try:
             # pshell csproduct get UUID | grep -v UUID
-            muuid = pshell('-Command', 'Get-CimInstance -ClassName Win32_ComputerSystemProduct | Select-Object -ExpandProperty UUID')
+            muuid = pshell('-Command', "CimCmdlets\\Get-CimInstance -ClassName Win32_ComputerSystemProduct | Select-Object -ExpandProperty UUID")
         except PShellError as err:
             log.warning(err)
             muuid = None
@@ -473,7 +473,7 @@ class WindowsVideo(object):
             # There are video cards that are not supported for the 64bit build on Windows 10,
             # so find out what the video controller is
             try:
-                pshell_graphics = pshell('-Command', 'Get-CimInstance -ClassName Win32_VideoController | Select-Object -ExpandProperty Name')
+                pshell_graphics = pshell('-Command', "CimCmdlets\\Get-CimInstance -ClassName Win32_VideoController | Select-Object -ExpandProperty Name")
             except PShellError as err:
                 log.warning(err)
                 # MAINT-8200: If we can't get information about the video
@@ -507,7 +507,7 @@ class WindowsVideo(object):
                             # This is either a generic Intel(R) HD Graphics or some mislabeled supported GPU
                             # To distinguish them we will have to check CPU model
                             try:
-                                pshell_cpus = pshell('-Command', 'Get-CimInstance -ClassName Win32_Processor | Select-Object -ExpandProperty Name')
+                                pshell_cpus = pshell('-Command', "CimCmdlets\\Get-CimInstance -ClassName Win32_Processor | Select-Object -ExpandProperty Name")
                             except PShellError as err:
                                 log.warning(err)
                                 continue
