@@ -445,13 +445,52 @@ class WindowsVideo(object):
     # Empirically, we find that the 64-bit viewer will not run on certain versions
     # of Windows with certain graphics cards. This module contains logic to detect
     # those situations and specifically run the 32-bit viewer.
-    #This is an exclusion list created by experimental techniques
-    #and research that is extrinsic to VMP.  64bit viewer does not run on these.
-    #
-    #Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
-    #so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
-    #hence the strange equality test for 'Graphics' when we pop the last word off the string.
+    # This is an exclusion list created by experimental techniques
+    # and research that is extrinsic to VMP.  64bit viewer does not run on these.
+    Intel_Graphics = "Intel(R) HD Graphics"
+
+    # Also, only some HDs are bad, unfortunately, some of the bad ones have no model number
+    # so instead of 'Intel(R) HD Graphics 530' we just get 'Intel(R) HD Graphics'
+    # hence the strange equality test for 'Graphics' when we pop the last word off the string.
     NO64_GRAPHICS_LIST = ['Graphics', '2000', '3000']
+
+    # When the GPU is reported as "Intel(R) HD Graphics", we check the CPU for
+    # certain models that we've observed to fail with 64 bits.
+    CPU_MODELS = (
+        # HD 2000/3000
+        ('Intel HD 2000/3000', re.compile(r"(\si[0-9]-2[0-9]{3}[EKLMSTXQ\s])|(E3-1260L)")),
+        # IntelR HD Graphics for Previous Generation IntelR Processors
+        ('Intel HD Graphics',
+         re.compile(r"(\si[0-9]-[0-9]{3}[ELMU\s])|(Processor\sP[46][0-6]0[05]\s)|"
+                    r"(Processor\sU[35][46]0[05]\s)")),
+        ('Intel HD Graphics', re.compile(r"(CPU\sP[46][0-6]0[05]\s)|(CPU\sU[35][46]0[05]\s)")),
+        # IntelR HD Graphics for 2nd Generation IntelR Processors
+        ('Intel 2nd Generation', re.compile(r"(Processor\s[BG]*[0-9]{3}[ET\s])")),
+        ('Intel 2nd Generation', re.compile(r"(CPU\s[BG]*[0-9]{3}[ET\s])")),
+        # IntelR HD Graphics for 3rd Generation IntelR Processors
+        ('3rd Generation', re.compile(r"(Processor\s[G]*[12][016][0-4][05-9][YTUME\s])|"
+                                      r"(Processor\s927UE)|(Processor\sA1018)")),
+        ('3rd Generation', re.compile(r"(CPU\s[G]*[12][016][0-4][05-9][YTUME\s])|"
+                                      r"(CPU\s927UE)|(CPU\sA1018)")),
+        # IntelR HD Graphics for 4th Generation IntelR Processors
+        # Partial overlap with 3rd gen due to Processor 2000E
+        ('Intel HD Graphics for 4th Generation',
+         re.compile(r"(Processor\s[G]*3[2-5][2-9][0168][YTUME\s])|"
+                    r"(Processor\s2[09][05-8][0-9][YTUME\s])|"
+                    r"(Processor\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)")),
+        ('Intel HD Graphics for 4th Generation',
+         re.compile(r"(CPU\s[G]*3[2-5][2-9][0168][YTUME\s])|"
+                    r"(CPU\s2[09][05-8][0-9][YTUME\s])|"
+                    r"(CPU\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)")),
+        # Some celeron CPUs might output 'Intel64 Family' as a name
+        ('unrecognized Intel64 Family CPU', re.compile(r"Intel64\sFamily\s")),
+    )
+    # Does not cover, due to supposedly up to date drivers:
+    # IntelR HD Graphics for Intel AtomR Processor Z3700 Series
+    # IntelR HD Graphics for IntelR CeleronR Processor N3000 Series (HD 400)
+    #
+    # IntelR HD Graphics for 4th Generation IntelR also have an up to date
+    # driver, but for now we consider it as 32 bit.
 
     @staticmethod
     def onNo64Windows():
@@ -494,23 +533,29 @@ class WindowsVideo(object):
                 pshell_list = [line for line in
                                  (ln.rstrip() for ln in pshell_graphics.splitlines())
                                  if line]
-                if pshell_list:
+                if not pshell_list:
+                    log.warning("power shell did not return any video cards")
+                    # use MAINT-8200 reasoning described above
+                    WindowsVideo.hasOnlyUnsupported = True
+                else:
                     good_cards = []
                     # The logic here is a little complicated:
                     # - If there's no bad card, we're good.
                     # - If there's a bad card AND some other card, still good.
                     # - If the only card(s) present are bad cards, not good.
                     for line in pshell_list:
-                        if not ("Intel(R) HD Graphics" in line and
-                                 line.split()[-1] in WindowsVideo.NO64_GRAPHICS_LIST):
+                        lastword = line.split()[-1]
+                        if not (WindowsVideo.Intel_Graphics in line and
+                                lastword in WindowsVideo.NO64_GRAPHICS_LIST):
                             # Card not in the list, pass
                             good_cards.append(line)
                             continue
                         # else
-                        if ("Intel(R) HD Graphics" in line and line.split()[-1] in "Graphics"):
-                            # Last word is "Graphics"
-                            # This is either a generic Intel(R) HD Graphics or some mislabeled supported GPU
-                            # To distinguish them we will have to check CPU model
+                        if (WindowsVideo.Intel_Graphics in line and lastword == "Graphics"):
+                            # Last word is "Graphics", i.e. no specific model.
+                            # This is either a generic Intel(R) HD Graphics or
+                            # some mislabeled supported GPU. To distinguish them
+                            # we will have to check CPU model.
                             try:
                                 pshell_cpus = pshell('-Command', "CimCmdlets\\Get-CimInstance -ClassName Win32_Processor | Select-Object -ExpandProperty Name")
                             except PShellError as err:
@@ -521,75 +566,20 @@ class WindowsVideo(object):
                                              (ln.rstrip() for ln in pshell_cpus.splitlines())
                                               if line1]
 
-                                # HD 2000/3000
-                                cpu = re.search("(\si[0-9]-2[0-9]{3}[EKLMSTXQ\s])|(E3-1260L)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD 2000/3000: %r", cpus)
-                                    continue
-
-                                # IntelR HD Graphics for Previous Generation IntelR Processors
-                                cpu = re.search("(\si[0-9]-[0-9]{3}[ELMU\s])|(Processor\sP[46][0-6]0[05]\s)|(Processor\sU[35][46]0[05]\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics: %r", cpus)
-                                    continue
-
-                                cpu = re.search("(CPU\sP[46][0-6]0[05]\s)|(CPU\sU[35][46]0[05]\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics: %r", cpus)
-                                    continue
-                                
-                                # IntelR HD Graphics for 2nd Generation IntelR Processors
-                                cpu = re.search("(Processor\s[BG]*[0-9]{3}[ET\s])", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel 2nd Generation: %r", cpus)
-                                    continue
-                                
-                                cpu = re.search("(CPU\s[BG]*[0-9]{3}[ET\s])", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel 2nd Generation: %r", cpus)
-                                    continue
-
-                                # IntelR HD Graphics for 3rd Generation IntelR Processors
-                                cpu = re.search("(Processor\s[G]*[12][016][0-4][05-9][YTUME\s])|(Processor\s927UE)|(Processor\sA1018)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to 3rd Generation: %r", cpus)
-                                    continue
-
-                                cpu = re.search("(CPU\s[G]*[12][016][0-4][05-9][YTUME\s])|(CPU\s927UE)|(CPU\sA1018)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to 3rd Generation: %r", cpus)
-                                    continue
-
-                                # IntelR HD Graphics for 4th Generation IntelR Processors
-                                # Partial overlap with 3rd gen due to Processor 2000E
-                                cpu = re.search("(Processor\s[G]*3[2-5][2-9][0168][YTUME\s])|(Processor\s2[09][05-8][0-9][YTUME\s])|(Processor\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics for 4th Generation: %r", cpus)
-                                    continue
-
-                                cpu = re.search("(CPU\s[G]*3[2-5][2-9][0168][YTUME\s])|(CPU\s2[09][05-8][0-9][YTUME\s])|(CPU\s[G]1[089][0-9]{2}[YTUME\s])|(E3-12[6-9][0-9]L\s)", cpus[0])
-                                if cpu:
-                                    log.debug("cpu corresponds to Intel HD Graphics for 4th Generation: %r", cpus)
-                                    continue
-
-                                # Some celeron CPUs might output 'Intel64 Family' as a name
-                                cpu = re.search("Intel64\sFamily\s", cpus[0])
-                                if cpu:
-                                    log.debug("Unrecognized Intel64 Family CPU: %r", cpus)
-                                    continue
-
-                                # Does not cover, due to supposedly up to date drivers:
-                                # IntelR HD Graphics for Intel AtomR Processor Z3700 Series
-                                # IntelR HD Graphics for IntelR CeleronR Processor N3000 Series (HD 400)
-                                #
-                                # IntelR HD Graphics for 4th Generation IntelR also have an up to date driver, but for now we consider it as 32 bit.
-
+                            for description, regexp in WindowsVideo.CPU_MODELS:
+                                if regexp.search(cpus[0]):
+                                    log.debug("cpu corresponds to %s: %r",
+                                              description, cpus)
+                                    break
+                            else:
                                 # No regex matches, assume a good card
-                                log.debug("No CPU regex matches, assume a good card: %r", cpus)
+                                log.debug("No known CPU regex matches, assume a good card: %r", cpus)
                                 good_cards.append(line)
+
                     # There's no order guarantee from power shell, this is to prevent an
-                    # HD card discovered after a good card from overwriting the state variable
-                    # by specification, a machine is bad iff ALL of the cards on the machine are bad ones
+                    # HD card discovered after a good card from overwriting the
+                    # state variable by specification, a machine is bad iff ALL of
+                    # the cards on the machine are bad ones
                     if good_cards:
                         WindowsVideo.hasOnlyUnsupported = False
                         log.debug("Found at least one good graphics card: '%s'",
@@ -600,10 +590,6 @@ class WindowsVideo(object):
                         log.warning("Found only graphics cards not supported in Windows 8.1 or 10: "
                                     "'%s'; should switch to the 32 bit build",
                                     "', '".join(pshell_list))
-                else:
-                    log.warning("power shell did not return any video cards")
-                    # use MAINT-8200 reasoning described above
-                    WindowsVideo.hasOnlyUnsupported = True
 
         return WindowsVideo.hasOnlyUnsupported
 
