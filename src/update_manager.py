@@ -293,7 +293,7 @@ def make_VVM_UUID_hash(platform_key):
     elif (platform_key == 'win'):
         try:
             # pshell csproduct get UUID | grep -v UUID
-            muuid = pshell('-Command', "CimCmdlets\\Get-CimInstance -ClassName Win32_ComputerSystemProduct | Select-Object -ExpandProperty UUID")
+            muuid = pshell('-Command', "\"CimCmdlets\\Get-CimInstance -ClassName Win32_ComputerSystemProduct | Select-Object -ExpandProperty UUID\"")
         except PShellError as err:
             log.warning(err)
             muuid = None
@@ -343,7 +343,7 @@ def pshell(*args):
     except WindowsError as winerr:
         if winerr.errno == errno.ENOENT:
             raise PShellError("No powershell found - bad Windows install?")
-        raise PShellError("powershel failed; error %s %s" % (winerr.winerror, winerr.strerror))
+        raise PShellError("powershell failed; error %s %s" % (winerr.winerror, winerr.strerror))
 
 def _pshell(*pshell_cmd):
     return subprocess.check_output(
@@ -517,7 +517,7 @@ class WindowsVideo(object):
             # There are video cards that are not supported for the 64bit build on Windows 10,
             # so find out what the video controller is
             try:
-                pshell_graphics = pshell('-Command', "CimCmdlets\\Get-CimInstance -ClassName Win32_VideoController | Select-Object -ExpandProperty Name")
+                pshell_graphics = pshell('-Command', "\"CimCmdlets\\Get-CimInstance -ClassName Win32_VideoController | Select-Object -ExpandProperty Name\"")
             except PShellError as err:
                 log.warning(err)
                 # MAINT-8200: If we can't get information about the video
@@ -557,7 +557,7 @@ class WindowsVideo(object):
                             # some mislabeled supported GPU. To distinguish them
                             # we will have to check CPU model.
                             try:
-                                pshell_cpus = pshell('-Command', "CimCmdlets\\Get-CimInstance -ClassName Win32_Processor | Select-Object -ExpandProperty Name")
+                                pshell_cpus = pshell('-Command', "\"CimCmdlets\\Get-CimInstance -ClassName Win32_Processor | Select-Object -ExpandProperty Name\"")
                             except PShellError as err:
                                 log.warning(err)
                                 continue
