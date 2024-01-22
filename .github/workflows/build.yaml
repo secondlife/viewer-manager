@@ -21,7 +21,7 @@ jobs:
     continue-on-error: false
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           # 2023-10-31: Python 3.12 drives an eventlet bug
           # https://github.com/eventlet/eventlet/issues/795
