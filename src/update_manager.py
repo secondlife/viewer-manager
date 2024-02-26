@@ -65,6 +65,10 @@ from xml.etree import ElementTree
 
 DEFAULT_UPDATE_SERVICE = 'https://update.secondlife.com/update'
 
+INSTALL_MODE_MANUAL = 0
+INSTALL_MODE_ASK = 1
+INSTALL_MODE_AUTO = 3
+
 class UpdateError(Exception):
     pass
 
@@ -936,7 +940,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
             installer = apply_update.get_filename(download_dir)
         # Do the install
         return install(existing_viewer, platform_key = platdata.key, installer=installer)
-    elif 'Install_manual' == install_mode:
+    elif INSTALL_MODE_MANUAL == install_mode:
         # The user has chosen to install only required updates, and this one is optional,
         # so just run the already-installed viewer. We don't even download the optional
         # viewer, so chances are they will have to wait for the download if it eventually
@@ -976,7 +980,7 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
             log.info("Found previously downloaded update in: " + download_dir)
             installer = apply_update.get_filename(download_dir)
 
-            if 'Install_automatically' == install_mode:
+            if INSTALL_MODE_AUTO == install_mode:
                 log.info("updating automatically")
                 return install(existing_viewer, platform_key = platdata.key, installer=installer)
 
@@ -1016,48 +1020,23 @@ def update_manager(log, existing_viewer, cli_overrides = {}):
 
 @pass_logger
 def decode_install_mode(log, install_key):
-    """
-    Given (the string form of) one of the numeric codes representing an
-    install_mode choice on the Preferences floater, return the corresponding
-    internal name string, one of:
+    # Ensure the install_mode is one of [0, 1, 3]
+    # Set 3 as default for all values except [0, 1]
 
-    Install_automatically
-    Install_ask
-    Install_manual
+    # Using the following modes:
+    # INSTALL_MODE_MANUAL = 0
+    # INSTALL_MODE_ASK = 1
+    # INSTALL_MODE_AUTO = 3
 
-    If you pass None (or an invalid key), you get the default: Install_automatically.
-    """
-    # Track the real preferences control settings used by the viewer.
-    panel_file = os.path.join(Application.app_data_path(),
-                              'skins', 'default', 'xui', 'en', 'panel_preferences_setup.xml')
-    root = ElementTree.parse(panel_file).getroot()
-    # Look for the combo_box for the UpdaterServiceSetting control,
-    # specifically the items defined for that combo_box.
-    # https://docs.python.org/2/library/xml.etree.elementtree.html#xpath-support
-    # Construct a dict { string_value : (internal_name, user_text) }.
-    install_modes = {
-        item.get('value'): (item.get('name'), item.get('label'))
-        for item in
-        root.findall('./combo_box[@control_name="UpdaterServiceSetting"]/combo_box.item') }
+    install_mode = install_key
+    if INSTALL_MODE_MANUAL == install_key:
+        install_desc = "Install only mandatory updates"
+    elif INSTALL_MODE_ASK == install_key:
+        install_desc = "Ask me when an optional update is ready to install"
+    else:
+        install_mode = INSTALL_MODE_AUTO
+        install_desc = "Install each update automatically"
 
-    # Look up key in install_modes
-    try:
-        install_modes[install_key]
-    except KeyError:
-        # For this one item we must perform a reverse lookup -- but with only a
-        # handful of items, a linear search suffices.
-        Install_automatically = next(key for (key, (internal, user)) in install_modes.items()
-                                     if internal == 'Install_automatically')
-        # install_key can be passed as None if nobody has tried to set it. We
-        # know None is an invalid setting; it's only an error if somebody set
-        # some other invalid value.
-        logfunc = log.info if install_key is None else log.error
-        logfunc("Invalid setting value for UpdaterServiceSetting (%s); falling back to auto (%s)",
-                install_key, Install_automatically)
-        install_key = Install_automatically
-    # Now convert to the internal string to defend against possible changes to the
-    # meaning of the value.
-    install_mode, install_desc = install_modes[install_key]
     log.info("Update mode (UpdaterServiceSetting) is %s (%s)", install_desc, install_key)
     return install_mode
 
