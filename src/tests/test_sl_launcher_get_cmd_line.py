@@ -37,7 +37,6 @@ import platform
 import shutil
 from util import BuildData
 import SLVersionChecker as SLL
-import with_setup_args
 
 #the {Resources}/app_settings dir is a sibling of the parent of the script dir
 source_dir = os.path.join(os.path.dirname(SLL.__file__), os.pardir)
@@ -49,21 +48,19 @@ path_dict = {'Darwin':os.path.join(source_dir, 'Resources/app_settings/cmd_line.
 test_dir = os.path.dirname(path_dict[plat])
 test_file = os.path.join(test_dir, 'cmd_line.xml')
 
-def get_cmd_line_setup():
+def setup_function():
     #makedirs errors if there are borked leftovers from a previous test, so wipe the plate clean
     BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
     shutil.rmtree(test_dir, ignore_errors = True)
     os.makedirs(test_dir)
     shutil.copyfile(golden_cmd_xml, path_dict[plat])
-    return [], {}
 
-def get_cmd_line_teardown():
+def teardown_function():
     shutil.rmtree(test_dir, ignore_errors = True)
 
 #here we use a private to the repo copy the cmd line file so that the test is platform independent
 #in particular, on Windows, sys.executable is different for nose (python) than the compiled exe
 #which throws off various mechanisms that look for things relative to where they are.
-@with_setup_args.with_setup_args(get_cmd_line_setup, get_cmd_line_teardown)
 def test_get_cmd_line(): 
     result = get_cmd_line(test_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here

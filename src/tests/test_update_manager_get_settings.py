@@ -34,7 +34,6 @@ import os
 import shutil
 import tempfile
 import update_manager
-import with_setup_args
 import logging
 from util import SL_Logging, Application, BuildData
 
@@ -42,22 +41,20 @@ data_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data')
 BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
 log=SL_Logging.getLogger('test_settings', verbosity='DEBUG')
 
-def get_settings_setup():
+def setup_function():
+    global tmpdir1
     tmpdir1 = tempfile.mkdtemp()
-    return [tmpdir1], {}
 
-def get_settings_teardown(tmpdir1):
+def teardown_function():
     shutil.rmtree(tmpdir1, ignore_errors = True)
 
-@with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
-def test_get_settings(tmpdir1):   
+def test_get_settings():   
     settings_llsd = update_manager.get_settings(
         os.path.join(data_dir, "user_settings", "settings.xml"))
     #we aren't testing the LLSD library, one dictionary value is enough
     assert_equal(settings_llsd['CurrentGrid'],'util.agni.lindenlab.com')
 
-@with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
-def test_get_settings_bad_key(tmpdir1):
+def test_get_settings_bad_key():
     settings_llsd = update_manager.get_settings(
         os.path.join(data_dir, "user_settings", "settings.xml"))
     try:
@@ -65,7 +62,6 @@ def test_get_settings_bad_key(tmpdir1):
     except KeyError:
         pass
 
-@with_setup_args.with_setup_args(get_settings_setup, get_settings_teardown)
-def test_get_settings_bad_path(tmpdir1):
+def test_get_settings_bad_path():
     settings_llsd = update_manager.get_settings(os.path.dirname(data_dir))
     assert not settings_llsd

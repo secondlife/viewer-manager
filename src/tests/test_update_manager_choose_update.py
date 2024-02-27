@@ -182,7 +182,7 @@ optionalWinFallback = {
 
 class testChooseUpdate:
 
-    def setup(self):
+    def setup_method(self):
         os.environ['APP_DATA_DIR'] = os.path.dirname(os.path.abspath(__file__))
         BuildData.read()
 

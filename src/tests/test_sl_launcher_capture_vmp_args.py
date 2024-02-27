@@ -35,7 +35,6 @@ import os
 import os.path
 import platform
 import shutil
-import with_setup_args
 from util import BuildData
 import SLVersionChecker as SLL
 
@@ -49,7 +48,7 @@ path_dict = {'Darwin':os.path.join(source_dir, 'Resources', 'app_settings', 'cmd
 test_dir = os.path.dirname(path_dict[plat])
 test_file = os.path.join(test_dir, 'cmd_line.xml')
 
-def capture_vmp_args_setup():
+def setup_function():
     #makedirs errors if there are borked leftovers from a previous test, so wipe the plate clean
     shutil.rmtree(test_dir, ignore_errors = True)
     os.makedirs(test_dir)
@@ -57,24 +56,21 @@ def capture_vmp_args_setup():
     BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
     return [], {}
 
-def capture_vmp_args_teardown():
+def teardown_function():
     shutil.rmtree(test_dir, ignore_errors = True)
 
-@with_setup_args.with_setup_args(capture_vmp_args_setup, capture_vmp_args_teardown)
 def test_capture_vmp_args_empty():
     cmd_settings_file = get_cmd_line(test_file)
     overrides = SLL.capture_vmp_args(None, cmd_settings_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
     assert_equal(overrides.get('channel'), None)
 
-@with_setup_args.with_setup_args(capture_vmp_args_setup, capture_vmp_args_teardown)
 def test_capture_vmp_args_simple():
     cmd_settings_file = get_cmd_line(test_file) 
     overrides = SLL.capture_vmp_args(['--channel', 'Bat'], cmd_settings_file)
     #choose one key to test, we don't need to recapitulate LLSD parsing unit tests here
     assert_equal(overrides['channel'], 'Bat')
 
-@with_setup_args.with_setup_args(capture_vmp_args_setup, capture_vmp_args_teardown)
 def test_capture_vmp_args_setter(): 
     cmd_settings_file = get_cmd_line(test_file)
     overrides = SLL.capture_vmp_args(['--set', 'UpdaterServiceSetting', '2'], cmd_settings_file)
