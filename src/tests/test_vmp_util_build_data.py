@@ -30,7 +30,6 @@ from llbase import llsd
 from nose_tools import *
 
 import os
-import with_setup_args
 
 from util import BuildData
 

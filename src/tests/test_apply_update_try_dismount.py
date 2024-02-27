@@ -39,23 +39,20 @@ os.environ["APP_DATA_DIR"] = os.path.dirname(__file__)
 
 import apply_update
 import subprocess
-import with_setup_args
 
 plat = platform.system()
 
-def try_dismount_setup():
+def setup_function(function):
     if plat != 'Darwin':
-        return [], {}
+        return
+    # test_try_dismount_missing_dmg() is supposed to run WITHOUT setup
+    if function == test_try_dismount_missing_dmg:
+        return
     script_dir = os.path.dirname(os.path.realpath(__file__))
     test_dmg = os.path.join(script_dir, 'data/Second Life Installer.dmg')
     subprocess.check_output(["hdiutil", "attach", test_dmg, "-mountroot", '/Volumes'],
                             universal_newlines=True)
-    return [], {}
 
-def try_dismount_teardown():
-    pass
-
-@with_setup_args.with_setup_args(try_dismount_setup, try_dismount_teardown)
 def test_try_dismount():
     #we only dismount dmg files on Macs
     if plat == 'Darwin':
