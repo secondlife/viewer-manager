@@ -42,7 +42,7 @@ import update_manager
 
 class testWindowsVideo(object):
 
-    def setup(self):
+    def setup_method(self):
         update_manager.WindowsVideo.hasOnlyUnsupported = None # defeat caching so each test rechecks
         os.environ['APP_DATA_DIR'] = os.path.dirname(os.path.abspath(__file__))
 
