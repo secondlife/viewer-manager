@@ -29,7 +29,7 @@ jobs:
           architecture: ${{ matrix.python-architecture }}
       - name: Install Python packages
         run: pip3 install -U eventlet llbase pytest PyInstaller requests
-      - uses: secondlife/action-autobuild@v3
+      - uses: secondlife/action-autobuild@v4
         with:
           addrsize: ${{ matrix.addrsize }}
           archive-format: ${{ matrix.archive-format }}
