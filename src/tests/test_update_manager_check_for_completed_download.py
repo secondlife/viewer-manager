@@ -34,25 +34,21 @@ import os
 import shutil
 import tempfile
 import update_manager
-import with_setup_args
 
-def check_for_completed_download_setup():
+def setup_function():
+    global tmpdir1, tmpdir2
     tmpdir1 = tempfile.mkdtemp(prefix = 'test1')
     tmpdir2 = tempfile.mkdtemp(prefix = 'test2')
     tempfile.mkstemp(suffix = '.done', dir = tmpdir1)
 
-    return [tmpdir1,tmpdir2], {}
-
-def check_for_completed_download_teardown(tmpdir1,tmpdir2):
+def teardown_function():
     shutil.rmtree(tmpdir1, ignore_errors = True)
     shutil.rmtree(tmpdir2, ignore_errors = True)
 
-@with_setup_args.with_setup_args(check_for_completed_download_setup, check_for_completed_download_teardown)
-def test_completed_check_for_completed_download(tmpdir1,tmpdir2):
+def test_completed_check_for_completed_download():
     assert_equal(update_manager.check_for_completed_download(tmpdir1), 'done'), "Failed to find completion marker"
 
-@with_setup_args.with_setup_args(check_for_completed_download_setup, check_for_completed_download_teardown)
-def test_incomplete_check_for_completed_download(tmpdir1,tmpdir2):
+def test_incomplete_check_for_completed_download():
     #should return False
     incomplete = not update_manager.check_for_completed_download(tmpdir2)
     assert incomplete, "False positive, should not mark complete without a marker"

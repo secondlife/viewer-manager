@@ -68,7 +68,7 @@ def onOther():
 
 class testOnWindows10orHigher(object):
 
-    def setup(self):
+    def setup_method(self):
         os.environ['APP_DATA_DIR'] = os.path.dirname(os.path.abspath(__file__))
 
     def test_onWindows8(self):

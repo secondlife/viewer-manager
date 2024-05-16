@@ -41,7 +41,6 @@ import tempfile
 import logging
 from util import SL_Logging, Application, BuildData
 from argparse import Namespace
-import with_setup_args
 import requests
 from patch import patch
 
@@ -77,21 +76,19 @@ def dummy_get(url, stream=None): # mock for request.get
         raise ValueError("Incorrect URL passed")
     return DummyResponse()
 
-def download_update_setup():
-    global log
+def setup_function():
+    global log, tmpdir1
     BuildData.read(os.path.join(os.path.dirname(__file__),'build_data.json'))
     # must override BuildData above before initializing log
     log=SL_Logging.getLogger('test_download', verbosity='DEBUG')
     # DO NOT try to download via a proxy!
     os.environ.pop("http_proxy", None)
     tmpdir1 = tempfile.mkdtemp(prefix = 'test1')   
-    return [tmpdir1], {}
 
-def download_update_teardown(tmpdir1):
+def teardown_function():
     shutil.rmtree(tmpdir1, ignore_errors = True)
 
-@with_setup_args.with_setup_args(download_update_setup, download_update_teardown)
-def test_download_update_null_url(tmpdir1):     
+def test_download_update_null_url():     
     try:
         download_update.download_update(url=None, download_dir=tmpdir1, size=None, progressbar=False)
     #this is the expected error when d_u tries to apply split() to None
@@ -105,8 +102,7 @@ def test_download_update_null_url(tmpdir1):
     else:
         raise AssertionError("download_update() failed to raise exception for url=None")
         
-@with_setup_args.with_setup_args(download_update_setup, download_update_teardown)
-def test_download_update_correct_url(tmpdir1):
+def test_download_update_correct_url():
     with patch(requests, "get", dummy_get):
         download_update.download_update(url=URL, download_dir=tmpdir1, size=URL_len, progressbar=False)
     #if behaving correctly, the downloader should leave a tmpfile with the
